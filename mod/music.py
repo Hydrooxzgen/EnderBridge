@@ -169,50 +169,126 @@ class Mod:
     def onCommand(self):
         return {
             "normal": [
-                Command.create("m:join", "加入音乐收听")
-                .set_func(self._cmd_join),
-
-                Command.create("m:exit", "退出音乐收听")
-                .set_func(self._cmd_exit),
-
-                Command.create("m:status", "查看当前播放进度")
-                .set_func(self._cmd_status),
-
-                Command.create("m:list", "查看音乐列表")
-                .add_optional_integer("页码")
-                .set_func(self._cmd_list),
-
-                Command.create("m:search", "搜索音乐文件")
-                .add_string("关键词", False)
-                .add_optional_integer("页码")
-                .set_func(self._cmd_search),
-
-                Command.create("m:percussion", "开启/关闭打击乐器")
-                .add_enum(["on", "off"], "开关状态 (on=开启 off=关闭)")
-                .set_func(self._cmd_percussion),
-            ],
-
-            "user": [
-                Command.create("m:run", "快速播放指定音乐")
-                .add_string("音乐文件名", True)
-                .set_func(self._cmd_run),
-
-                Command.create("m:next", "切换到下一首音乐")
-                .set_func(self._cmd_next),
-
-                Command.create("m:random", "随机播放音乐")
-                .set_func(self._cmd_random),
-
-                Command.create("m:loop", "设置循环播放模式")
-                .add_enum(["next", "random", "single"], "播放模式 (next=顺序 random=随机 single=单曲)")
-                .add_optional_string("歌名 (仅 single 模式有效)")
-                .set_func(self._cmd_loop),
-
-                Command.create("m:stop", "停止播放（不带参数停止全部）")
-                .add_optional_enum(["music", "loop", "all"], "停止范围 (music=仅音乐 loop=仅循环 all=全部，默认 all)")
-                .set_func(self._cmd_stop),
+                Command.create("music", "音乐播放命令（方法: join/exit/status/list/search/percussion/run/next/random/loop/stop）")
+                .add_string("方法", False)
+                .add_optional_string("参数1")
+                .add_optional_string("参数2")
+                .add_optional_string("参数3")
+                .add_optional_string("参数4")
+                .add_optional_string("参数5")
+                .set_func(self._cmd_music),
             ],
         }
+
+    # ---- 命令分发器 ----
+
+    # (方法, 参数格式, 说明, 所需权限等级)
+    MUSIC_METHODS = [
+        ("join", "", "加入音乐收听", 0),
+        ("exit", "", "退出音乐收听", 0),
+        ("status", "", "查看当前播放进度", 0),
+        ("list", "[页码]", "查看音乐列表", 0),
+        ("search", "[关键词] [页码]", "搜索音乐文件", 0),
+        ("percussion", "<on|off>", "开启/关闭打击乐器", 0),
+        ("run", "<音乐文件名>", "快速播放指定音乐", 1),
+        ("next", "", "切换到下一首音乐", 1),
+        ("random", "", "随机播放音乐", 1),
+        ("loop", "<next|random|single> [歌名]", "设置循环播放模式", 1),
+        ("stop", "[music|loop|all]", "停止播放（不带参数停止全部）", 1),
+    ]
+
+    async def _cmd_music(self, sender, method, p1=None, p2=None, p3=None, p4=None, p5=None):
+        """$music 方法分发器(方法内做权限检查)"""
+        if method is None:
+            self.client.tell(f"§cMusic | §fError > §i未知方法: 未指定（输入 {Command.command_prefix}music help 查看全部方法）", sender)
+            return
+
+        # 查询方法所需权限
+        required = None
+        for mname, _args, _desc, plevel in self.MUSIC_METHODS:
+            if mname == method:
+                required = plevel
+                break
+        if required is None:
+            self.client.tell(f"§cMusic | §fError > §i未知方法: {method}（输入 {Command.command_prefix}music help 查看全部方法）", sender)
+            return
+
+        # 权限检查
+        from lib.permission import PermissionManager
+        perm = await PermissionManager.query(sender)
+        if isinstance(perm, Exception):
+            self.client.tell("§cMusic | §fError > §i权限查询失败", sender)
+            return
+        if perm < required:
+            self.client.tell("§cMusic | §fError > §i权限不足", sender)
+            return
+
+        # 分发到具体实现
+        if method == "join":
+            await self._cmd_join(sender)
+
+        elif method == "exit":
+            await self._cmd_exit(sender)
+
+        elif method == "status":
+            await self._cmd_status(sender)
+
+        elif method == "list":
+            page = None
+            if p1 is not None:
+                try:
+                    page = int(p1)
+                except ValueError:
+                    self.client.tell(f'§cMusic | §fError > §i"{p1}" 处应为整型', sender)
+                    return
+            await self._cmd_list(sender, page)
+
+        elif method == "search":
+            page = None
+            if p2 is not None:
+                try:
+                    page = int(p2)
+                except ValueError:
+                    self.client.tell(f'§cMusic | §fError > §i"{p2}" 处应为整型', sender)
+                    return
+            await self._cmd_search(sender, p1, page)
+
+        elif method == "percussion":
+            if p1 is None:
+                self.client.tell(f"§cMusic | §fError > §i参数不足：{Command.command_prefix}music percussion <on|off>", sender)
+                return
+            if p1 not in ("on", "off"):
+                self.client.tell(f'§cMusic | §fError > §i"{p1}" 处应为枚举 on, off', sender)
+                return
+            await self._cmd_percussion(sender, p1)
+
+        elif method == "run":
+            if p1 is None:
+                self.client.tell(f"§cMusic | §fError > §i参数不足：{Command.command_prefix}music run <音乐文件名>", sender)
+                return
+            await self._cmd_run(sender, p1)
+
+        elif method == "next":
+            await self._cmd_next(sender)
+
+        elif method == "random":
+            await self._cmd_random(sender)
+
+        elif method == "loop":
+            if p1 is None:
+                self.client.tell(f"§cMusic | §fError > §i参数不足：{Command.command_prefix}music loop <next|random|single> [歌名]", sender)
+                return
+            if p1 not in ("next", "random", "single"):
+                self.client.tell(f'§cMusic | §fError > §i"{p1}" 处应为枚举 next, random, single', sender)
+                return
+            await self._cmd_loop(sender, p1, p2)
+
+        elif method == "stop":
+            mode = p1
+            if mode is not None and mode not in ("music", "loop", "all"):
+                self.client.tell(f'§cMusic | §fError > §i"{mode}" 处应为枚举 music, loop, all', sender)
+                return
+            await self._cmd_stop(sender, mode)
 
     # ---- 命令实现 ----
 
@@ -300,7 +376,7 @@ class Mod:
                 if existing.lower().endswith(".mid") and file_.lower().endswith(".json"):
                     name_map[base_name] = file_
 
-        # 排序:readdir 返回顺序由文件系统决定,若不排序会导致 m:list 顺序每次不同(显示错乱)
+        # 排序:readdir 返回顺序由文件系统决定,若不排序会导致 music list 顺序每次不同(显示错乱)
         self.files = sorted(
             name_map.values(),
             key=lambda f: re.sub(r"\.(json|mid)$", "", f, flags=re.I).lower(),

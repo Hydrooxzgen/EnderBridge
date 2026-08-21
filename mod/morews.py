@@ -27,11 +27,40 @@ class Mod:
     def onCommand(self):
         return {
             "op": [
-                Command.create("c:connect", "连接到 WebSocket 服务端")
-                .add_string("WebSocket 地址", True)
-                .set_func(self._cmd_connect),
+                Command.create("ws", "扩展 WebSocket 连接命令（方法: connect）")
+                .add_string("方法", False)
+                .add_optional_string("参数1")
+                .add_optional_string("参数2")
+                .add_optional_string("参数3")
+                .add_optional_string("参数4")
+                .add_optional_string("参数5")
+                .set_func(self._cmd_ws),
             ],
         }
+
+    # ---- 命令分发器 ----
+
+    WS_METHODS = [
+        ("connect", "<WebSocket 地址>", "连接到 WebSocket 服务端"),
+    ]
+
+    async def _cmd_ws(self, sender, method, p1=None, p2=None, p3=None, p4=None, p5=None):
+        """$ws 方法分发器"""
+        if method is None:
+            self.client.tell(f"§cMoreWS | §fError > §i未知方法: 未指定（输入 {Command.command_prefix}ws help 查看全部方法）", sender)
+            return
+
+        known = [m for m, _a, _d in self.WS_METHODS]
+        if method not in known:
+            self.client.tell(f"§cMoreWS | §fError > §i未知方法: {method}（输入 {Command.command_prefix}ws help 查看全部方法）", sender)
+            return
+
+        # 分发到具体实现(全部为 op 权限,注册在 op 等级无需再查)
+        if method == "connect":
+            if p1 is None:
+                self.client.tell(f"§cMoreWS | §fError > §i参数不足：{Command.command_prefix}ws connect <WebSocket 地址>", sender)
+                return
+            await self._cmd_connect(sender, p1)
 
     async def _cmd_connect(self, _, ip):
         self.connect(ip)

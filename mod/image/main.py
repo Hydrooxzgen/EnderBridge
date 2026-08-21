@@ -293,53 +293,116 @@ class Mod:
     def onCommand(self):
         return {
             "op": [
-                Command.create("i:create", "将图片转换为像素画")
-                .add_string("图片文件名", False)
-                .add_enum(["x", "y", "z"], "生成方向 (x=默认 y=直立 z=旋转)", True)
-                .add_optional_float("X")
-                .add_optional_float("Y")
-                .add_optional_float("Z")
-                .set_func(self._cmd_create),
-
-                Command.create("i:raw", "将图片转换为像素画（原始尺寸，仅支持 x/z）")
-                .add_string("图片文件名", False)
-                .add_enum(["x", "z"], "生成方向 (x=默认 z=旋转)", True)
-                .add_optional_float("X")
-                .add_optional_float("Y")
-                .add_optional_float("Z")
-                .set_func(self._cmd_create_raw),
-
-                Command.create("i:y", "确认转换操作")
-                .set_func(self._cmd_confirm),
-
-                Command.create("i:n", "取消/中断转换")
-                .set_func(self._cmd_cancel),
-
-                Command.create("i:status", "查看转换进度")
-                .set_func(self._cmd_status),
-
-                Command.create("i:list", "查看像素画文件列表")
-                .add_optional_integer("页码")
-                .set_func(self._cmd_list),
-
-                Command.create("i:search", "搜索像素画文件")
-                .add_string("关键词", True)
-                .add_optional_integer("页码")
-                .set_func(self._cmd_search),
+                Command.create("image", "图片像素画命令（方法: create/raw/y/n/status/list/search）")
+                .add_string("方法", False)
+                .add_optional_string("参数1")
+                .add_optional_string("参数2")
+                .add_optional_string("参数3")
+                .add_optional_string("参数4")
+                .add_optional_string("参数5")
+                .set_func(self._cmd_image),
             ],
         }
+
+    # ---- 命令分发器 ----
+
+    IMAGE_METHODS = [
+        ("create", "<文件> [x|y|z] [X] [Y] [Z]", "将图片转换为像素画"),
+        ("raw", "<文件> [x|z] [X] [Y] [Z]", "将图片转换为像素画（原始尺寸，仅支持 x/z）"),
+        ("y", "", "确认转换操作"),
+        ("n", "", "取消/中断转换"),
+        ("status", "", "查看转换进度"),
+        ("list", "[页码]", "查看像素画文件列表"),
+        ("search", "<关键词> [页码]", "搜索像素画文件"),
+    ]
+
+    async def _cmd_image(self, sender, method, p1=None, p2=None, p3=None, p4=None, p5=None):
+        """$image 方法分发器"""
+        if method is None:
+            self.client.tell(f"§cImage | §fError > §i未知方法: 未指定（输入 {Command.command_prefix}image help 查看全部方法）", sender)
+            return
+
+        known = [m for m, _a, _d in self.IMAGE_METHODS]
+        if method not in known:
+            self.client.tell(f"§cImage | §fError > §i未知方法: {method}（输入 {Command.command_prefix}image help 查看全部方法）", sender)
+            return
+
+        # 方法内做权限检查(全部为 op)
+        from lib.permission import PermissionManager
+        perm = await PermissionManager.query(sender)
+        if isinstance(perm, Exception):
+            self.client.tell("§cImage | §fError > §i权限查询失败", sender)
+            return
+        if perm < 2:
+            self.client.tell("§cImage | §fError > §i权限不足", sender)
+            return
+
+        # 分发到具体实现
+        if method in ("create", "raw"):
+            if p1 is None:
+                self.client.tell(f"§cImage | §fError > §i参数不足：{Command.command_prefix}image {method} <文件> [方向] [X] [Y] [Z]", sender)
+                return
+            file_name = p1
+            dir_value = p2 or "x"
+            coords = []
+            for v in (p3, p4, p5):
+                if v is None:
+                    coords.append(None)
+                else:
+                    try:
+                        coords.append(float(v))
+                    except ValueError:
+                        self.client.tell(f'§cImage | §fError > §i"{v}" 处应为浮点型', sender)
+                        return
+            x, y, z = coords
+            if method == "create":
+                await self._cmd_create(sender, file_name, dir_value, x, y, z)
+            else:
+                await self._cmd_create_raw(sender, file_name, dir_value, x, y, z)
+
+        elif method == "y":
+            await self._cmd_confirm(sender)
+
+        elif method == "n":
+            await self._cmd_cancel(sender)
+
+        elif method == "status":
+            await self._cmd_status(sender)
+
+        elif method == "list":
+            page = None
+            if p1 is not None:
+                try:
+                    page = int(p1)
+                except ValueError:
+                    self.client.tell(f'§cImage | §fError > §i"{p1}" 处应为整型', sender)
+                    return
+            await self._cmd_list(sender, page)
+
+        elif method == "search":
+            if p1 is None:
+                self.client.tell(f"§cImage | §fError > §i参数不足：{Command.command_prefix}image search <关键词> [页码]", sender)
+                return
+            page = None
+            if p2 is not None:
+                try:
+                    page = int(p2)
+                except ValueError:
+                    self.client.tell(f'§cImage | §fError > §i"{p2}" 处应为整型', sender)
+                    return
+            await self._cmd_search(sender, p1, page)
 
     # ---- 命令实现 ----
 
     async def _cmd_create(self, sender, file_name, dir_, x, y, z):
         if self.job:
-            self.client.tell("§cImage | §fError > §i已有转换进程运行中，请等待完成或 !i:n 中断", sender)
+            self.client.tell(f"§cImage | §fError > §i已有转换进程运行中，请等待完成或 {Command.command_prefix}image n 中断", sender)
             return
         await self.create(file_name, sender, dir_, x, y, z)
 
     async def _cmd_create_raw(self, sender, file_name, dir_, x, y, z):
         if self.job:
-            self.client.tell("§cImage | §fError > §i已有转换进程运行中，请等待完成或 !i:n 中断", sender)
+            self.client.tell(f"§cImage | §fError > §i已有转换进程运行中，请等待完成或 {Command.command_prefix}image n 中断", sender)
             return
         await self.create_raw(file_name, sender, dir_, x, y, z)
 
@@ -559,7 +622,7 @@ class Mod:
             f"§f方向: {dir_value} | 区块: {len(preview_areas)} 个区域\n"
             f"§f范围: ({min_x}, {min_y}, {min_z}) → ({max_x}, {max_y}, {max_z})\n"
             f"§f预计耗时: {est_time}s\n"
-            f"§f确认请发送 §e!i:y§f，取消请发送 §c!i:n"
+            f"§f确认请发送 §e{Command.command_prefix}image y§f，取消请发送 §c{Command.command_prefix}image n"
         )
 
     # ---- 执行转换 ----

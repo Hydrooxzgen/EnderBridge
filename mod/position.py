@@ -4,6 +4,7 @@
 """
 import asyncio
 import math
+import re
 import time
 
 from lib.command import Command
@@ -78,57 +79,113 @@ class Mod:
     def onCommand(self):
         return {
             "op": [
-                Command.create("p:a", "设置 A 点坐标（可选 X Y Z，缺省则取自身坐标）")
-                .add_optional_integer("X")
-                .add_optional_integer("Y")
-                .add_optional_integer("Z")
-                .set_func(self._cmd_a),
-
-                Command.create("p:b", "设置 B 点坐标（可选 X Y Z，缺省则取自身坐标）")
-                .add_optional_integer("X")
-                .add_optional_integer("Y")
-                .add_optional_integer("Z")
-                .set_func(self._cmd_b),
-
-                Command.create("p:distance", "计算 A B 两点间的距离（保留 3 位小数）")
-                .set_func(self._cmd_distance),
-
-                Command.create("p:offset", "计算 B 点相对于 A 点的偏移量")
-                .set_func(self._cmd_offset),
-
-                Command.create("p:fill", "填充 A B 两点间区域（必填方块 ID，选填 replace 目标方块 ID）")
-                .add_string("填充方块 ID", False)
-                .add_optional_string("替换目标方块 ID")
-                .set_func(self._cmd_fill),
-
-                Command.create("p:copy", "复制 A B 两点间区域")
-                .set_func(self._cmd_copy),
-
-                Command.create("p:paste", "粘贴复制的结构（可选 X Y Z，缺省取自身坐标）")
-                .add_optional_integer("X")
-                .add_optional_integer("Y")
-                .add_optional_integer("Z")
-                .set_func(self._cmd_paste),
-
-                Command.create("p:cut", "剪切 A B 两点间区域（复制后填充空气）")
-                .set_func(self._cmd_cut),
-
-                Command.create("p:cancel", "中断当前操作")
-                .set_func(self._cmd_cancel),
-
-                Command.create("p:status", "查看当前任务进度")
-                .set_func(self._cmd_status),
-
-                Command.create("p:show", "显示当前 A B 点坐标")
-                .set_func(self._cmd_show),
+                Command.create("pos", "坐标操作命令（方法: a/b/distance/offset/fill/copy/paste/cut/cancel/status/show）")
+                .add_string("方法", False)
+                .add_optional_string("参数1")
+                .add_optional_string("参数2")
+                .add_optional_string("参数3")
+                .add_optional_string("参数4")
+                .add_optional_string("参数5")
+                .set_func(self._cmd_pos),
             ],
         }
+
+    # ---- 命令分发器 ----
+
+    POS_METHODS = [
+        ("a", "[X] [Y] [Z]", "设置 A 点坐标（可选 X Y Z，缺省则取自身坐标）"),
+        ("b", "[X] [Y] [Z]", "设置 B 点坐标（可选 X Y Z，缺省则取自身坐标）"),
+        ("distance", "", "计算 A B 两点间的距离（保留 3 位小数）"),
+        ("offset", "", "计算 B 点相对于 A 点的偏移量"),
+        ("fill", "<填充方块 ID> [替换目标方块 ID]", "填充 A B 两点间区域"),
+        ("copy", "", "复制 A B 两点间区域"),
+        ("paste", "[X] [Y] [Z]", "粘贴复制的结构（缺省取自身坐标）"),
+        ("cut", "", "剪切 A B 两点间区域（复制后填充空气）"),
+        ("cancel", "", "中断当前操作"),
+        ("status", "", "查看当前任务进度"),
+        ("show", "", "显示当前 A B 点坐标"),
+    ]
+
+    async def _cmd_pos(self, sender, method, p1=None, p2=None, p3=None, p4=None, p5=None):
+        """$pos 方法分发器"""
+        if method is None:
+            self.client.tell(f"§cPosition | §fError > §i未知方法: 未指定（输入 {Command.command_prefix}pos help 查看全部方法）", sender)
+            return
+
+        known = [m for m, _a, _d in self.POS_METHODS]
+        if method not in known:
+            self.client.tell(f"§cPosition | §fError > §i未知方法: {method}（输入 {Command.command_prefix}pos help 查看全部方法）", sender)
+            return
+
+        # 分发到具体实现(全部为 op 权限,注册在 op 等级无需再查)
+        if method == "a":
+            xyz = self._parse_xyz(p1, p2, p3, sender, f"{Command.command_prefix}pos a")
+            if xyz is None:
+                return
+            await self._cmd_a(sender, *xyz)
+
+        elif method == "b":
+            xyz = self._parse_xyz(p1, p2, p3, sender, f"{Command.command_prefix}pos b")
+            if xyz is None:
+                return
+            await self._cmd_b(sender, *xyz)
+
+        elif method == "distance":
+            await self._cmd_distance(sender)
+
+        elif method == "offset":
+            await self._cmd_offset(sender)
+
+        elif method == "fill":
+            if p1 is None:
+                self.client.tell(f"§cPosition | §fError > §i参数不足：{Command.command_prefix}pos fill <填充方块 ID> [替换目标方块 ID]", sender)
+                return
+            await self._cmd_fill(sender, p1, p2)
+
+        elif method == "copy":
+            await self._cmd_copy(sender)
+
+        elif method == "paste":
+            xyz = self._parse_xyz(p1, p2, p3, sender, f"{Command.command_prefix}pos paste")
+            if xyz is None:
+                return
+            await self._cmd_paste(sender, *xyz)
+
+        elif method == "cut":
+            await self._cmd_cut(sender)
+
+        elif method == "cancel":
+            await self._cmd_cancel(sender)
+
+        elif method == "status":
+            await self._cmd_status(sender)
+
+        elif method == "show":
+            await self._cmd_show(sender)
+
+    def _parse_xyz(self, p1, p2, p3, sender, cmd_line):
+        """解析可选 X Y Z 参数(全缺或全给),成功返回 (x, y, z),失败返回 None"""
+        coords = []
+        for v in (p1, p2, p3):
+            if v is None:
+                coords.append(None)
+            else:
+                if not re.fullmatch(r"-?\d+", v):
+                    self.client.tell(f'§cPosition | §fError > §i"{v}" 处应为整型', sender)
+                    return None
+                coords.append(int(v))
+        x, y, z = coords
+        count = sum(1 for v in coords if v is not None)
+        if 0 < count < 3:
+            self.client.tell(f"§cPosition | §fError > §i坐标参数不完整，需要同时提供 X Y Z 或都不提供（使用自身坐标）：{cmd_line} [X] [Y] [Z]", sender)
+            return None
+        return x, y, z
 
     # ---- 命令实现 ----
 
     async def _cmd_a(self, sender, x, y, z):
         if self.job:
-            self.client.tell("§cPosition | §fError > §i已有操作进行中，请等待完成或 $p:cancel 中断", sender)
+            self.client.tell(f"§cPosition | §fError > §i已有操作进行中，请等待完成或 {Command.command_prefix}pos cancel 中断", sender)
             return
         if x is not None and y is not None and z is not None:
             pos = {"x": x, "y": y, "z": z}
@@ -147,7 +204,7 @@ class Mod:
 
     async def _cmd_b(self, sender, x, y, z):
         if self.job:
-            self.client.tell("§cPosition | §fError > §i已有操作进行中，请等待完成或 $p:cancel 中断", sender)
+            self.client.tell(f"§cPosition | §fError > §i已有操作进行中，请等待完成或 {Command.command_prefix}pos cancel 中断", sender)
             return
         if x is not None and y is not None and z is not None:
             pos = {"x": x, "y": y, "z": z}
@@ -274,7 +331,7 @@ class Mod:
 
     async def _with_job(self, sender, type_, fn):
         if self.job:
-            self.client.tell("§cPosition | §fError > §i已有操作进行中，请等待完成或 $p:cancel 中断", sender)
+            self.client.tell(f"§cPosition | §fError > §i已有操作进行中，请等待完成或 {Command.command_prefix}pos cancel 中断", sender)
             return
         self.job = {"cancelled": False, "startTime": time.time() * 1000, "type": type_}
         try:
@@ -518,7 +575,7 @@ class Mod:
 
     async def _exec_paste(self, sender, origin):
         if not self.lastCopyEntry:
-            self.client.tell("§cPosition | §fError > §i没有可粘贴的复制结构，请先使用 $p:copy", sender)
+            self.client.tell(f"§cPosition | §fError > §i没有可粘贴的复制结构，请先使用 {Command.command_prefix}pos copy", sender)
             return
 
         entry = self.lastCopyEntry

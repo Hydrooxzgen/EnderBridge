@@ -1,6 +1,6 @@
 """QQ 互通命令 Mod
 
-提供 q:send / q:check / q:toggle 命令(仅主客户端可用)。
+提供 $qq send / $qq check / $qq toggle 命令(仅主客户端可用)。
 """
 from config import features
 from lib.command import Command
@@ -21,23 +21,71 @@ class Mod:
     def onCommand(self):
         return {
             "user": [
-                # q:send <消息内容> — 向 QQ 群发送消息
-                Command.create("q:send", "向 QQ 群发送消息")
-                .add_string("消息内容", True)
-                .set_func(self._cmd_send),
-            ],
-
-            "owner": [
-                # q:check — 检测并手动重连 QQ
-                Command.create("q:check", "检测并手动重连 QQ")
-                .set_func(self._cmd_check),
-
-                # q:toggle <true|false> — 开启/关闭 QQ 互通功能
-                Command.create("q:toggle", "开启/关闭 QQ 互通功能")
-                .add_boolean("启用或禁用", True)
-                .set_func(self._cmd_toggle),
+                # qq send <消息内容> — 向 QQ 群发送消息
+                Command.create("qq", "QQ 互通命令（方法: send/check/toggle，仅主客户端可用）")
+                .add_string("方法", False)
+                .add_optional_string("参数1")
+                .add_optional_string("参数2")
+                .add_optional_string("参数3")
+                .add_optional_string("参数4")
+                .add_optional_string("参数5")
+                .set_func(self._cmd_qq),
             ],
         }
+
+    # ---- 命令分发器 ----
+
+    # (方法, 参数格式, 说明, 所需权限等级)
+    QQ_METHODS = [
+        ("send", "<消息内容>", "向 QQ 群发送消息", 1),
+        ("check", "", "检测并手动重连 QQ", 3),
+        ("toggle", "<true|false>", "开启/关闭 QQ 互通功能", 3),
+    ]
+
+    async def _cmd_qq(self, sender, method, p1=None, p2=None, p3=None, p4=None, p5=None):
+        """$qq 方法分发器(方法内做权限检查)"""
+        if method is None:
+            self.client.tell(f"§cQQ | §fError > §i未知方法: 未指定（输入 {Command.command_prefix}qq help 查看全部方法）", sender)
+            return
+
+        # 查询方法所需权限
+        required = None
+        for mname, _args, _desc, plevel in self.QQ_METHODS:
+            if mname == method:
+                required = plevel
+                break
+        if required is None:
+            self.client.tell(f"§cQQ | §fError > §i未知方法: {method}（输入 {Command.command_prefix}qq help 查看全部方法）", sender)
+            return
+
+        # 权限检查
+        from lib.permission import PermissionManager
+        perm = await PermissionManager.query(sender)
+        if isinstance(perm, Exception):
+            self.client.tell("§cQQ | §fError > §i权限查询失败", sender)
+            return
+        if perm < required:
+            self.client.tell("§cQQ | §fError > §i权限不足", sender)
+            return
+
+        # 分发到具体实现
+        if method == "send":
+            if p1 is None:
+                self.client.tell(f"§cQQ | §fError > §i参数不足：{Command.command_prefix}qq send <消息内容>", sender)
+                return
+            await self._cmd_send(sender, p1)
+
+        elif method == "check":
+            await self._cmd_check(sender)
+
+        elif method == "toggle":
+            if p1 is None:
+                self.client.tell(f"§cQQ | §fError > §i参数不足：{Command.command_prefix}qq toggle <true|false>", sender)
+                return
+            if p1 not in ("true", "false"):
+                self.client.tell(f'§cQQ | §fError > §i"{p1}" 处应为布尔值 true/false', sender)
+                return
+            await self._cmd_toggle(sender, p1 == "true")
 
     async def _cmd_send(self, sender, text):
         if not self._is_main:

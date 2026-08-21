@@ -145,20 +145,67 @@ class Mod:
     def onCommand(self):
         return {
             "normal": [
-                Command.create("ai", "与 AI 进行对话")
-                .add_string("对话内容", True)
-                .set_func(lambda commander, text: self.chat(text, commander)),
-
-                Command.create("ai:reset", "重置对话上下文")
-                .set_func(lambda commander: self._cmd_reset(commander)),
-            ],
-
-            "op": [
-                Command.create("ai:c", "让 AI 执行基岩版命令")
-                .add_string("对话内容", True)
-                .set_func(lambda commander, text: self.command(text, commander)),
+                Command.create("ai", "AI 对话命令（方法: chat/reset/cmd）")
+                .add_string("方法", False)
+                .add_optional_string("参数1")
+                .add_optional_string("参数2")
+                .add_optional_string("参数3")
+                .add_optional_string("参数4")
+                .add_optional_string("参数5")
+                .set_func(self._cmd_ai),
             ],
         }
+
+    # ---- 命令分发器 ----
+
+    # (方法, 参数格式, 说明, 所需权限等级)
+    AI_METHODS = [
+        ("chat", "<对话内容>", "与 AI 进行对话(带空格内容请用双引号包裹)", 0),
+        ("reset", "", "重置对话上下文", 0),
+        ("cmd", "<对话内容>", "让 AI 执行基岩版命令(带空格内容请用双引号包裹)", 2),
+    ]
+
+    async def _cmd_ai(self, sender, method, p1=None, p2=None, p3=None, p4=None, p5=None):
+        """$ai 方法分发器(方法内做权限检查)"""
+        if method is None:
+            self.client.tell(f"§cAI | §fError > §i未知方法: 未指定（输入 {Command.command_prefix}ai help 查看全部方法）", sender)
+            return
+
+        # 查询方法所需权限
+        required = None
+        for mname, _args, _desc, plevel in self.AI_METHODS:
+            if mname == method:
+                required = plevel
+                break
+        if required is None:
+            self.client.tell(f"§cAI | §fError > §i未知方法: {method}（输入 {Command.command_prefix}ai help 查看全部方法）", sender)
+            return
+
+        # 权限检查
+        from lib.permission import PermissionManager
+        perm = await PermissionManager.query(sender)
+        if isinstance(perm, Exception):
+            self.client.tell("§cAI | §fError > §i权限查询失败", sender)
+            return
+        if perm < required:
+            self.client.tell("§cAI | §fError > §i权限不足", sender)
+            return
+
+        # 分发到具体实现
+        if method == "chat":
+            if p1 is None:
+                self.client.tell(f"§cAI | §fError > §i参数不足：{Command.command_prefix}ai chat <对话内容>", sender)
+                return
+            await self.chat(p1, sender)
+
+        elif method == "reset":
+            await self._cmd_reset(sender)
+
+        elif method == "cmd":
+            if p1 is None:
+                self.client.tell(f"§cAI | §fError > §i参数不足：{Command.command_prefix}ai cmd <对话内容>", sender)
+                return
+            await self.command(p1, sender)
 
     async def _cmd_reset(self, commander):
         self.reset(commander)

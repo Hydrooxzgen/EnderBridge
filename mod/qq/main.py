@@ -231,7 +231,7 @@ class _NapCatClient:
 
 
 class Mod:
-    """QQ 互通 Mod(服务端,静态单例;由 tool Mod 的 t:move / commands 直接调用)"""
+    """QQ 互通 Mod(服务端,静态单例;由 tool Mod 的 tool move / commands 直接调用)"""
 
     napcat = None
     main_client = None

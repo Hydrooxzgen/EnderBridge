@@ -17,24 +17,66 @@ class Mod:
         return {
             # 普通命令:权限查询
             "normal": [
-                Command.create("p:query", "查询权限等级(不带参数查询自身)")
-                .add_string("账号", True)
-                .set_func(self._cmd_query),
-            ],
-
-            # Owner 命令:权限增删
-            "owner": [
-                Command.create("p:add", "添加指定账号权限")
-                .add_string("权限类型", True)
-                .add_string("账号", True)
-                .set_func(self._cmd_add),
-
-                Command.create("p:remove", "删除指定账号权限")
-                .add_string("权限类型", True)
-                .add_string("账号", True)
-                .set_func(self._cmd_remove),
+                Command.create("perm", "权限管理命令（方法: query/add/remove）")
+                .add_string("方法", False)
+                .add_optional_string("参数1")
+                .add_optional_string("参数2")
+                .add_optional_string("参数3")
+                .add_optional_string("参数4")
+                .add_optional_string("参数5")
+                .set_func(self._cmd_perm),
             ],
         }
+
+    # ---- 命令分发器 ----
+
+    # (方法, 参数格式, 说明, 所需权限等级)
+    PERM_METHODS = [
+        ("query", "[账号]", "查询权限等级(不带参数查询自身)", 0),
+        ("add", "<权限类型> <账号>", "添加指定账号权限", 3),
+        ("remove", "<权限类型> <账号>", "删除指定账号权限", 3),
+    ]
+
+    async def _cmd_perm(self, sender, method, p1=None, p2=None, p3=None, p4=None, p5=None):
+        """$perm 方法分发器(方法内做权限检查)"""
+        if method is None:
+            self.client.tell(f"§cPermission | §fError > §i未知方法: 未指定（输入 {Command.command_prefix}perm help 查看全部方法）", sender)
+            return
+
+        # 查询方法所需权限
+        required = None
+        for mname, _args, _desc, plevel in self.PERM_METHODS:
+            if mname == method:
+                required = plevel
+                break
+        if required is None:
+            self.client.tell(f"§cPermission | §fError > §i未知方法: {method}（输入 {Command.command_prefix}perm help 查看全部方法）", sender)
+            return
+
+        # 权限检查
+        perm = await PermissionManager.query(sender)
+        if isinstance(perm, Exception):
+            self.client.tell("§cPermission | §fError > §i权限查询失败", sender)
+            return
+        if perm < required:
+            self.client.tell("§cPermission | §fError > §i权限不足", sender)
+            return
+
+        # 分发到具体实现
+        if method == "query":
+            await self._cmd_query(sender, p1)
+
+        elif method == "add":
+            if p1 is None or p2 is None:
+                self.client.tell(f"§cPermission | §fError > §i参数不足：{Command.command_prefix}perm add <权限类型> <账号>", sender)
+                return
+            await self._cmd_add(sender, p1, p2)
+
+        elif method == "remove":
+            if p1 is None or p2 is None:
+                self.client.tell(f"§cPermission | §fError > §i参数不足：{Command.command_prefix}perm remove <权限类型> <账号>", sender)
+                return
+            await self._cmd_remove(sender, p1, p2)
 
     async def _cmd_query(self, commander, queried):
         # 无参数查询自身权限;带参数查询指定账号

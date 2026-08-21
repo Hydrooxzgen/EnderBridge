@@ -150,6 +150,88 @@ def _cmd_c_line(_, text):
     Current.client.tellAll(f"\n§r\n{text}")
 
 
+# ===== 命令分发器(单一入口 $read) =====
+
+# (方法, 参数格式, 说明)
+READ_METHODS = [
+    ("test", "", "测试命令"),
+    ("list", "", "列出所有连接(主客户端 + IP 或 编号 + IP)"),
+    ("reload", "", "重载所有服务端 Mod + 所有客户端 Mod 全部实例"),
+    ("mod", "", "列出所有服务端 Mod 与客户端 Mod"),
+    ("bye", "", "强制退出当前房间 (WebSocket 专用)"),
+    ("testx", "", "小测试 (WebSocket 专用)"),
+    ("attack", "", "攻击客户端聊天"),
+    ("count", "", "聊天室倒计时"),
+    ("crash", "", "崩溃客户端聊天"),
+    ("clear", "", "清屏聊天消息"),
+    ("ad", "", "推送广告"),
+    ("repeat", "<刷屏内容>", "刷屏指定内容"),
+    ("stop", "", "停止所有刷屏"),
+    ("line", "<发言内容>", "换行发言"),
+]
+
+
+async def _cmd_read(_, method, p1=None, p2=None, p3=None, p4=None, p5=None):
+    """$read 方法分发器(终端命令,无权限检查)"""
+    if method is None:
+        print(f"< 未知方法: 未指定（输入 {Command.command_prefix}read help 查看全部方法）")
+        return
+
+    known = [m for m, _a, _d in READ_METHODS]
+    if method not in known:
+        print(f"< 未知方法: {method}（输入 {Command.command_prefix}read help 查看全部方法）")
+        return
+
+    # 分发到具体实现
+    if method == "test":
+        _cmd_test(_)
+
+    elif method == "list":
+        _cmd_p_list(_)
+
+    elif method == "reload":
+        await _cmd_p_reload(_)
+
+    elif method == "mod":
+        _cmd_p_mod(_)
+
+    elif method == "bye":
+        _cmd_bye(_)
+
+    elif method == "testx":
+        _cmd_testx(_)
+
+    elif method == "attack":
+        _cmd_c_attack(_)
+
+    elif method == "count":
+        _cmd_c_count(_)
+
+    elif method == "crash":
+        _cmd_c_crash(_)
+
+    elif method == "clear":
+        _cmd_c_clear(_)
+
+    elif method == "ad":
+        _cmd_c_ad(_)
+
+    elif method == "repeat":
+        if p1 is None:
+            print(f"< 参数不足：{Command.command_prefix}read repeat <刷屏内容>")
+            return
+        _cmd_c_repeat(_, p1)
+
+    elif method == "stop":
+        _cmd_c_stop(_)
+
+    elif method == "line":
+        if p1 is None:
+            print(f"< 参数不足：{Command.command_prefix}read line <发言内容>")
+            return
+        _cmd_c_line(_, p1)
+
+
 class Mod:
     """终端读取 Mod(服务端)"""
 
@@ -191,56 +273,17 @@ class Mod:
 
         Current.set("loop", asyncio.get_running_loop().create_task(_run()))
 
-    # 命令定义
+    # 命令定义(单一入口 $read,方法见 READ_METHODS)
     commands = {
-        # 进程命令
         "normal": [
-            Command.create("test", "测试命令")
-            .set_func(_cmd_test),
-
-            Command.create("p:list", "列出所有连接(主客户端 + IP 或 编号 + IP)")
-            .set_func(_cmd_p_list),
-
-            Command.create("p:reload", "重载所有服务端 Mod + 所有客户端 Mod 全部实例")
-            .set_func(_cmd_p_reload),
-
-            Command.create("p:mod", "列出所有服务端 Mod 与客户端 Mod")
-            .set_func(_cmd_p_mod),
-        ],
-
-        # WebSocket 级别命令(终端专用)
-        "ws": [
-            Command.create("bye", "强制退出当前房间 (WebSocket 专用)")
-            .set_func(_cmd_bye),
-
-            Command.create("testx", "小测试 (WebSocket 专用)")
-            .set_func(_cmd_testx),
-
-            Command.create("c:attack", "攻击客户端聊天")
-            .set_func(_cmd_c_attack),
-
-            Command.create("c:count", "聊天室倒计时")
-            .set_func(_cmd_c_count),
-
-            Command.create("c:crash", "崩溃客户端聊天")
-            .set_func(_cmd_c_crash),
-
-            Command.create("c:clear", "清屏聊天消息")
-            .set_func(_cmd_c_clear),
-
-            Command.create("c:ad", "推送广告")
-            .set_func(_cmd_c_ad),
-
-            Command.create("c:repeat", "刷屏指定内容")
-            .add_string("刷屏内容", True)
-            .set_func(_cmd_c_repeat),
-
-            Command.create("c:stop", "停止所有刷屏")
-            .set_func(_cmd_c_stop),
-
-            Command.create("c:line", "换行发言")
-            .add_string("发言内容", True)
-            .set_func(_cmd_c_line),
+            Command.create("read", "终端命令（方法: test/list/reload/mod/bye/testx/attack/count/crash/clear/ad/repeat/stop/line）")
+            .add_string("方法", False)
+            .add_optional_string("参数1")
+            .add_optional_string("参数2")
+            .add_optional_string("参数3")
+            .add_optional_string("参数4")
+            .add_optional_string("参数5")
+            .set_func(_cmd_read),
         ],
     }
 
@@ -262,11 +305,13 @@ class Mod:
     async def read(self, input_text):
         is_command = input_text.startswith(Command.command_prefix)
 
-        # 执行普通命令
+        # 执行命令(单一入口 $read)
         if is_command:
             result = self.execute(input_text, self.commands["normal"])
             if not result:
-                return
+                # 无匹配命令提示
+                print(f"未知的命令 {input_text.split(' ')[0]}")
+            return
 
         # 检测主客户端连接状态
         if not Current.client:
@@ -284,17 +329,7 @@ class Mod:
             return
 
         # 非命令文本作为聊天消息发送
-        if not is_command:
-            Current.client.tellAll(input_text)
-            return
-
-        # 执行 WebSocket 级别命令
-        result = self.execute(input_text, self.commands["ws"])
-        if not result:
-            return
-
-        # 未知命令提示
-        print(f"未知的命令 {input_text.split(' ')[0]}")
+        Current.client.tellAll(input_text)
 
     # 命令执行
     def execute(self, msg, cmds):

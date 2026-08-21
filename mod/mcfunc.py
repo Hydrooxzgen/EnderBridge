@@ -24,30 +24,81 @@ class Mod:
     def onCommand(self):
         return {
             "op": [
-                Command.create("f:function", "运行 Function 文件")
-                .add_string("文件路径", True)
-                .set_func(self._cmd_run),
-
-                Command.create("f:loop", "循环运行 Function")
-                .add_string("文件路径", True)
-                .add_string("循环名称", True)
-                .add_float("间隔秒数", True)
-                .set_func(self._cmd_loop),
-
-                Command.create("f:stop", "停止循环（不带参数停止所有）")
-                .add_optional_string("循环名称")
-                .set_func(self._cmd_stop),
-
-                Command.create("f:list", "查看函数文件列表")
-                .add_optional_integer("页码")
-                .set_func(self._cmd_list),
-
-                Command.create("f:search", "搜索函数文件")
-                .add_string("关键词", True)
-                .add_optional_integer("页码")
-                .set_func(self._cmd_search),
+                Command.create("function", "Function 执行命令（方法: function/loop/stop/list/search）")
+                .add_string("方法", False)
+                .add_optional_string("参数1")
+                .add_optional_string("参数2")
+                .add_optional_string("参数3")
+                .add_optional_string("参数4")
+                .add_optional_string("参数5")
+                .set_func(self._cmd_function),
             ],
         }
+
+    # ---- 命令分发器 ----
+
+    FUNCTION_METHODS = [
+        ("function", "<文件路径>", "运行 Function 文件"),
+        ("loop", "<文件路径> <循环名称> <间隔秒数>", "循环运行 Function"),
+        ("stop", "[循环名称]", "停止循环（不带参数停止所有）"),
+        ("list", "[页码]", "查看函数文件列表"),
+        ("search", "<关键词> [页码]", "搜索函数文件"),
+    ]
+
+    async def _cmd_function(self, sender, method, p1=None, p2=None, p3=None, p4=None, p5=None):
+        """$function 方法分发器"""
+        if method is None:
+            self.client.tell(f"§cFunction | §fError > §i未知方法: 未指定（输入 {Command.command_prefix}function help 查看全部方法）", sender)
+            return
+
+        known = [m for m, _a, _d in self.FUNCTION_METHODS]
+        if method not in known:
+            self.client.tell(f"§cFunction | §fError > §i未知方法: {method}（输入 {Command.command_prefix}function help 查看全部方法）", sender)
+            return
+
+        # 分发到具体实现(全部为 op 权限,注册在 op 等级无需再查)
+        if method == "function":
+            if p1 is None:
+                self.client.tell(f"§cFunction | §fError > §i参数不足：{Command.command_prefix}function function <文件路径>", sender)
+                return
+            await self._cmd_run(sender, p1)
+
+        elif method == "loop":
+            if p1 is None or p2 is None or p3 is None:
+                self.client.tell(f"§cFunction | §fError > §i参数不足：{Command.command_prefix}function loop <文件路径> <循环名称> <间隔秒数>", sender)
+                return
+            try:
+                interval = float(p3)
+            except ValueError:
+                self.client.tell(f'§cFunction | §fError > §i"{p3}" 处应为浮点型', sender)
+                return
+            await self._cmd_loop(sender, p1, p2, interval)
+
+        elif method == "stop":
+            await self._cmd_stop(sender, p1)
+
+        elif method == "list":
+            page = None
+            if p1 is not None:
+                try:
+                    page = int(p1)
+                except ValueError:
+                    self.client.tell(f'§cFunction | §fError > §i"{p1}" 处应为整型', sender)
+                    return
+            await self._cmd_list(sender, page)
+
+        elif method == "search":
+            if p1 is None:
+                self.client.tell(f"§cFunction | §fError > §i参数不足：{Command.command_prefix}function search <关键词> [页码]", sender)
+                return
+            page = None
+            if p2 is not None:
+                try:
+                    page = int(p2)
+                except ValueError:
+                    self.client.tell(f'§cFunction | §fError > §i"{p2}" 处应为整型', sender)
+                    return
+            await self._cmd_search(sender, p1, page)
 
     # ---- 命令实现 ----
 

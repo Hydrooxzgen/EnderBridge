@@ -3,9 +3,9 @@
 > Minecraft 基岩版（Bedrock Edition）服务器端模组加载框架 —— 通过 WebSocket 桥接游戏客户端，加载并运行你的自定义模组。
 > A mod loader framework for Minecraft Bedrock Edition — bridges the game client over WebSocket and loads your custom mods.
 
-EnderBridge 是一个用 Python 编写的 MCBE 模组加载器，它启动一个 WebSocket 服务器等待游戏客户端连入，并以「客户端 Mod / 服务端 Mod」两层结构加载扩展。内置 AI 对话、QQ 群互通、音乐播放、图片转像素画、Litematic 建筑导入等模组，开箱即用。
+EnderBridge 是一个用 Python 编写的 MCBE 模组加载器，它启动一个 WebSocket 服务器等待游戏客户端连入，并以「客户端 Mod / 服务端 Mod」两层结构加载扩展。内置 AI 对话、QQ 群互通、音乐播放、图片转像素画、Ezmatic 建筑导入等模组，开箱即用。
 
-EnderBridge is a Python-based mod loader for Minecraft Bedrock Edition. It runs a WebSocket server waiting for game clients, then loads extensions in a two-layer architecture of **Client Mods / Server Mods**. It ships with built-in mods: AI chat, QQ bridge, music playback, image-to-pixel-art, and Litematic build import — ready to use out of the box.
+EnderBridge is a Python-based mod loader for Minecraft Bedrock Edition. It runs a WebSocket server waiting for game clients, then loads extensions in a two-layer architecture of **Client Mods / Server Mods**. It ships with built-in mods: AI chat, QQ bridge, music playback, image-to-pixel-art, and Ezmatic build import — ready to use out of the box.
 
 ---
 
@@ -17,7 +17,7 @@ EnderBridge is a Python-based mod loader for Minecraft Bedrock Edition. It runs 
 - 💬 **QQ 群互通 / QQ bridge**：通过 NapCat（OneBot v11 协议）实现 QQ 群消息与游戏内消息双向转发
 - 🎵 **音乐播放 / Music playback**：解析 MIDI/JSON 音乐，映射为游戏内 `playsound` 音效
 - 🖼️ **图片像素画 / Image to pixel art**：按 HSV/LAB 颜色匹配调色板，自动生成 MC 像素画
-- 🏗️ **Litematic 导入 / Litematic import**：解析 Java 版 `.litematic` 建筑并转换为基岩版结构
+- 🏗️ **Ezmatic 导入 / Ezmatic import**：解析 Java 版 `.litematic` 建筑并转换为基岩版结构
 - 🛡️ **权限系统 / Permission system**：owner / op / user / blocker 四级权限，命令分级执行
 - 🚦 **命令限流 / Command rate limit**：按玩家分桶的窗口限流，防刷屏
 - 🔧 **图形化配置向导 / Web setup wizard**：首次运行自动打开浏览器向导（`http://127.0.0.1:18888`），无需手改配置
@@ -73,7 +73,31 @@ After saving, `config.py` and `permission.json` are generated (old files backed 
 
 1. 让游戏客户端连接到 WebSocket 服务器（端口与向导中配置的一致，默认 `8800`）/ Connect your game client to the WebSocket server (port as configured, default `8800`)
 2. 第一个连接成为主客户端 / The first connection becomes the main client
-3. 在游戏内使用命令前缀（默认 `!`）调用各模组命令，例如 `!t:help` 查看命令帮助 / Use the command prefix (default `!`) in-game to call mod commands, e.g. `!t:help`
+3. 在游戏内使用命令前缀（默认 `!`）调用各模组命令，例如 `!tool help` 查看命令帮助 / Use the command prefix (default `!`) in-game to call mod commands, e.g. `!tool help`
+
+### 4. 命令格式 / Command format
+
+所有内置模组统一使用**单入口命令**：`<前缀><模组入口> <方法> <参数...>`，例如：
+
+All built-in mods share a **single-entry command** format: `<prefix><entry> <method> <args...>`.
+
+| 模组 / Mod | 入口 / Entry | 示例 / Example |
+|------|------|------|
+| 工具 / Tool | `tool` | `!tool help`、`!tool reload Ezmatic` |
+| 图片 / Image | `image` | `!image create demo.png` |
+| 音乐 / Music | `music` | `!music run <文件>` |
+| 坐标 / Position | `pos` | `!pos a`、`!pos fill <方块>` |
+| 权限 / Permission | `perm` | `!perm query Steve` |
+| 函数 / MCFunc | `function` | `!function function <路径>` |
+| 外接 WebSocket / MoreWS | `ws` | `!ws connect ws://127.0.0.1:8080` |
+| QQ 互通 / QQ | `qq` | `!qq send 你好` |
+| AI 对话 / AI | `ai` | `!ai chat 你好` |
+| 终端 / Terminal | `read` | `!read list` |
+| Ezmatic 建筑 / Ezmatic | `ezmatic` | `!ezmatic preview <文件>` |
+
+每个入口输入 `help` 可查看该模组的全部方法：`!tool help`、`!music help`……
+
+Type `help` after any entry to list all its methods: `!tool help`, `!music help`, ...
 
 ---
 
@@ -117,7 +141,7 @@ EnderBridge/
     ├── read.py              # 终端交互模组 / Terminal interaction mod
     ├── tool.py              # 工具 / 命令帮助 / 管理 / Tools & command help
     ├── image/               # 图片转像素画 / Image to pixel art
-    ├── litematic/           # Litematic 建筑导入 / Litematic build import
+    ├── ezmatic/             # Ezmatic 建筑导入 / Ezmatic build import
     └── qq/                  # QQ 群互通（NapCat）/ QQ bridge (NapCat)
 ```
 
@@ -128,13 +152,13 @@ EnderBridge/
 | 模组 / Mod | 加载位置 / Load | 功能 / Description |
 |------|----------|------|
 | `AI` | 客户端 + 服务端 / Client + Server | 与 AI 模型对话（单次 / 上下文模式）/ Chat with AI (single / context mode) |
-| `PermissionCommands` | 客户端 / Client | 游戏内权限查询与增删（`p:query` / `p:add` / `p:remove`）/ In-game permission management |
-| `Tool` | 客户端 / Client | 命令帮助（`t:help` 分页）、搜索、终端执行、SAPI 控制 / Command help, search, terminal exec |
+| `PermissionCommands` | 客户端 / Client | 游戏内权限查询与增删（`!perm query` / `!perm add` / `!perm remove`）/ In-game permission management |
+| `Tool` | 客户端 / Client | 命令帮助（`!tool help` 分页）、搜索、终端执行、SAPI 控制 / Command help, search, terminal exec |
 | `Position` | 客户端 / Client | A/B 点标记、距离计算、区域填充、结构复制 / 粘贴 / 剪切 / Coordinates & structure ops |
 | `Music` | 客户端 / Client | 解析 MIDI/JSON 并播放为游戏音效 / Play MIDI/JSON as in-game sounds |
 | `MCFunc` | 客户端 / Client | 加载执行 `.mcfunction` 文件，支持嵌套与定时循环 / Run .mcfunction files |
 | `MoreWS` | 客户端 / Client | 同时连接多个外部 WebSocket 服务端并双向转发 / Multi-WebSocket forwarding |
-| `Litematic` | 客户端 / Client | `.litematic` 建筑导入、预览、修复、导出 `.mcstructure` / Build import & export |
+| `Ezmatic` | 客户端 / Client | `.litematic` 建筑导入、预览、修复、导出 `.mcstructure` / Build import & export |
 | `ImageMod` | 客户端 / Client | 图片转 MC 像素画（HSV/LAB 颜色匹配）/ Image to pixel art |
 | `QQ` | 客户端 / Client | QQ 群消息与游戏内消息互通 / QQ ↔ in-game chat bridge |
 | `read` | 服务端 / Server | 终端命令：重载 Mod、列出连接、消息推送 / Terminal commands, reload, push |

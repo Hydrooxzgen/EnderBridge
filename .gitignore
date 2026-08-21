@@ -8,7 +8,7 @@ logs/*
 # 资源目录: 忽略用户内容,保留目录结构(.gitkeep 占位)
 resources/midi/*
 resources/mcfunc/*
-resources/litematic/*
+resources/ezmatic/*
 resources/pictures/*
 structures/*
 !.gitkeep

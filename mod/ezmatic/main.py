@@ -1,4 +1,4 @@
-"""Litematic 建筑投影导入 Mod
+"""Ezmatic 建筑投影导入 Mod
 
 解析 .litematic 文件(NBT 格式),导入为 MCBE 世界中的建筑;
 支持预览、世界差异检查、修复、导出 .mcstructure 结构文件。
@@ -530,7 +530,7 @@ def merge_blocks_to_rects(blocks, sx, sz):
 
 
 class Mod:
-    """Litematic 建筑投影导入 Mod(客户端)"""
+    """Ezmatic 建筑投影导入 Mod(客户端)"""
 
     # 任务存档为静态共享:连接/实例共用同一份,$create 返回的任务 ID 全局有效
     task_seq = 0
@@ -547,120 +547,102 @@ class Mod:
         self.fix_job = None
 
     def onCommand(self):
-        c = self.client
+        # 统一入口命令:${prefix}ezmatic 方法 参数1 参数2 ...
         return {
             "op": [
-                # l:help [命令名] — 列出所有命令,或查看指定命令的用法
-                Command.create("l:help", "查看命令用法")
-                .add_optional_string("命令名")
-                .set_func(self._cmd_help),
-
-                # l:create <文件> [X] [Y] [Z] [trim|raw] — 导入建筑投影
-                Command.create("l:create", "导入 Litematic 建筑投影")
-                .add_string("文件名", False)
-                .add_optional_string("X")
-                .add_optional_string("Y")
-                .add_optional_string("Z")
-                .add_optional_string("模式")
-                .set_func(self._cmd_create),
-
-                # l:preview <文件> [X] [Y] [Z] [trim|raw] — 粒子+实体边框预览
-                Command.create("l:preview", "粒子边框 + 实体标记预览建筑位置")
-                .add_string("文件名", False)
-                .add_optional_string("X")
-                .add_optional_string("Y")
-                .add_optional_string("Z")
-                .add_optional_string("模式")
-                .set_func(self._cmd_preview),
-
-                # l:unpreview — 清除预览
-                Command.create("l:unpreview", "清除建筑预览")
-                .set_func(self._cmd_unpreview),
-
-                # l:export <文件> [导出名] [trim|raw] — 导出 .mcstructure 结构文件
-                Command.create("l:export", "导出为 MCBE 结构方块文件 (.mcstructure)")
-                .add_string("文件名", False)
-                .add_optional_string("导出名")
-                .add_optional_string("模式")
-                .set_func(self._cmd_export),
-
-                # l:list [页码] — 浏览建筑文件
-                Command.create("l:list", "查看建筑文件列表")
-                .add_optional_string("页码")
-                .set_func(self._cmd_list),
-
-                # l:id — 查看所有任务 ID
-                Command.create("l:id", "查看所有任务 ID")
-                .set_func(self._cmd_id),
-
-                # l:search <关键词> [页码] — 搜索建筑文件
-                Command.create("l:search", "搜索建筑文件")
-                .add_string("关键词", False)
-                .add_optional_string("页码")
-                .set_func(self._cmd_search),
-
-                # l:y — 确认待执行的导入
-                Command.create("l:y", "确认导入操作")
-                .set_func(self._cmd_confirm),
-
-                # l:n — 取消待确认任务或中断正在进行的导入/检查/修复
-                Command.create("l:n", "取消/中断操作")
-                .set_func(self._cmd_cancel),
-
-                # l:author — 作者信息
-                Command.create("l:author", "查看作者信息")
-                .set_func(self._cmd_author),
-
-                # l:status — 查看所有进行中任务进度
-                Command.create("l:status", "查看导入/检查/修复进度")
-                .set_func(self._cmd_status),
-
-                # l:verify <ID> [map|world] — 默认检查游戏世界一致性;map 检查方块映射错误
-                Command.create("l:verify", "检查投影与世界的差异 / 方块映射错误")
-                .add_string("ID", False)
-                .add_optional_string("模式")
-                .set_func(self._cmd_verify),
-
-                # l:fix <ID> [替代方块] — 修复错误方块
-                Command.create("l:fix", "修复被挖掉的方块 / 替换无法映射的方块")
-                .add_string("ID", False)
-                .add_optional_string("替代方块")
-                .set_func(self._cmd_fix),
+                Command.create("ezmatic", "Ezmatic 建筑投影命令（方法: create/preview/export/list/search/id/y/n/status/verify/fix/unpreview/author/help）")
+                .add_string("方法", False)
+                .add_optional_string("参数1")
+                .add_optional_string("参数2")
+                .add_optional_string("参数3")
+                .add_optional_string("参数4")
+                .add_optional_string("参数5")
+                .set_func(self._cmd_ezmatic),
             ],
         }
 
     # ---- 命令实现 ----
 
-    async def _cmd_help(self, sender, name):
-        all_cmds = self.onCommand()["op"]
-        if name:
-            cm = next((x for x in all_cmds if x.name == name), None)
-            if not cm:
-                self.client.tell(f"§cLitematic | §fError > §i没有找到命令: {name}（输入 !l:help 查看全部命令）", sender)
-                return
-            if cm.parameters:
-                params = []
-                for i, p in enumerate(cm.parameters):
-                    ptype, desc, opt = p
-                    params.append(f" §f参数{i + 1}: §7<{ptype}> §f({'可选' if opt else '必选'}){f' - {desc}' if desc else ''}")
-                param_text = "\n".join(params)
-            else:
-                param_text = " §7无参数"
+    # 方法名 -> (参数格式, 描述)
+    EZ_METHODS = [
+        ("create", "<文件> [X] [Y] [Z] [trim|raw]", "导入建筑投影"),
+        ("preview", "<文件> [X] [Y] [Z] [trim|raw]", "粒子边框 + 实体标记预览建筑位置"),
+        ("unpreview", "", "清除建筑预览"),
+        ("export", "<文件> [导出名] [trim|raw]", "导出为 MCBE 结构方块文件 (.mcstructure)"),
+        ("list", "[页码]", "查看建筑文件列表"),
+        ("id", "", "查看所有任务 ID"),
+        ("search", "<关键词> [页码]", "搜索建筑文件"),
+        ("y", "", "确认导入操作"),
+        ("n", "", "取消/中断操作"),
+        ("author", "", "查看作者信息"),
+        ("status", "", "查看导入/检查/修复进度"),
+        ("verify", "<ID> [map|world]", "检查投影与世界的差异 / 方块映射错误"),
+        ("fix", "<ID> [替代方块]", "修复被挖掉的方块 / 替换无法映射的方块"),
+        ("help", "[方法名]", "查看方法用法"),
+    ]
+
+    # 统一分发:根据方法名路由到各内部实现
+    async def _cmd_ezmatic(self, sender, method, p1=None, p2=None, p3=None, p4=None, p5=None):
+        m = (method or "").lower()
+        if m == "help":
+            await self._cmd_help(sender, p1)
+        elif m == "create":
+            await self._cmd_create(sender, p1, p2, p3, p4, p5)
+        elif m == "preview":
+            await self._cmd_preview(sender, p1, p2, p3, p4, p5)
+        elif m == "unpreview":
+            await self._cmd_unpreview(sender)
+        elif m == "export":
+            await self._cmd_export(sender, p1, p2, p3)
+        elif m == "list":
+            await self._cmd_list(sender, p1)
+        elif m == "id":
+            await self._cmd_id(sender)
+        elif m == "search":
+            await self._cmd_search(sender, p1, p2)
+        elif m == "y":
+            await self._cmd_confirm(sender)
+        elif m == "n":
+            await self._cmd_cancel(sender)
+        elif m == "author":
+            await self._cmd_author(sender)
+        elif m == "status":
+            await self._cmd_status(sender)
+        elif m == "verify":
+            await self._cmd_verify(sender, p1, p2)
+        elif m == "fix":
+            await self._cmd_fix(sender, p1, p2)
+        else:
             self.client.tell(
-                f"§eLitematic | §fHelp > §b{cm.name} §7用法:\n"
-                f"§f说明: §7{cm.description}\n"
-                f"§f参数:\n{param_text}", sender
+                f"§cEzmatic | §fError > §i未知方法: {method}（输入 {Command.command_prefix}ezmatic help 查看全部方法）", sender
+            )
+
+    async def _cmd_help(self, sender, name):
+        if name:
+            hit = next((m for m in Mod.EZ_METHODS if m[0] == name), None)
+            if not hit:
+                self.client.tell(
+                    f"§cEzmatic | §fError > §i没有找到方法: {name}（输入 {Command.command_prefix}ezmatic help 查看全部方法）", sender
+                )
+                return
+            mname, args, desc = hit
+            self.client.tell(
+                f"§eEzmatic | §fHelp > §b{Command.command_prefix}ezmatic {mname}{' ' + args if args else ''} §7用法:\n"
+                f"§f说明: §7{desc}", sender
             )
         else:
-            lines = "\n".join(f"§a$l:{cm.name.replace('l:', '', 1)} §7- §f{cm.description}" for cm in all_cmds)
+            lines = "\n".join(
+                f"§a{Command.command_prefix}ezmatic {mname}{' ' + args if args else ''} §7- §f{desc}"
+                for mname, args, desc in Mod.EZ_METHODS
+            )
             self.client.tell(
-                f"§eLitematic | §fHelp > §7可用命令\n{lines}\n"
-                f"§7输入 §a!l:help <命令名> §7查看详细用法", sender
+                f"§eEzmatic | §fHelp > §7可用方法\n{lines}\n"
+                f"§7输入 §a{Command.command_prefix}ezmatic help <方法名> §7查看详细用法", sender
             )
 
     async def _cmd_create(self, sender, file_name, x, y, z, mode):
         if self.job:
-            self.client.tell("§cLitematic | §fError > §i已有导入进程运行中，请等待完成或 !l:n 中断", sender)
+            self.client.tell(f"§cEzmatic | §fError > §i已有导入进程运行中，请等待完成或 {Command.command_prefix}ezmatic n 中断", sender)
             return
         await self.create(file_name, sender, x, y, z, mode)
 
@@ -684,33 +666,33 @@ class Mod:
 
     async def _cmd_confirm(self, sender):
         if not self.pending:
-            self.client.tell("§cLitematic | §fError > §i没有待确认的导入任务", sender)
+            self.client.tell("§cEzmatic | §fError > §i没有待确认的导入任务", sender)
             return
-        self.client.tell("§eLitematic | §fImport > §i已确认，开始导入…", sender)
+        self.client.tell("§eEzmatic | §fImport > §i已确认，开始导入…", sender)
         try:
             await self.run()
         except Exception as e:
-            self.client.tell(f"§cLitematic | §fError > §i导入出错: {e}", sender)
+            self.client.tell(f"§cEzmatic | §fError > §i导入出错: {e}", sender)
             self.job = None
 
     async def _cmd_cancel(self, sender):
         if self.job:
             self.job["cancelled"] = True
-            self.client.tell("§cLitematic | §fCancel > §i正在中断导入…", sender)
+            self.client.tell("§cEzmatic | §fCancel > §i正在中断导入…", sender)
         elif self.verify_job:
             self.verify_job["cancelled"] = True
-            self.client.tell("§cLitematic | §fCancel > §i正在中断世界检查…", sender)
+            self.client.tell("§cEzmatic | §fCancel > §i正在中断世界检查…", sender)
         elif self.fix_job:
             self.fix_job["cancelled"] = True
-            self.client.tell("§cLitematic | §fCancel > §i正在中断修复…", sender)
+            self.client.tell("§cEzmatic | §fCancel > §i正在中断修复…", sender)
         elif self.pending:
             self.pending = None
-            self.client.tell("§cLitematic | §fCancel > §i已取消导入", sender)
+            self.client.tell("§cEzmatic | §fCancel > §i已取消导入", sender)
         else:
-            self.client.tell("§cLitematic | §fError > §i没有进行中的操作", sender)
+            self.client.tell("§cEzmatic | §fError > §i没有进行中的操作", sender)
 
     async def _cmd_author(self, sender):
-        self.client.tell("§eLitematic | §fAuthor > §iHydrooxzgen", sender)
+        self.client.tell("§eEzmatic | §fAuthor > §iHydrooxzgen", sender)
 
     async def _cmd_status(self, sender):
         lines = []
@@ -722,7 +704,7 @@ class Mod:
             phase_pct = f"{(j['phasePlaced'] / j['phaseTotal'] * 100):.1f}" if j["phaseTotal"] > 0 else "0.0"
             eta = f"{((j['total'] - j['phasePlaced']) / cmd_speed):.1f}" if cmd_speed > 0 else "?"
             lines.append(
-                f"§eLitematic | §fStatus > §i导入 §f{j['fileName']}\n"
+                f"§eEzmatic | §fStatus > §i导入 §f{j['fileName']}\n"
                 f"§f总进度 {total_pct}% | 预计 {eta}s\n"
                 f"§f阶段: {j['phase']} ({j['areaIndex']}/{j['areaTotal']} 区域)\n"
                 f"§f进度: {phase_pct}% | {j['phasePlaced']} / {j['phaseTotal']} 命令 | 方块 {j['phaseBlocksPlaced']} / {j['phaseBlockTotal']}\n"
@@ -732,18 +714,18 @@ class Mod:
             v = self.verify_job
             elapsed = (time.time() * 1000 - v["startTime"]) / 1000
             lines.append(
-                f"§eLitematic | §fStatus > §i世界检查 §f(任务 #{v['taskId']}: {v['fileName']})\n"
+                f"§eEzmatic | §fStatus > §i世界检查 §f(任务 #{v['taskId']}: {v['fileName']})\n"
                 f"§f进度: {f'{(v['checked'] / v['total'] * 100):.1f}' if v['total'] > 0 else '0.0'}% | {v['checked']} / {v['total']} 方块 | 不匹配: {v['mismatches']} | {elapsed:.1f}s"
             )
         if self.fix_job:
             f = self.fix_job
             elapsed = (time.time() * 1000 - f["startTime"]) / 1000
             lines.append(
-                f"§eLitematic | §fStatus > §i修复 §f(任务 #{f['taskId']}: {f['fileName']})\n"
+                f"§eEzmatic | §fStatus > §i修复 §f(任务 #{f['taskId']}: {f['fileName']})\n"
                 f"§f进度: {f['done']} / {f['total']} 方块 | {elapsed:.1f}s"
             )
         if not lines:
-            self.client.tell("§cLitematic | §fError > §i当前没有进行中的任务", sender)
+            self.client.tell("§cEzmatic | §fError > §i当前没有进行中的任务", sender)
             return
         self.client.tellAll("\n\n".join(lines))
 
@@ -753,13 +735,13 @@ class Mod:
         except (ValueError, TypeError):
             tid = None
         if tid is None or tid not in Mod.tasks:
-            self.client.tell("§cLitematic | §fError > §i没有找到任务 ID，请先 !l:create 获取任务 ID", sender)
+            self.client.tell(f"§cEzmatic | §fError > §i没有找到任务 ID，请先 {Command.command_prefix}ezmatic create 获取任务 ID", sender)
             return
         if mode == "map":
             self.verify(tid, sender)
             return
         if mode is not None and mode != "world":
-            self.client.tell("§cLitematic | §fError > §i模式参数无效：应为 map（检查方块映射）或留空（检查世界一致性）", sender)
+            self.client.tell("§cEzmatic | §fError > §i模式参数无效：应为 map（检查方块映射）或留空（检查世界一致性）", sender)
             return
         await self.verify_world(tid, sender)
 
@@ -769,22 +751,22 @@ class Mod:
         except (ValueError, TypeError):
             tid = None
         if tid is None or tid not in Mod.tasks:
-            self.client.tell("§cLitematic | §fError > §i没有找到任务 ID，请先 !l:create 获取任务 ID", sender)
+            self.client.tell(f"§cEzmatic | §fError > §i没有找到任务 ID，请先 {Command.command_prefix}ezmatic create 获取任务 ID", sender)
             return
         if self.fix_job:
-            self.client.tell("§cLitematic | §fError > §i已有修复任务进行中，请等待完成或 !l:n 中断", sender)
+            self.client.tell(f"§cEzmatic | §fError > §i已有修复任务进行中，请等待完成或 {Command.command_prefix}ezmatic n 中断", sender)
             return
         await self.fix(tid, sender, fb)
 
     # ---- 文件列表 ----
 
     def page_list(self, sender, files, header):
-        dir_ = basePath["litematic"]
+        dir_ = basePath["ezmatic"]
         if not os.path.exists(dir_):
-            self.client.tell("§cLitematic | §fError > §i建筑目录不存在", sender)
+            self.client.tell("§cEzmatic | §fError > §i建筑目录不存在", sender)
             return
         if not files:
-            self.client.tell("§cLitematic | §fError > §i没有找到 .litematic 文件", sender)
+            self.client.tell("§cEzmatic | §fError > §i没有找到 .litematic 文件", sender)
             return
 
         page_size = 5
@@ -816,9 +798,9 @@ class Mod:
                 self.page = 1
         else:
             self.page = 1
-        dir_ = basePath["litematic"]
+        dir_ = basePath["ezmatic"]
         files = sorted([f for f in os.listdir(dir_) if f.endswith(".litematic")]) if os.path.exists(dir_) else []
-        self.page_list(sender, files, "§eLitematic | §fList")
+        self.page_list(sender, files, "§eEzmatic | §fList")
 
     def search_files(self, keyword, page, sender):
         if page is not None:
@@ -828,17 +810,17 @@ class Mod:
                 self.page = 1
         else:
             self.page = 1
-        dir_ = basePath["litematic"]
+        dir_ = basePath["ezmatic"]
         files = sorted([
             f for f in os.listdir(dir_)
             if f.endswith(".litematic") and keyword.lower() in f.lower()
         ]) if os.path.exists(dir_) else []
-        self.page_list(sender, files, f"§eLitematic | §fSearch > §i\"{keyword}\"")
+        self.page_list(sender, files, f"§eEzmatic | §fSearch > §i\"{keyword}\"")
 
     def list_tasks(self, sender):
         tasks = sorted(Mod.tasks.items(), key=lambda kv: kv[0], reverse=True)
         if not tasks:
-            self.client.tell("§cLitematic | §fError > §i当前没有任务，先 !l:create 创建", sender)
+            self.client.tell(f"§cEzmatic | §fError > §i当前没有任务，先 {Command.command_prefix}ezmatic create 创建", sender)
             return
         now = time.time() * 1000
         lines = []
@@ -861,8 +843,8 @@ class Mod:
             lines.append(f"§b{str(tid).rjust(3, ' ')}. §f{t['file']} §7| §f{blocks}§7 方块 §7| §7{ago}{' §7| ' + ' '.join(tags) if tags else ''}")
         lines_text = "\n".join(lines)
         self.client.tell(
-            f"§eLitematic | §fID > §i任务列表 ({len(tasks)} 个)\n{lines_text}\n"
-            f"§7使用 §a!l:verify <ID>§7 检查世界差异 / §a!l:fix <ID>§7 修复", sender
+            f"§eEzmatic | §fID > §i任务列表 ({len(tasks)} 个)\n{lines_text}\n"
+            f"§7使用 §a{Command.command_prefix}ezmatic verify <ID>§7 检查世界差异 / §a{Command.command_prefix}ezmatic fix <ID>§7 修复", sender
         )
 
     def format_size(self, bytes_):
@@ -894,31 +876,31 @@ class Mod:
         raw = placement["raw"]
         coords = placement["coords"]
         if raw is None:
-            self.client.tell("§cLitematic | §fError > §i模式参数无效：应为 raw（保留原始高度）或 trim（裁剪底部空气，默认）", sender)
+            self.client.tell("§cEzmatic | §fError > §i模式参数无效：应为 raw（保留原始高度）或 trim（裁剪底部空气，默认）", sender)
             return
         if 0 < len(coords) < 3:
-            self.client.tell("§cLitematic | §fError > §i坐标参数不完整，需要同时提供 X Y Z 或都不提供（使用自身坐标）", sender)
+            self.client.tell("§cEzmatic | §fError > §i坐标参数不完整，需要同时提供 X Y Z 或都不提供（使用自身坐标）", sender)
             return
 
         # 路径穿越防护:只允许单层合法文件名
         if (not isinstance(file_name, str) or not file_name
                 or file_name != os.path.basename(file_name)
                 or re.search(r"[\\/]", file_name) is not None or file_name.startswith(".")):
-            self.client.tell(f"§cLitematic | §fError > §i非法的文件名: {file_name}", sender)
+            self.client.tell(f"§cEzmatic | §fError > §i非法的文件名: {file_name}", sender)
             return
 
         base_name = file_name if file_name.endswith(".litematic") else file_name + ".litematic"
-        file_path = os.path.join(basePath["litematic"], base_name)
+        file_path = os.path.join(basePath["ezmatic"], base_name)
         if not os.path.exists(file_path):
-            self.client.tell(f"§cLitematic | §fError > §i文件不存在: {file_name}", sender)
+            self.client.tell(f"§cEzmatic | §fError > §i文件不存在: {file_name}", sender)
             return
 
-        self.client.tell("§i正在解析 Litematic 文件…", sender)
+        self.client.tell("§i正在解析建筑文件…", sender)
 
         try:
             data = await parse_litematic(file_path)
         except Exception as e:
-            self.client.tell(f"§cLitematic | §fError > §i解析失败: {e}", sender)
+            self.client.tell(f"§cEzmatic | §fError > §i解析失败: {e}", sender)
             return
         if not raw:
             trim_air(data)
@@ -933,21 +915,21 @@ class Mod:
             try:
                 pos = await self.client.getPosition("@s")
                 if not pos:
-                    self.client.tell("§cLitematic | §fError > §i无法获取你的坐标", sender)
+                    self.client.tell("§cEzmatic | §fError > §i无法获取你的坐标", sender)
                     return
                 # 玩家脚底的 Y 是其脚下方块的上表面,减 1 使建筑底部对齐到脚下那层方块
                 origin = {"x": math.floor(pos["x"]), "y": math.floor(pos["y"]) - 1, "z": math.floor(pos["z"])}
             except Exception:
-                self.client.tell("§cLitematic | §fError > §i无法获取你的坐标", sender)
+                self.client.tell("§cEzmatic | §fError > §i无法获取你的坐标", sender)
                 return
 
         if origin["y"] < -64 or origin["y"] + data["sy"] - 1 > 320:
-            self.client.tell(f"§cLitematic | §fError > §iY 轴超出限制: {origin['y']} ~ {origin['y'] + data['sy'] - 1} (允许 -64 ~ 320)", sender)
+            self.client.tell(f"§cEzmatic | §fError > §iY 轴超出限制: {origin['y']} ~ {origin['y'] + data['sy'] - 1} (允许 -64 ~ 320)", sender)
             return
 
         self.pending = {"data": data, "origin": origin, "file": file_name, "raw": raw}
 
-        # 分配唯一任务 ID 并存档,供 $verify / $fix 使用
+        # 分配唯一任务 ID 并存档,供 ezmatic verify / ezmatic fix 使用
         Mod.task_seq += 1
         task_id = Mod.task_seq
         Mod.tasks[task_id] = {"data": data, "file": file_name, "origin": origin, "raw": raw, "time": time.time() * 1000}
@@ -984,8 +966,8 @@ class Mod:
         est_time = f"{((area_count + cmd_count) * 0.001 + 1):.1f}"
 
         self.client.tellAll(
-            f"§eLitematic | §fImport > §i{file_name}\n"
-            f"§f任务ID: §b{task_id} §7(用于 !l:verify / !l:fix)\n"
+            f"§eEzmatic | §fImport > §i{file_name}\n"
+            f"§f任务ID: §b{task_id} §7(用于 {Command.command_prefix}ezmatic verify / {Command.command_prefix}ezmatic fix)\n"
             f"§f尺寸: {data['sx']} × {data['sy']} × {data['sz']} = {data['totalCoords']} 坐标\n"
             f"§f方块: {block_count} → {cmd_count} 条指令\n"
             f"§f底部空气: {data.get('trimmedAir', 0)} 层 §7({'raw: 保留高度偏移' if raw else 'trim: 已裁剪对齐地面'})\n"
@@ -994,8 +976,8 @@ class Mod:
             f"§f预计耗时: {est_time}s"
         )
         if unmapped_count:
-            self.client.tellAll(f"§cLitematic | §fWarn > §i无法映射方块: {unmapped_count} 个 （可用 !l:verify {task_id} map 检查，!l:fix {task_id} 修复）")
-        self.client.tellAll(f"§f确认请发送 §e!l:y，取消请发送 §c!l:n")
+            self.client.tellAll(f"§cEzmatic | §fWarn > §i无法映射方块: {unmapped_count} 个 （可用 {Command.command_prefix}ezmatic verify {task_id} map 检查，{Command.command_prefix}ezmatic fix {task_id} 修复）")
+        self.client.tellAll(f"§f确认请发送 §e{Command.command_prefix}ezmatic y，取消请发送 §c{Command.command_prefix}ezmatic n")
 
     async def run(self):
         task = self.pending
@@ -1076,9 +1058,9 @@ class Mod:
             self.job["phaseBlocksPlaced"] = 0
             self.job["phaseBlockTotal"] = 0
             try:
-                await self.client.runCommand(f"/tickingarea add {abs_x1} {origin['y']} {abs_z1} {abs_x2} {origin['y'] + sy - 1} {abs_z2} litematic_{i}")
+                await self.client.runCommand(f"/tickingarea add {abs_x1} {origin['y']} {abs_z1} {abs_x2} {origin['y'] + sy - 1} {abs_z2} ezmatic_{i}")
             except Exception as e:
-                self.client.tellAll(f"§cLitematic | §fError > §i[tickingarea add] {e}")
+                self.client.tellAll(f"§cEzmatic | §fError > §i[tickingarea add] {e}")
             fill_x1 = max(abs_x1, origin["x"])
             fill_z1 = max(abs_z1, origin["z"])
             fill_x2 = min(abs_x2, origin["x"] + sx - 1)
@@ -1170,39 +1152,39 @@ class Mod:
             self.job["phaseBlocksPlaced"] = 0
             self.job["phaseBlockTotal"] = 0
             try:
-                await self.client.runCommand(f"/tickingarea remove litematic_{i}")
+                await self.client.runCommand(f"/tickingarea remove ezmatic_{i}")
             except Exception:
                 pass
 
         if not self.job["cancelled"]:
             elapsed = (time.time() * 1000 - self.job["startTime"]) / 1000
             speed = round(total / elapsed) if elapsed > 0 else 0
-            self.client.tellAll(f"§eLitematic | §fImport > §i{file_name} 导入完成 共 {total} 方块 {total_cmds} 指令 耗时 {elapsed:.1f}s 速度 {speed}方块/s")
+            self.client.tellAll(f"§eEzmatic | §fImport > §i{file_name} 导入完成 共 {total} 方块 {total_cmds} 指令 耗时 {elapsed:.1f}s 速度 {speed}方块/s")
         else:
-            self.client.tellAll(f"§cLitematic | §fCancel > §i导入已中断 ({file_name})")
+            self.client.tellAll(f"§cEzmatic | §fCancel > §i导入已中断 ({file_name})")
         self.job = None
 
-    # l:verify <ID> map: 检查任务投影中方块映射错误
+    # ezmatic verify <ID> map: 检查任务投影中方块映射错误
     def verify(self, id_, sender):
         task = Mod.tasks.get(id_)
         data = task["data"]
         unmapped = data.get("unmappedBlocks") or []
         if not unmapped:
             self.client.tell(
-                f"§aLitematic | §fVerify > §i任务 #{id_} ({task['file']}) 方块映射检查通过，无 mod 方块错误\n"
-                f"§f提示: 要检查游戏世界里方块是否被挖掉/替换，请用 !l:verify {id_}", sender
+                f"§aEzmatic | §fVerify > §i任务 #{id_} ({task['file']}) 方块映射检查通过，无 mod 方块错误\n"
+                f"§f提示: 要检查游戏世界里方块是否被挖掉/替换，请用 {Command.command_prefix}ezmatic verify {id_}", sender
             )
             return
         lines = "\n".join(f"§f{name} §7× §e{cnt}" for name, cnt in (data.get("unmappedSummary") or {}).items())
         self.client.tell(
-            f"§eLitematic | §fVerify > §i方块检查报告 (任务 #{id_})\n"
+            f"§eEzmatic | §fVerify > §i方块检查报告 (任务 #{id_})\n"
             f"§f文件: {task['file']}\n"
             f"§c无法映射方块: {len(unmapped)} 个 （导入时会被跳过）\n"
             f"{lines}\n"
-            f"§7发送 !l:fix {id_} §7将用 stone 替换（可指定替代方块）", sender
+            f"§7发送 {Command.command_prefix}ezmatic fix {id_} §7将用 stone 替换（可指定替代方块）", sender
         )
 
-    # l:verify <ID> world: 检查游戏世界里投影区域与投影数据的差异
+    # ezmatic verify <ID> world: 检查游戏世界里投影区域与投影数据的差异
     async def verify_world(self, id_, sender):
         c = self.client
         task = Mod.tasks.get(id_)
@@ -1210,11 +1192,11 @@ class Mod:
         origin = task["origin"]
         blocks = data["blocks"]
         if not blocks:
-            self.client.tell(f"§aLitematic | §fVerify > §i任务 #{id_} 没有可检查的方块", sender)
+            self.client.tell(f"§aEzmatic | §fVerify > §i任务 #{id_} 没有可检查的方块", sender)
             return
         t0 = time.time() * 1000
         est = math.ceil(len(blocks) / 8)
-        self.client.tell(f"§i开始世界检查… {len(blocks)} 个方块 （预计 {est}s 左右，!l:n 可中断）", sender)
+        self.client.tell(f"§i开始世界检查… {len(blocks)} 个方块 （预计 {est}s 左右，{Command.command_prefix}ezmatic n 可中断）", sender)
         CONC = 4
         mismatches = []
         checked = 0
@@ -1251,20 +1233,20 @@ class Mod:
                 batch = blocks[i:i + CONC]
                 await asyncio.gather(*(check_one(b) for b in batch))
                 if checked >= 500 and checked % 500 == 0:
-                    self.client.tellAll(f"§7Litematic | §fVerify >  §i世界检查进度: {checked}/{len(blocks)} | 不匹配: {len(mismatches)} 个")
+                    self.client.tellAll(f"§7Ezmatic | §fVerify >  §i世界检查进度: {checked}/{len(blocks)} | 不匹配: {len(mismatches)} 个")
                 i += CONC
                 await asyncio.sleep(0.001)
         finally:
             self.verify_job = None
 
         if checked == 0:
-            self.client.tell("§cLitematic | §fVerify > §i世界检查已中断", sender)
+            self.client.tell("§cEzmatic | §fVerify > §i世界检查已中断", sender)
             return
         elapsed = (time.time() * 1000 - t0) / 1000
-        # 差异列表存档到任务,供 $fix 修复
+        # 差异列表存档到任务,供 ezmatic fix 修复
         task["mismatches"] = mismatches
         if not mismatches:
-            self.client.tell(f"§aLitematic | §fVerify > §i世界检查完成 (任务 #{id_}) 已逐块 testforblock 比对 {checked} 个方块，全部与投影一致 耗时 {elapsed:.1f}s", sender)
+            self.client.tell(f"§aEzmatic | §fVerify > §i世界检查完成 (任务 #{id_}) 已逐块 testforblock 比对 {checked} 个方块，全部与投影一致 耗时 {elapsed:.1f}s", sender)
             return
         lines = []
         for m in mismatches[:20]:
@@ -1273,15 +1255,15 @@ class Mod:
         list_text = "\n".join(lines)
         more = f"\n§7…共 {len(mismatches)} 处差异" if len(mismatches) > 20 else ""
         self.client.tell(
-            f"§eLitematic | §fVerify > §i世界检查报告 (任务 #{id_})\n"
+            f"§eEzmatic | §fVerify > §i世界检查报告 (任务 #{id_})\n"
             f"§f文件: {task['file']}\n"
             f"§f检查: {checked} 个方块 | 不匹配: {len(mismatches)} 个 耗时 {elapsed:.1f}s\n"
             f"{list_text}{more}\n"
             f"§7差异可能是方块被挖掉或替换（本检查不检测额外新增的方块）\n"
-            f"§7发送 !l:fix {id_} §7可重新放置这些方块，恢复与投影一致", sender
+            f"§7发送 {Command.command_prefix}ezmatic fix {id_} §7可重新放置这些方块，恢复与投影一致", sender
         )
 
-    # l:fix <ID> [替代方块]: ① 重新放置 verify 发现的被挖掉/替换的方块 ② 替换无法映射的方块
+    # ezmatic fix <ID> [替代方块]: ① 重新放置 verify 发现的被挖掉/替换的方块 ② 替换无法映射的方块
     async def fix(self, id_, sender, fb):
         c = self.client
         task = Mod.tasks.get(id_)
@@ -1321,13 +1303,13 @@ class Mod:
                     batch = mismatches[i:i + CONC]
                     await asyncio.gather(*(place_one(m) for m in batch))
                     i += CONC
-                # 中断时未处理的差异保留,供再次 $fix 继续
+                # 中断时未处理的差异保留,供再次 ezmatic fix 继续
                 for idx in range(self.fix_job["done"], len(mismatches)):
                     failed.append(mismatches[idx])
             finally:
                 self.fix_job = None
             task["mismatches"] = failed
-        # ② 修复无法映射的方块(更新任务数据,供 $y 导入)
+        # ② 修复无法映射的方块(更新任务数据,供 ezmatic y 导入)
         unmapped = data.get("unmappedBlocks") or []
         if unmapped:
             n2 = len(unmapped)
@@ -1338,18 +1320,18 @@ class Mod:
             data["unmappedBlocks"] = []
             data["unmappedSummary"] = {}
         if not n1 and not n2:
-            self.client.tell(f"§aLitematic | §fFix > §i任务 #{id_} 没有需要修复的方块", sender)
+            self.client.tell(f"§aEzmatic | §fFix > §i任务 #{id_} 没有需要修复的方块", sender)
             return
         lines = []
         if n1:
             lines.append(f"§a已重新放置 {len(fixed)} / {n1} 个方块 （恢复与投影一致）")
             if failed:
-                lines.append(f"§c未成功 {len(failed)} 个 （命令被服务器限流，可再次 !l:verify {id_} 检查并 !l:fix {id_} 重试）")
+                lines.append(f"§c未成功 {len(failed)} 个 （命令被服务器限流，可再次 {Command.command_prefix}ezmatic verify {id_} 检查并 {Command.command_prefix}ezmatic fix {id_} 重试）")
         if n2:
-            lines.append(f"§a已将 {n2} 个无法映射方块替换为 {fb or 'minecraft:stone'}，任务存档已更新，直接发送 !l:y 即可用修复后的数据导入")
+            lines.append(f"§a已将 {n2} 个无法映射方块替换为 {fb or 'minecraft:stone'}，任务存档已更新，直接发送 {Command.command_prefix}ezmatic y 即可用修复后的数据导入")
         if fixed:
             lines.append("\n".join(fixed[:20]))
-        self.client.tell(f"§aLitematic | §fFix > §i已修复 (任务 #{id_})\n" + "\n".join(lines), sender)
+        self.client.tell(f"§aEzmatic | §fFix > §i已修复 (任务 #{id_})\n" + "\n".join(lines), sender)
 
     # ---- 预览 ----
 
@@ -1358,21 +1340,21 @@ class Mod:
         raw = placement["raw"]
         coords = placement["coords"]
         if raw is None:
-            self.client.tell("§cLitematic | §fError > §i模式参数无效：应为 raw（保留原始高度）或 trim（裁剪底部空气，默认）", sender)
+            self.client.tell("§cEzmatic | §fError > §i模式参数无效：应为 raw（保留原始高度）或 trim（裁剪底部空气，默认）", sender)
             return
         if 0 < len(coords) < 3:
-            self.client.tell("§cLitematic | §fError > §i坐标参数不完整，需要同时提供 X Y Z 或都不提供（使用自身坐标）", sender)
+            self.client.tell("§cEzmatic | §fError > §i坐标参数不完整，需要同时提供 X Y Z 或都不提供（使用自身坐标）", sender)
             return
         base_name = file_name if file_name.endswith(".litematic") else file_name + ".litematic"
-        file_path = os.path.join(basePath["litematic"], base_name)
+        file_path = os.path.join(basePath["ezmatic"], base_name)
         if not os.path.exists(file_path):
-            self.client.tell(f"§cLitematic | §fError > §i文件不存在: {file_name}", sender)
+            self.client.tell(f"§cEzmatic | §fError > §i文件不存在: {file_name}", sender)
             return
-        self.client.tell("§i正在解析 Litematic 文件…", sender)
+        self.client.tell("§i正在解析建筑文件…", sender)
         try:
             data = await parse_litematic(file_path)
         except Exception as e:
-            self.client.tell(f"§cLitematic | §fError > §i解析失败: {e}", sender)
+            self.client.tell(f"§cEzmatic | §fError > §i解析失败: {e}", sender)
             return
         if not raw:
             trim_air(data)
@@ -1386,14 +1368,14 @@ class Mod:
             try:
                 pos = await self.client.getPosition("@s")
                 if not pos:
-                    self.client.tell("§cLitematic | §fError > §i无法获取你的坐标", sender)
+                    self.client.tell("§cEzmatic | §fError > §i无法获取你的坐标", sender)
                     return
                 origin = {"x": math.floor(pos["x"]), "y": math.floor(pos["y"]) - 1, "z": math.floor(pos["z"])}
             except Exception:
-                self.client.tell("§cLitematic | §fError > §i无法获取你的坐标", sender)
+                self.client.tell("§cEzmatic | §fError > §i无法获取你的坐标", sender)
                 return
         if origin["y"] < -64 or origin["y"] + data["sy"] - 1 > 320:
-            self.client.tell(f"§cLitematic | §fError > §iY 轴超出限制: {origin['y']} ~ {origin['y'] + data['sy'] - 1} (允许 -64 ~ 320)", sender)
+            self.client.tell(f"§cEzmatic | §fError > §iY 轴超出限制: {origin['y']} ~ {origin['y'] + data['sy'] - 1} (允许 -64 ~ 320)", sender)
             return
         await self.clear_preview()
         self.preview_data = {"origin": origin, "data": data, "file": file_name}
@@ -1402,10 +1384,10 @@ class Mod:
         loop = asyncio.get_running_loop()
         self.preview_timer = loop.create_task(self._preview_loop())
         self.client.tell(
-            f"§eLitematic | §fPreview > §i已生成预览: {file_name} 尺寸 {data['sx']}×{data['sy']}×{data['sz']}\n"
+            f"§eEzmatic | §fPreview > §i已生成预览: {file_name} 尺寸 {data['sx']}×{data['sy']}×{data['sz']}\n"
             f"§f范围: ({origin['x']}, {origin['y']}, {origin['z']}) → ({origin['x'] + data['sx'] - 1}, {origin['y'] + data['sy'] - 1}, {origin['z'] + data['sz'] - 1})\n"
             f"§f底部空气: {data.get('trimmedAir', 0)} 层 §7({'保留原始高度' if raw else '已裁剪，建筑底部对齐放置点'})\n"
-            f"§f§o实体标记持续显示，输入 !l:unpreview 清除", sender
+            f"§f§o实体标记持续显示，输入 {Command.command_prefix}ezmatic unpreview 清除", sender
         )
 
     async def _preview_loop(self):
@@ -1425,7 +1407,7 @@ class Mod:
         await self.client.sendCommand('/kill @e[name="§e[LIT]✦"]')
         await self.client.sendCommand('/kill @e[name="§b[LIT]INFO"]')
         if sender:
-            self.client.tell("§7Litematic | §fPreview > §i已清除建筑预览", sender)
+            self.client.tell("§7Ezmatic | §fPreview > §i已清除建筑预览", sender)
 
     # 12 条边框边(角点对)
     @staticmethod
@@ -1490,21 +1472,21 @@ class Mod:
         elif mode == "trim":
             raw = False
         elif mode is not None:
-            self.client.tell("§cLitematic | §fError > §i模式参数无效：应为 raw 或 trim", sender)
+            self.client.tell("§cEzmatic | §fError > §i模式参数无效：应为 raw 或 trim", sender)
             return
         if mode is None and export_name == "raw":
             raw = True
             export_name = None
         base_name = file_name if file_name.endswith(".litematic") else file_name + ".litematic"
-        file_path = os.path.join(basePath["litematic"], base_name)
+        file_path = os.path.join(basePath["ezmatic"], base_name)
         if not os.path.exists(file_path):
-            self.client.tell(f"§cLitematic | §fError > §i文件不存在: {file_name}", sender)
+            self.client.tell(f"§cEzmatic | §fError > §i文件不存在: {file_name}", sender)
             return
-        self.client.tell("§i正在解析 Litematic 文件…", sender)
+        self.client.tell("§i正在解析建筑文件…", sender)
         try:
             data = await parse_litematic(file_path)
         except Exception as e:
-            self.client.tell(f"§cLitematic | §fError > §i解析失败: {e}", sender)
+            self.client.tell(f"§cEzmatic | §fError > §i解析失败: {e}", sender)
             return
         if not raw:
             trim_air(data)
@@ -1518,10 +1500,10 @@ class Mod:
             with open(out_path, "wb") as f:
                 f.write(content)
         except Exception as e:
-            self.client.tell(f"§cLitematic | §fError > §i导出失败: {e}", sender)
+            self.client.tell(f"§cEzmatic | §fError > §i导出失败: {e}", sender)
             return
         self.client.tell(
-            f"§aLitematic | §fExport > §i已导出结构文件: {out_path}\n"
+            f"§aEzmatic | §fExport > §i已导出结构文件: {out_path}\n"
             f"§f尺寸: {data['sx']} × {data['sy']} × {data['sz']} | 方块: {len(data['blocks'])} | 底部空气: {data.get('trimmedAir', 0)} 层\n"
             f"§7用法: 将文件放入行为包 structures 文件夹（如 BP/structures/mystructure/）或单机存档的 structures 文件夹，游戏内用结构方块预览放置，或执行 /structure load <名称>", sender
         )

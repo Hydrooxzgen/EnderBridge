@@ -4,6 +4,7 @@
 """
 import asyncio
 import asyncio.subprocess
+import re
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -12,7 +13,7 @@ from lib.current import Current
 from lib.mods import ClientModManager, ServerModManager
 from lib.permission import PermissionManager
 
-# QQ 互通为可选依赖,导入失败时置 None(t:move 会跳过 QQ 切换)
+# QQ 互通为可选依赖,导入失败时置 None(tool move 会跳过 QQ 切换)
 try:
     from mod.qq.main import Mod as QQMod
 except Exception:
@@ -23,22 +24,22 @@ class Mod:
     """工具 Mod(客户端)"""
 
     @staticmethod
-    def format_help(commands, page=1, per_page=5, nav_command="t:help", title="命令帮助"):
+    def format_help(commands, page=1, per_page=5, nav_command="tool", title="命令帮助"):
         """格式化命令帮助列表
 
         Args:
             commands: 命令对象列表
             page: 页码(从 1 开始)
             per_page: 每页显示数量
-            nav_command: 翻页导航命令(不含页码,默认 t:help)
+            nav_command: 翻页导航命令(不含页码,默认 tool)
             title: 列表标题
 
         Returns:
             格式化后的帮助信息行列表
         """
         prefix = Command.command_prefix
-        # t:help 排最前,其余按名称字典序
-        sorted_ = sorted(commands, key=lambda c: (c.name != "t:help", c.name))
+        # tool 排最前,其余按名称字典序
+        sorted_ = sorted(commands, key=lambda c: (c.name != "tool", c.name))
 
         total = len(sorted_)
         total_pages = max(1, (total + per_page - 1) // per_page)
@@ -74,55 +75,126 @@ class Mod:
     def onCommand(self):
         return {
             "normal": [
-                Command.create("t:help", "查看命令帮助")
-                .add_optional_integer("页码")
-                .set_func(self._cmd_help),
-
-                Command.create("t:search", "搜索命令")
-                .add_string("关键词", True)
-                .add_optional_integer("页码")
-                .set_func(self._cmd_search),
-            ],
-
-            "op": [
-                Command.create("t:send", "向外部发送消息")
-                .add_string("消息内容", True)
-                .set_func(self._cmd_send),
-
-                Command.create("t:tellall", "查看/切换本客户端 tellAll 转发模式")
-                .add_boolean("模式 (true=转发为 tell false=原样)", True)
-                .set_func(self._cmd_tellall),
-
-                Command.create("t:cmd", "执行基岩版命令")
-                .add_string("命令内容", True)
-                .set_func(self._cmd_cmd),
-            ],
-
-            "owner": [
-                Command.create("t:ping", "检测与服务器的延迟")
-                .set_func(self._cmd_ping),
-
-                Command.create("t:time", "查看当前时间(北京时间)")
-                .set_func(self._cmd_time),
-
-                Command.create("t:start", "重新开始 SAPI 轮询")
-                .set_func(self._cmd_start),
-
-                Command.create("t:move", "将当前客户端设为主客户端")
-                .set_func(self._cmd_move),
-
-                Command.create("t:reload", "重载客户端 Mod(带名称重载单个,不带重载全部客户端)")
-                .add_optional_string("Mod 名称")
-                .set_func(self._cmd_reload),
-
-                Command.create("t:mod", "显示所有客户端 Mod")
-                .set_func(self._cmd_mod),
-
-                Command.create("t:exec", "在服务器终端执行命令")
-                .add_string("命令内容", True)
-                .set_func(self._cmd_exec),
+                Command.create("tool", "工具命令（方法: help/search/send/tellall/cmd/ping/time/start/move/reload/mod/exec）")
+                .add_string("方法", False)
+                .add_optional_string("参数1")
+                .add_optional_string("参数2")
+                .add_optional_string("参数3")
+                .add_optional_string("参数4")
+                .add_optional_string("参数5")
+                .set_func(self._cmd_tool),
             ],
         }
+
+    # ---- 命令分发器 ----
+
+    # 方法所需权限等级: 0=normal 1=user 2=op 3=owner
+    TOOL_METHODS = [
+        ("help", "[页码]", "查看命令帮助", 0),
+        ("search", "<关键词> [页码]", "搜索命令", 0),
+        ("send", "<消息内容>", "向外部发送消息", 2),
+        ("tellall", "<true|false>", "查看/切换本客户端 tellAll 转发模式", 2),
+        ("cmd", "<命令内容>", "执行基岩版命令", 2),
+        ("ping", "", "检测与服务器的延迟", 3),
+        ("time", "", "查看当前时间(北京时间)", 3),
+        ("start", "", "重新开始 SAPI 轮询", 3),
+        ("move", "", "将当前客户端设为主客户端", 3),
+        ("reload", "[Mod 名称]", "重载客户端 Mod(带名称重载单个,不带重载全部客户端)", 3),
+        ("mod", "", "显示所有客户端 Mod", 3),
+        ("exec", "<命令内容>", "在服务器终端执行命令", 3),
+    ]
+
+    async def _cmd_tool(self, sender, method, p1=None, p2=None, p3=None, p4=None, p5=None):
+        """$tool 方法分发器(方法内做权限检查)"""
+        if method is None:
+            self.client.tell(f"§cTool | §fError > §i未知方法: 未指定（输入 {Command.command_prefix}tool help 查看全部方法）", sender)
+            return
+
+        # 查询方法所需权限
+        required = None
+        for mname, _args, _desc, plevel in self.TOOL_METHODS:
+            if mname == method:
+                required = plevel
+                break
+        if required is None:
+            self.client.tell(f"§cTool | §fError > §i未知方法: {method}（输入 {Command.command_prefix}tool help 查看全部方法）", sender)
+            return
+
+        # 权限检查
+        perm = await PermissionManager.query(sender)
+        if isinstance(perm, Exception):
+            self.client.tell("§cTool | §fError > §i权限查询失败", sender)
+            return
+        if perm < required:
+            self.client.tell("§cTool | §fError > §i权限不足", sender)
+            return
+
+        # 分发到具体实现
+        if method == "help":
+            page = None
+            if p1 is not None:
+                if not re.fullmatch(r"-?\d+", p1):
+                    self.client.tell(f'§cTool | §fError > §i"{p1}" 处应为整型', sender)
+                    return
+                page = int(p1)
+            await self._cmd_help(sender, page)
+
+        elif method == "search":
+            if p1 is None:
+                self.client.tell(f"§cTool | §fError > §i参数不足：{Command.command_prefix}tool search <关键词> [页码]", sender)
+                return
+            page = None
+            if p2 is not None:
+                if not re.fullmatch(r"-?\d+", p2):
+                    self.client.tell(f'§cTool | §fError > §i"{p2}" 处应为整型', sender)
+                    return
+                page = int(p2)
+            await self._cmd_search(sender, p1, page)
+
+        elif method == "send":
+            if p1 is None:
+                self.client.tell(f"§cTool | §fError > §i参数不足：{Command.command_prefix}tool send <消息内容>", sender)
+                return
+            await self._cmd_send(sender, p1)
+
+        elif method == "tellall":
+            mode = None
+            if p1 is not None:
+                if p1 not in ("true", "false"):
+                    self.client.tell(f'§cTool | §fError > §i"{p1}" 处应为布尔型', sender)
+                    return
+                mode = p1 == "true"
+            await self._cmd_tellall(sender, mode)
+
+        elif method == "cmd":
+            if p1 is None:
+                self.client.tell(f"§cTool | §fError > §i参数不足：{Command.command_prefix}tool cmd <命令内容>", sender)
+                return
+            await self._cmd_cmd(sender, p1)
+
+        elif method == "ping":
+            await self._cmd_ping(sender)
+
+        elif method == "time":
+            await self._cmd_time(sender)
+
+        elif method == "start":
+            await self._cmd_start(sender)
+
+        elif method == "move":
+            await self._cmd_move(sender)
+
+        elif method == "reload":
+            await self._cmd_reload(sender, p1)
+
+        elif method == "mod":
+            await self._cmd_mod(sender)
+
+        elif method == "exec":
+            if p1 is None:
+                self.client.tell(f"§cTool | §fError > §i参数不足：{Command.command_prefix}tool exec <命令内容>", sender)
+                return
+            await self._cmd_exec(sender, p1)
 
     # ---- 命令实现 ----
 
@@ -173,7 +245,7 @@ class Mod:
             self.client.tell(f'§cTool | §fSearch > §i没有找到与 "{keyword}" 相关的命令', sender)
             return
 
-        lines = Mod.format_help(matched, page or 1, 5, f"t:search {keyword}", f'命令搜索 "{keyword}"')
+        lines = Mod.format_help(matched, page or 1, 5, f"tool search {keyword}", f'命令搜索 "{keyword}"')
         for line in lines:
             self.client.tell(line, sender)
 
