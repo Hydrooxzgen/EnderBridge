@@ -6,6 +6,7 @@ import asyncio
 import json
 import math
 import os
+import re
 import shutil
 import time
 
@@ -287,6 +288,7 @@ class Mod:
         self.client = client
         self.pending = None
         self.job = None
+        self.page = 1
 
     def onCommand(self):
         return {
@@ -315,6 +317,15 @@ class Mod:
 
                 Command.create("i:status", "查看转换进度")
                 .set_func(self._cmd_status),
+
+                Command.create("i:list", "查看像素画文件列表")
+                .add_optional_integer("页码")
+                .set_func(self._cmd_list),
+
+                Command.create("i:search", "搜索像素画文件")
+                .add_string("关键词", True)
+                .add_optional_integer("页码")
+                .set_func(self._cmd_search),
             ],
         }
 
@@ -372,6 +383,85 @@ class Mod:
             f"§f当前区域: {phase_pct}% | {phase_placed} / {phase_total} 命令 | 方块 {job['phaseBlocksPlaced']} / {job['phaseBlockTotal']}\n"
             f"§f速度: {cmd_speed} 命令/s | {elapsed:.1f}s | 预计 {total_eta}s"
         )
+
+    async def _cmd_list(self, sender, page):
+        self.list_files(page, sender)
+
+    async def _cmd_search(self, sender, keyword, page):
+        self.search_files(keyword, page, sender)
+
+    # ---- 文件列表 ----
+
+    def format_size(self, size):
+        """格式化文件大小(字节 → 可读单位)"""
+        size = float(size or 0)
+        if size >= 1024 * 1024:
+            return f"{size / 1024 / 1024:.1f}MB"
+        if size >= 1024:
+            return f"{size / 1024:.1f}KB"
+        return f"{int(size)}B"
+
+    def show_files(self, sender, files, header):
+        """分页展示文件列表(每页 5 个)"""
+        if not files:
+            self.client.tell("§cImage | §fError > §i没有找到图片文件", sender)
+            return
+
+        page_size = 5
+        total_pages = math.ceil(len(files) / page_size)
+        page = self.page or 1
+        pn = max(1, min(page, total_pages))
+        self.page = pn
+
+        start_index = (pn - 1) * page_size
+        page_files = files[start_index:start_index + page_size]
+
+        items = []
+        for i, f in enumerate(page_files):
+            num = str(start_index + i + 1).rjust(2, " ")
+            file_path = os.path.join(basePath["image"], f)
+            size = "?"
+            try:
+                size = self.format_size(os.path.getsize(file_path))
+            except Exception:
+                pass
+            items.append(f"{num}. {f} §f{size}")
+        items_text = "\n".join(items)
+
+        self.client.tell(f"{header} §f({pn}/{total_pages}页) §i共 {len(files)} 个\n{items_text}", sender)
+
+    def list_files(self, page, sender):
+        """列出所有像素画图片文件"""
+        if page is not None:
+            try:
+                self.page = int(page) or 1
+            except (ValueError, TypeError):
+                self.page = 1
+        else:
+            self.page = 1
+        dir_ = basePath["image"]
+        files = sorted([
+            f for f in os.listdir(dir_)
+            if re.search(r"\.(png|jpg|jpeg|gif|bmp|webp|tiff)$", f, re.I)
+        ]) if os.path.exists(dir_) else []
+        self.show_files(sender, files, "§eImage | §fList")
+
+    def search_files(self, keyword, page, sender):
+        """搜索像素画图片文件"""
+        if page is not None:
+            try:
+                self.page = int(page) or 1
+            except (ValueError, TypeError):
+                self.page = 1
+        else:
+            self.page = 1
+        dir_ = basePath["image"]
+        files = sorted([
+            f for f in os.listdir(dir_)
+            if re.search(r"\.(png|jpg|jpeg|gif|bmp|webp|tiff)$", f, re.I)
+            and keyword.lower() in f.lower()
+        ]) if os.path.exists(dir_) else []
+        self.show_files(sender, files, f'§eImage | §fSearch > §i"{keyword}"')
 
     # ---- 创建流程 ----
 

@@ -3,7 +3,9 @@
 支持加载和执行 .mcfunction 格式的指令文件,支持嵌套调用和循环执行
 """
 import asyncio
+import math
 import os
+import re
 
 from config import basePath
 from lib.command import Command
@@ -16,6 +18,7 @@ class Mod:
         self.client = client
         # 存储循环执行的定时器任务: 循环名 -> asyncio.Task
         self.loops = {}
+        self.page = 1
 
     # 返回命令定义
     def onCommand(self):
@@ -34,6 +37,15 @@ class Mod:
                 Command.create("f:stop", "停止循环（不带参数停止所有）")
                 .add_optional_string("循环名称")
                 .set_func(self._cmd_stop),
+
+                Command.create("f:list", "查看函数文件列表")
+                .add_optional_integer("页码")
+                .set_func(self._cmd_list),
+
+                Command.create("f:search", "搜索函数文件")
+                .add_string("关键词", True)
+                .add_optional_integer("页码")
+                .set_func(self._cmd_search),
             ],
         }
 
@@ -47,6 +59,84 @@ class Mod:
 
     async def _cmd_stop(self, _, name):
         self.stop(name)
+
+    async def _cmd_list(self, sender, page):
+        self.list_files(page, sender)
+
+    async def _cmd_search(self, sender, keyword, page):
+        self.search_files(keyword, page, sender)
+
+    # ---- 文件列表 ----
+
+    def format_size(self, size):
+        """格式化文件大小(字节 → 可读单位)"""
+        size = float(size or 0)
+        if size >= 1024 * 1024:
+            return f"{size / 1024 / 1024:.1f}MB"
+        if size >= 1024:
+            return f"{size / 1024:.1f}KB"
+        return f"{int(size)}B"
+
+    def show_files(self, sender, files, header):
+        """分页展示文件列表(每页 5 个)"""
+        if not files:
+            self.client.tell("§cMCFunc | §fError > §i没有找到函数文件", sender)
+            return
+
+        page_size = 5
+        total_pages = math.ceil(len(files) / page_size)
+        page = self.page or 1
+        pn = max(1, min(page, total_pages))
+        self.page = pn
+
+        start_index = (pn - 1) * page_size
+        page_files = files[start_index:start_index + page_size]
+
+        items = []
+        for i, f in enumerate(page_files):
+            num = str(start_index + i + 1).rjust(2, " ")
+            file_path = os.path.join(basePath["mcfunc"], f)
+            size = "?"
+            try:
+                size = self.format_size(os.path.getsize(file_path))
+            except Exception:
+                pass
+            items.append(f"{num}. {f} §f{size}")
+        items_text = "\n".join(items)
+
+        self.client.tell(f"{header} §f({pn}/{total_pages}页) §i共 {len(files)} 个\n{items_text}", sender)
+
+    def list_files(self, page, sender):
+        """列出所有 .mcfunction 函数文件"""
+        if page is not None:
+            try:
+                self.page = int(page) or 1
+            except (ValueError, TypeError):
+                self.page = 1
+        else:
+            self.page = 1
+        dir_ = basePath["mcfunc"]
+        files = sorted([
+            f for f in os.listdir(dir_)
+            if f.endswith(".mcfunction")
+        ]) if os.path.exists(dir_) else []
+        self.show_files(sender, files, "§eMCFunc | §fList")
+
+    def search_files(self, keyword, page, sender):
+        """搜索 .mcfunction 函数文件"""
+        if page is not None:
+            try:
+                self.page = int(page) or 1
+            except (ValueError, TypeError):
+                self.page = 1
+        else:
+            self.page = 1
+        dir_ = basePath["mcfunc"]
+        files = sorted([
+            f for f in os.listdir(dir_)
+            if f.endswith(".mcfunction") and keyword.lower() in f.lower()
+        ]) if os.path.exists(dir_) else []
+        self.show_files(sender, files, f'§eMCFunc | §fSearch > §i"{keyword}"')
 
     # 加载函数文件
     # 返回按行分割的指令数组,失败返回 False
