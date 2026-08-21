@@ -98,6 +98,161 @@ if WANT_RESET:
     print("========================================")
     sys.exit(0)
 
+# ===== 一键升级:python main.py update <新版本压缩包> =====
+# 从压缩包(zip / tar.gz)升级当前版本,保留 config.py / permission.json
+# 等设置与 resources / structures / logs 等用户数据,完成后退出不启动服务器。
+WANT_UPDATE = "update" in sys.argv
+if WANT_UPDATE:
+    import shutil
+    import tarfile
+    import tempfile
+    import zipfile
+
+    # 数据区/设置文件:升级时跳过,不覆盖不删除
+    UPDATE_KEEP = {
+        ".git",
+        "logs",
+        "resources",
+        "structures",
+        "config.py",
+        "config.py.bak",
+        "permission.json",
+        "permission.json.bak",
+    }
+
+    def _update_err(msg):
+        print("========================================")
+        print(f"  升级失败: {msg}")
+        print("  当前版本未做任何改动,可继续正常启动")
+        print("========================================")
+        sys.exit(1)
+
+    def _update_member_name(name):
+        """规范化压缩包成员路径,过滤路径穿越,返回相对路径或 None"""
+        norm = os.path.normpath(name.replace("\\", "/"))
+        if not norm or norm == ".":
+            return None
+        if norm.startswith("..") or os.path.isabs(norm):
+            return None
+        return norm.replace(os.sep, "/")
+
+    def _update_common_root(names):
+        """GitHub 风格压缩包内含顶层目录(如 EnderBridge-main/),探测并剥离"""
+        files = [n for n in names if n]
+        if not files:
+            return ""
+        roots = {n.split("/", 1)[0] for n in files}
+        if len(roots) == 1 and all("/" in n for n in files):
+            return roots.pop()
+        return ""
+
+    def _update_archive_members(archive):
+        """迭代压缩包成员,产出 (相对路径, 文件对象)"""
+        lower = archive.lower()
+        if lower.endswith(".zip"):
+            with zipfile.ZipFile(archive) as z:
+                names = [i.filename for i in z.infolist() if not i.is_dir()]
+                root = _update_common_root(names)
+                for info in z.infolist():
+                    if info.is_dir():
+                        continue
+                    rel = _update_member_name(info.filename)
+                    if rel is None:
+                        continue
+                    if root:
+                        if not rel.startswith(root + "/"):
+                            continue
+                        rel = rel[len(root) + 1:]
+                    if not rel:
+                        continue
+                    yield rel, z.open(info)
+        elif lower.endswith((".tar.gz", ".tgz", ".tar.bz2", ".tar.xz", ".tar")):
+            with tarfile.open(archive, "r:*") as t:
+                names = [m.name for m in t.getmembers() if m.isfile()]
+                root = _update_common_root(names)
+                for m in t.getmembers():
+                    if not m.isfile():
+                        continue
+                    rel = _update_member_name(m.name)
+                    if rel is None:
+                        continue
+                    if root:
+                        if not rel.startswith(root + "/"):
+                            continue
+                        rel = rel[len(root) + 1:]
+                    if not rel:
+                        continue
+                    yield rel, t.extractfile(m)
+        else:
+            _update_err(f"不支持的压缩包格式: {archive}（仅支持 zip / tar.gz）")
+
+    def _do_update(archive):
+        if not os.path.isfile(archive):
+            _update_err(f"找不到压缩包: {archive}")
+
+        print("========================================")
+        print(f"  正在升级 EnderBridge ...")
+        print(f"  压缩包: {archive}")
+        print("========================================")
+
+        # 1. 先探测压缩包内容,校验为 EnderBridge 项目
+        members = []
+        try:
+            for rel, _f in _update_archive_members(archive):
+                members.append(rel)
+        except Exception as e:
+            _update_err(f"读取压缩包失败: {e}")
+        if "main.py" not in members:
+            _update_err("压缩包内未找到 main.py,不是 EnderBridge 压缩包")
+
+        # 2. 解压到临时目录(跳过数据区)
+        tmp = tempfile.mkdtemp(prefix="enderbridge_update_")
+        try:
+            for rel, fobj in _update_archive_members(archive):
+                top = rel.split("/", 1)[0]
+                if top in UPDATE_KEEP:
+                    continue
+                target = os.path.join(tmp, *rel.split("/"))
+                os.makedirs(os.path.dirname(target), exist_ok=True)
+                with open(target, "wb") as out:
+                    shutil.copyfileobj(fobj, out)
+
+            # 3. 校验解压结果
+            if not os.path.exists(os.path.join(tmp, "main.py")):
+                _update_err("解压后未找到 main.py")
+            if not os.path.exists(os.path.join(tmp, "lib")):
+                _update_err("解压后未找到 lib 目录")
+
+            # 4. 覆盖到项目根目录(跳过数据区,不清除多余文件以保留自定义内容)
+            copied = 0
+            for dirpath, dirnames, filenames in os.walk(tmp):
+                rel_dir = os.path.relpath(dirpath, tmp)
+                for fname in filenames:
+                    src = os.path.join(dirpath, fname)
+                    dst = os.path.join(ROOT, rel_dir, fname)
+                    if rel_dir.split(os.sep)[0] in UPDATE_KEEP:
+                        continue
+                    os.makedirs(os.path.dirname(dst), exist_ok=True)
+                    shutil.copy2(src, dst)
+                    copied += 1
+            print(f"  已覆盖 {copied} 个文件")
+
+            # 5. 重新生成 requirements.txt 缺失依赖的自动安装由下次启动完成
+            print("========================================")
+            print("  升级完成!")
+            print("  已保留: config.py / permission.json 等设置与用户数据")
+            print("  请重新启动: py -B main.py")
+            print("========================================")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+        sys.exit(0)
+
+    # update 后跟压缩包路径
+    if len(sys.argv) > sys.argv.index("update") + 1:
+        _do_update(sys.argv[sys.argv.index("update") + 1])
+    else:
+        _update_err("用法: python main.py update <新版本压缩包路径>")
+
 # 确保项目根目录可导入
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
