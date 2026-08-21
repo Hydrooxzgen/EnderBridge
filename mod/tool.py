@@ -75,7 +75,7 @@ class Mod:
     def onCommand(self):
         return {
             "normal": [
-                Command.create("tool", "工具命令（方法: help/search/send/tellall/cmd/ping/time/start/move/reload/mod/exec）")
+                Command.create("tool", "工具命令（方法: search/send/tellall/cmd/ping/time/start/move/reload/mod/exec）")
                 .add_string("方法", False)
                 .add_optional_string("参数1")
                 .add_optional_string("参数2")
@@ -83,6 +83,10 @@ class Mod:
                 .add_optional_string("参数4")
                 .add_optional_string("参数5")
                 .set_func(self._cmd_tool),
+
+                Command.create("help", "命令帮助（分页）")
+                .add_optional_string("页码")
+                .set_func(self._cmd_help),
             ],
         }
 
@@ -90,7 +94,6 @@ class Mod:
 
     # 方法所需权限等级: 0=normal 1=user 2=op 3=owner
     TOOL_METHODS = [
-        ("help", "[页码]", "查看命令帮助", 0),
         ("search", "<关键词> [页码]", "搜索命令", 0),
         ("send", "<消息内容>", "向外部发送消息", 2),
         ("tellall", "<true|false>", "查看/切换本客户端 tellAll 转发模式", 2),
@@ -108,6 +111,19 @@ class Mod:
         """$tool 方法分发器(方法内做权限检查)"""
         if method is None:
             self.client.tell(f"§cTool | §fError > §i未知方法: 未指定（输入 {Command.command_prefix}tool help 查看全部方法）", sender)
+            return
+
+        # help 显示本模组方法列表
+        if method == "help":
+            lines = "\n".join(
+                f"§a{Command.command_prefix}tool {mname}{' ' + margs if margs else ''} §7- §f{mdesc}"
+                for mname, margs, mdesc, _l in self.TOOL_METHODS
+            )
+            self.client.tell(
+                f"§eTool | §fHelp > §7可用方法\n{lines}\n"
+                f"§7输入 §a{Command.command_prefix}help §7查看全部命令帮助",
+                sender,
+            )
             return
 
         # 查询方法所需权限
@@ -130,16 +146,7 @@ class Mod:
             return
 
         # 分发到具体实现
-        if method == "help":
-            page = None
-            if p1 is not None:
-                if not re.fullmatch(r"-?\d+", p1):
-                    self.client.tell(f'§cTool | §fError > §i"{p1}" 处应为整型', sender)
-                    return
-                page = int(p1)
-            await self._cmd_help(sender, page)
-
-        elif method == "search":
+        if method == "search":
             if p1 is None:
                 self.client.tell(f"§cTool | §fError > §i参数不足：{Command.command_prefix}tool search <关键词> [页码]", sender)
                 return
@@ -214,7 +221,7 @@ class Mod:
         if perm >= 3:
             cmds.extend(cmd_map["owner"])
 
-        lines = Mod.format_help(cmds, page or 1, 5)
+        lines = Mod.format_help(cmds, page or 1, 5, "help", "命令帮助")
         for line in lines:
             self.client.tell(line, sender)
 

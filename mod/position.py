@@ -112,6 +112,15 @@ class Mod:
             self.client.tell(f"§cPosition | §fError > §i未知方法: 未指定（输入 {Command.command_prefix}pos help 查看全部方法）", sender)
             return
 
+        # help 显示本模组方法列表
+        if method == "help":
+            lines = "\n".join(
+                f"§a{Command.command_prefix}pos {mname}{' ' + margs if margs else ''} §7- §f{mdesc}"
+                for mname, margs, mdesc, *_ in self.POS_METHODS
+            )
+            self.client.tell(f"§ePosition | §fHelp > §7可用方法\n{lines}", sender)
+            return
+
         known = [m for m, _a, _d in self.POS_METHODS]
         if method not in known:
             self.client.tell(f"§cPosition | §fError > §i未知方法: {method}（输入 {Command.command_prefix}pos help 查看全部方法）", sender)

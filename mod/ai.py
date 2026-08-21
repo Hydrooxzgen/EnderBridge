@@ -171,6 +171,15 @@ class Mod:
             self.client.tell(f"§cAI | §fError > §i未知方法: 未指定（输入 {Command.command_prefix}ai help 查看全部方法）", sender)
             return
 
+        # help 显示本模组方法列表
+        if method == "help":
+            lines = "\n".join(
+                f"§a{Command.command_prefix}ai {mname}{' ' + margs if margs else ''} §7- §f{mdesc}"
+                for mname, margs, mdesc, _l in self.AI_METHODS
+            )
+            self.client.tell(f"§eAI | §fHelp > §7可用方法\n{lines}", sender)
+            return
+
         # 查询方法所需权限
         required = None
         for mname, _args, _desc, plevel in self.AI_METHODS:

@@ -73,7 +73,7 @@ After saving, `config.py` and `permission.json` are generated (old files backed 
 
 1. 让游戏客户端连接到 WebSocket 服务器（端口与向导中配置的一致，默认 `8800`）/ Connect your game client to the WebSocket server (port as configured, default `8800`)
 2. 第一个连接成为主客户端 / The first connection becomes the main client
-3. 在游戏内使用命令前缀（默认 `!`）调用各模组命令，例如 `!tool help` 查看命令帮助 / Use the command prefix (default `!`) in-game to call mod commands, e.g. `!tool help`
+3. 在游戏内使用命令前缀（默认 `!`）调用各模组命令，例如 `!help` 查看全部命令帮助 / Use the command prefix (default `!`) in-game to call mod commands, e.g. `!help`
 
 ### 4. 命令格式 / Command format
 
@@ -83,7 +83,8 @@ All built-in mods share a **single-entry command** format: `<prefix><entry> <met
 
 | 模组 / Mod | 入口 / Entry | 示例 / Example |
 |------|------|------|
-| 工具 / Tool | `tool` | `!tool help`、`!tool reload Ezmatic` |
+| 工具 / Tool | `tool` | `!tool reload Ezmatic` |
+| 命令帮助 / Help | `help` | `!help 2`（分页） |
 | 图片 / Image | `image` | `!image create demo.png` |
 | 音乐 / Music | `music` | `!music run <文件>` |
 | 坐标 / Position | `pos` | `!pos a`、`!pos fill <方块>` |
@@ -95,9 +96,9 @@ All built-in mods share a **single-entry command** format: `<prefix><entry> <met
 | 终端 / Terminal | `read` | `!read list` |
 | Ezmatic 建筑 / Ezmatic | `ezmatic` | `!ezmatic preview <文件>` |
 
-每个入口输入 `help` 可查看该模组的全部方法：`!tool help`、`!music help`……
+全局 `help` 命令（`!help [页码]`）分页显示全部命令；每个入口输入 `help` 可查看该模组的全部方法：`!tool help`、`!music help`……
 
-Type `help` after any entry to list all its methods: `!tool help`, `!music help`, ...
+The global `help` command (`!help [page]`) lists all commands with paging; type `help` after any entry to list its methods: `!tool help`, `!music help`, ...
 
 ---
 
@@ -153,7 +154,7 @@ EnderBridge/
 |------|----------|------|
 | `AI` | 客户端 + 服务端 / Client + Server | 与 AI 模型对话（单次 / 上下文模式）/ Chat with AI (single / context mode) |
 | `PermissionCommands` | 客户端 / Client | 游戏内权限查询与增删（`!perm query` / `!perm add` / `!perm remove`）/ In-game permission management |
-| `Tool` | 客户端 / Client | 命令帮助（`!tool help` 分页）、搜索、终端执行、SAPI 控制 / Command help, search, terminal exec |
+| `Tool` | 客户端 / Client | 全局命令帮助（`!help` 分页）、搜索、终端执行、SAPI 控制 / Command help, search, terminal exec |
 | `Position` | 客户端 / Client | A/B 点标记、距离计算、区域填充、结构复制 / 粘贴 / 剪切 / Coordinates & structure ops |
 | `Music` | 客户端 / Client | 解析 MIDI/JSON 并播放为游戏音效 / Play MIDI/JSON as in-game sounds |
 | `MCFunc` | 客户端 / Client | 加载执行 `.mcfunction` 文件，支持嵌套与定时循环 / Run .mcfunction files |

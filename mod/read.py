@@ -177,6 +177,13 @@ async def _cmd_read(_, method, p1=None, p2=None, p3=None, p4=None, p5=None):
         print(f"< 未知方法: 未指定（输入 {Command.command_prefix}read help 查看全部方法）")
         return
 
+    # help 显示本模组方法列表
+    if method == "help":
+        print("< 可用方法:")
+        for mname, margs, mdesc, *_ in READ_METHODS:
+            print(f"  {Command.command_prefix}read {mname}{' ' + margs if margs else ''} - {mdesc}")
+        return
+
     known = [m for m, _a, _d in READ_METHODS]
     if method not in known:
         print(f"< 未知方法: {method}（输入 {Command.command_prefix}read help 查看全部方法）")

@@ -48,6 +48,15 @@ class Mod:
             self.client.tell(f"§cQQ | §fError > §i未知方法: 未指定（输入 {Command.command_prefix}qq help 查看全部方法）", sender)
             return
 
+        # help 显示本模组方法列表
+        if method == "help":
+            lines = "\n".join(
+                f"§a{Command.command_prefix}qq {mname}{' ' + margs if margs else ''} §7- §f{mdesc}"
+                for mname, margs, mdesc, _l in self.QQ_METHODS
+            )
+            self.client.tell(f"§eQQ | §fHelp > §7可用方法\n{lines}", sender)
+            return
+
         # 查询方法所需权限
         required = None
         for mname, _args, _desc, plevel in self.QQ_METHODS:

@@ -240,6 +240,10 @@ async def connection_handler(ws):
         await msg_task
     except asyncio.CancelledError:
         pass
+    except websockets.exceptions.WebSocketException:
+        # 客户端断开(含 MCBE 非标准关闭导致的无 close frame 协议错误 1002),
+        # 属正常连接结束,无需记录为错误
+        pass
     except Exception as e:
         shared.logger.error(f"消息循环异常: {e}")
 
