@@ -4,7 +4,10 @@ __pycache__/
 .venv./
 .idea/
 logs/*
-
+permission.json
+permission.json.bak
+config.py
+config.py.bak
 # 资源目录: 忽略用户内容,保留目录结构(.gitkeep 占位)
 resources/midi/*
 resources/mcfunc/*
