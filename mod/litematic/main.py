@@ -710,7 +710,7 @@ class Mod:
             self.client.tell("§cLitematic | §fError > §i没有进行中的操作", sender)
 
     async def _cmd_author(self, sender):
-        self.client.tell("§eLitematic | §fAuthor > §iStarAwA117 & Hydrooxygen", sender)
+        self.client.tell("§eLitematic | §fAuthor > §iHydrooxzgen", sender)
 
     async def _cmd_status(self, sender):
         lines = []

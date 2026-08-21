@@ -1,9 +1,4 @@
 # 模板配置文件
-# ===== 首次运行 =====
-# True：启动图形化配置向导（浏览器访问 http://127.0.0.1:18888 完成配置）
-# 保存后自动生成 config.py 与 permission.json，并将本标记写为 False
-is_first_run = False
-
 # ===== 平台检测 =====
 # 所有平台统一使用相对路径写法（如 ./resources/pictures）
 import re
@@ -33,14 +28,14 @@ def resolvePath(relPath):
 # 系统配置
 wsConfig = {
     "name": "EnderBridge",
-    "port": 8800,
+    "port": 8880,
 }
 
 # 日志等级配置：只显示该等级及更高等级的错误
 # 可选值: "debug" < "info" < "warning" < "error"
 logLevel = "info"
 
-commandPrefix = "!"
+commandPrefix = "~"
 
 sapiConfig = {
     "gmsg": "gmsg",

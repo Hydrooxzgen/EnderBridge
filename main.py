@@ -102,6 +102,26 @@ if WANT_RESET:
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
+# ===== 资源目录自愈:确保默认资源目录存在 =====
+# basePath(music/mcfunc/litematic/image)与 litematic 导出目录 structures
+# 缺失时自动创建,避免首次运行找不到目录(如投影目录 resources/litematic)。
+try:
+    from config import basePath, resolvePath
+    _resource_dirs = [resolvePath(d) for d in list(basePath.values())]
+except Exception:
+    _resource_dirs = [
+        "./resources/midi",
+        "./resources/mcfunc",
+        "./resources/litematic",
+        "./resources/pictures",
+    ]
+_resource_dirs.append(resolvePath("./structures"))  # litematic 导出目录
+for _d in _resource_dirs:
+    try:
+        os.makedirs(_d, exist_ok=True)
+    except OSError:
+        pass
+
 # ===== 动态加载依赖 config.py 的本地模块(此时 config.py 必然已存在) =====
 from lib import shared
 from lib.logger import close_log_streams
