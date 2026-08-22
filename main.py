@@ -17,6 +17,7 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PY = os.path.join(ROOT, "config.py")
 CONFIG_EXAMPLE = os.path.join(ROOT, "config.example.py")
 WANT_RESET = "--reset-all" in sys.argv
+WANT_EXPORT = "export" in sys.argv
 
 # ===== 依赖检测(必须早于任何第三方模块使用) =====
 # websockets 使用动态导入:缺失时自动运行 setup.py 安装,成功后继续启动。
@@ -44,7 +45,7 @@ def _run_setup() -> None:
         sys.exit(1)
 
 
-if not _dependencies_ok():
+if not WANT_RESET and not WANT_EXPORT and not _dependencies_ok():
     _run_setup()
 
 # ===== 引导阶段(必须早于任何依赖 config.py 的模块加载) =====
@@ -253,6 +254,86 @@ if WANT_UPDATE:
         _do_update(sys.argv[sys.argv.index("update") + 1])
     else:
         _update_err("用法: python main.py update <新版本压缩包路径>")
+
+# ===== 一键导出:python main.py export [输出路径] =====
+# 将项目代码打包为 zip(排除用户数据/设置,与 update 命令的保留规则对称),
+# 生成的压缩包可直接用于:python main.py update <压缩包> 升级其他实例。
+if WANT_EXPORT:
+    import zipfile
+    from datetime import datetime
+
+    # 与 update 命令的 UPDATE_KEEP 保持一致:用户数据/设置不打包
+    EXPORT_EXCLUDE = {
+        ".git",
+        "logs",
+        "resources",
+        "structures",
+        "config.py",
+        "config.py.bak",
+        "permission.json",
+        "permission.json.bak",
+    }
+    EXPORT_SKIP_DIRS = {"__pycache__"}
+    EXPORT_SKIP_EXTS = {".pyc", ".pyo"}
+
+    def _export_err(msg):
+        print("======================================")
+        print(f"  导出失败: {msg}")
+        print("======================================")
+        sys.exit(1)
+
+    def _iter_export_files():
+        """遍历项目内需打包的文件,产出 (压缩包相对路径, 绝对路径)"""
+        for dirpath, dirnames, filenames in os.walk(ROOT):
+            dirnames[:] = [
+                d for d in dirnames
+                if d not in EXPORT_EXCLUDE and d not in EXPORT_SKIP_DIRS
+            ]
+            rel_dir = os.path.relpath(dirpath, ROOT)
+            rel_dir = "" if rel_dir == "." else rel_dir
+            for fname in filenames:
+                if os.path.splitext(fname)[1].lower() in EXPORT_SKIP_EXTS:
+                    continue
+                rel = os.path.join(rel_dir, fname) if rel_dir else fname
+                rel = rel.replace(os.sep, "/")
+                if rel.split("/", 1)[0] in EXPORT_EXCLUDE:
+                    continue
+                yield rel, os.path.join(dirpath, fname)
+
+    # 输出路径:默认上级目录 EnderBridge_export_<时间戳>.zip
+    if len(sys.argv) > sys.argv.index("export") + 1:
+        out = os.path.abspath(sys.argv[sys.argv.index("export") + 1])
+    else:
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        out = os.path.abspath(
+            os.path.join(os.path.dirname(ROOT), f"EnderBridge_export_{stamp}.zip")
+        )
+
+    # 输出文件不能位于项目目录内,否则会把自己打进压缩包
+    if out == ROOT or out.startswith(ROOT + os.sep):
+        _export_err("输出路径不能位于项目目录内,请放到上级目录或指定其他位置")
+
+    files = list(_iter_export_files())
+    if not files:
+        _export_err("未找到可导出的文件")
+
+    print("======================================")
+    print(f"  正在导出 EnderBridge ...")
+    print(f"  文件数量: {len(files)}")
+    print(f"  输出路径: {out}")
+    print("======================================")
+
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+        for rel, abspath in files:
+            z.write(abspath, rel)
+
+    size_kb = os.path.getsize(out) / 1024.0
+    print("======================================")
+    print(f"  导出完成: {out} ({size_kb:.1f} KB)")
+    print(f"  使用方法: python main.py update {out}")
+    print("======================================")
+    sys.exit(0)
 
 # 确保项目根目录可导入
 if ROOT not in sys.path:

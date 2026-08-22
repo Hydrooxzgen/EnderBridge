@@ -144,6 +144,7 @@ The global `help` command (`!help [page]`) lists all commands with paging; type 
 | `python main.py` | 正常启动服务器 / Start the server normally |
 | `python main.py --reset-all` | 一键重置：删除 `config.py` / `permission.json` 及其备份，并将模板复位为首次运行状态 / Reset all configs and restore first-run state |
 | `python main.py update <压缩包>` | 一键升级：从新版本压缩包（zip / tar.gz）升级，保留设置与用户数据 / Upgrade from a release archive, keeping your settings |
+| `python main.py export [输出路径]` | 一键导出：将项目代码打包为 zip（排除用户数据），配合 update 使用 / Export code as a zip (user data excluded), pairs with update |
 | `python setup.py` | 安装 / 检测依赖 / Install / check dependencies |
 | `python setup.py --check` | 仅检测依赖是否齐全 / Check dependencies only |
 
@@ -163,6 +164,23 @@ python main.py update 路径/到/新版本.zip
 4. 完成后提示重启：`python main.py`
 
 > 校验失败或压缩包损坏时不会改动任何现有文件。若新版配置模板结构变化，启动异常时可运行 `python main.py --reset-all` 重新配置。
+
+### 一键导出 / Export
+
+把当前项目代码打包成 zip，方便分发/更新其他实例：
+
+```bash
+python main.py export
+# 或指定输出路径
+python main.py export D:/backup/enderbridge.zip
+```
+
+导出内容：
+
+1. 默认输出到项目**上级目录** `EnderBridge_export_<时间戳>.zip`（不指定路径时）
+2. 打包全部代码与模板（`main.py` / `lib/` / `mod/` / `webui/` / `wiki/` / `config.example.py` / `permission.example.json` 等）
+3. 自动**排除**用户数据：`config.py` / `permission.json` 及其备份、`logs/`、`resources/`、`structures/`、`.git/`、`__pycache__/` 等
+4. 导出的压缩包可直接用于：`python main.py update <该压缩包>`
 
 ---
 
