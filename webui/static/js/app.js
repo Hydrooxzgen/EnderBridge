@@ -209,6 +209,38 @@ $("permReload").addEventListener("click", function () {
 
 // ===== 功能设置 =====
 var cfgData = null;
+// 已知 Mod 目录:名 -> 模块路径(与第一次运行向导一致)
+var MOD_CATALOG = {
+  client: [
+    ["AI", "mod.ai"],
+    ["PermissionCommands", "mod.permission"],
+    ["Tool", "mod.tool"],
+    ["Position", "mod.position"],
+    ["Music", "mod.music"],
+    ["MCFunc", "mod.mcfunc"],
+    ["MoreWS", "mod.morews"],
+    ["Ezmatic", "mod.ezmatic.main"],
+    ["ImageMod", "mod.image.main"],
+  ],
+  server: [
+    ["chat", "mod.read"],
+    ["AI", "mod.ai"],
+  ],
+};
+function renderModSwitches() {
+  var mods = cfgData.mods || {};
+  ["client", "server"].forEach(function (side) {
+    var enabled = mods[side] || {};
+    var box = $("mod" + (side === "client" ? "Client" : "Server") + "Box");
+    box.innerHTML = MOD_CATALOG[side].map(function (m) {
+      var key = m[0], path = m[1];
+      var checked = enabled[key] === path;
+      return '<label class="switch-row mod-check">' +
+        '<label class="switch"><input type="checkbox" id="mod-' + side + '-' + key + '"' + (checked ? " checked" : "") + "><span class=\"track\"></span></label>" +
+        '<span class="switch-label">' + escapeHtml(key) + " <span class=\"td-dim\">(" + escapeHtml(path) + ")</span></span></label>";
+    }).join("");
+  });
+}
 function loadConfig() {
   api("/config").then(function (data) {
     if (!data.ok) return;
@@ -262,6 +294,19 @@ function loadConfig() {
     var sapi = data.config.sapi || {};
     $("cfg-gmsg").value = sapi.gmsg || "gmsg";
     $("cfg-smsg").value = sapi.smsg || "smsg";
+
+    var spam = data.config.spam || {};
+    $("cfg-spamattack").value = spam.attack || "";
+    $("cfg-spamad").value = (spam.ad || []).join("\n");
+    $("cfg-spaminterval").value = spam.adInterval || "";
+
+    var bp = data.config.basePath || {};
+    $("cfg-path-music").value = bp.music || "";
+    $("cfg-path-mcfunc").value = bp.mcfunc || "";
+    $("cfg-path-ezmatic").value = bp.ezmatic || "";
+    $("cfg-path-image").value = bp.image || "";
+
+    renderModSwitches();
   }).catch(function () {});
 }
 function toggleSub(id, show) {
@@ -314,6 +359,31 @@ $("configSave").addEventListener("click", function () {
     smsg: $("cfg-smsg").value.trim() || "smsg",
   };
 
+  // Mod 开关:勾选添加映射,取消移除(自定义 Mod 不受影响)
+  var mods = cfgData.mods || {};
+  mods.client = mods.client || {};
+  mods.server = mods.server || {};
+  ["client", "server"].forEach(function (side) {
+    MOD_CATALOG[side].forEach(function (m) {
+      var cb = $("mod-" + side + "-" + m[0]);
+      if (cb && cb.checked) mods[side][m[0]] = m[1];
+      else if (mods[side][m[0]] === m[1]) delete mods[side][m[0]];
+    });
+  });
+
+  // 刷屏数据
+  var spam = cfgData.spam || {};
+  spam.attack = $("cfg-spamattack").value;
+  spam.ad = $("cfg-spamad").value.split(/\n+/).map(function (s) { return s.trim(); }).filter(Boolean);
+  spam.adInterval = parseInt($("cfg-spaminterval").value, 10) || 0;
+
+  // 资源路径
+  var basePath = cfgData.basePath || {};
+  basePath.music = $("cfg-path-music").value.trim();
+  basePath.mcfunc = $("cfg-path-mcfunc").value.trim();
+  basePath.ezmatic = $("cfg-path-ezmatic").value.trim();
+  basePath.image = $("cfg-path-image").value.trim();
+
   var payload = {
     config: {
       name: $("cfg-name").value.trim() || "EnderBridge",
@@ -326,6 +396,9 @@ $("configSave").addEventListener("click", function () {
       ai: ai,
       utils: utils,
       sapi: sapi,
+      mods: mods,
+      spam: spam,
+      basePath: basePath,
     }
   };
   api("/config", { method: "PUT", body: JSON.stringify(payload) })

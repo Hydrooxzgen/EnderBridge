@@ -129,7 +129,7 @@ MOD_REGISTRY = {
         "ImageMod": {"path": "mod.image.main", "label": "图片", "basePath": "image"},
     },
     "server": {
-        "read": {"path": "mod.read", "label": "读取 / 刷屏", "config": "spam"},
+        "chat": {"path": "mod.read", "label": "聊天 / 刷屏", "config": "spam"},
     },
 }
 
@@ -223,7 +223,7 @@ RULES = [
     # 刷屏数据配置块
     {"key": "刷屏配置", "apply": make_block_rule("spam", lambda f: _py_dump({
         "attack": f.get("spamAttack", ""),
-        "ad": split_list(f.get("spamAd", "")),
+        "ad": split_lines(f.get("spamAd", "")),
         "adInterval": int(f.get("spamAdInterval") or 60000),
     }))},
     # rateLimit 块的 enabled 后面紧跟 windowMs,用它做上下文锚点,避免误匹配其他 enabled
@@ -245,6 +245,20 @@ def split_list(str_) -> list:
     seen = set()
     result = []
     for s in re.split(r"[,，\s]+", str_):
+        s = s.strip()
+        if s and s not in seen:
+            seen.add(s)
+            result.append(s)
+    return result
+
+
+def split_lines(str_) -> list:
+    """将换行分隔的文本解析为去重数组(广告文本每行一条,保留行内空格)"""
+    if not isinstance(str_, str):
+        return []
+    seen = set()
+    result = []
+    for s in str_.splitlines():
         s = s.strip()
         if s and s not in seen:
             seen.add(s)
@@ -799,7 +813,7 @@ button[type=submit]:disabled { opacity: 0.7; cursor: wait; transform: none; }
       <div class="grid">
         <div><label for="spamAdInterval">广告推送间隔（毫秒）</label><input id="spamAdInterval" name="spamAdInterval" type="number" min="0"></div>
       </div>
-      <p class="hint">用于 $read 模组的 attack / ad 命令。</p>
+      <p class="hint">用于 $chat 模组的 attack / ad 命令。</p>
     </section>
 
     <section class="card">
@@ -973,7 +987,7 @@ function syncConfig() {
   var aiOn = $("advancedMods").querySelector('input[value="AI"]').checked;
   var qqOn = $("advancedMods").querySelector('input[value="QQ"]').checked;
   var musicOn = $("clientMods").querySelector('input[value="Music"]').checked;
-  var spamOn = $("serverMods").querySelector('input[value="read"]').checked;
+  var spamOn = $("serverMods").querySelector('input[value="chat"]').checked;
   $("aiFields").classList.toggle("hidden", !aiOn);
   $("qqFields").classList.toggle("hidden", !qqOn);
   $("musicFields").classList.toggle("hidden", !musicOn);

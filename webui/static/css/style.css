@@ -179,6 +179,19 @@ button { font-family: inherit; }
 .switch input:checked + .track::after { transform: translateX(18px); }
 .switch-label { font-size: 14px; }
 
+/* Mod 开关网格 */
+.mod-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
+.mod-check {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px; border-radius: 10px;
+  background: rgba(15, 23, 42, 0.45); border: 1px solid rgba(148, 163, 184, 0.15);
+}
+.mod-check .switch { width: 36px; height: 20px; }
+.mod-check .track::after { width: 14px; height: 14px; }
+.mod-check .switch input:checked + .track::after { transform: translateX(16px); }
+.mod-check .switch-label { font-size: 13px; }
+.mod-check .switch-label .td-dim { font-size: 11px; color: var(--text-faint); }
+
 /* 子设置块 */
 .sub-box {
   margin-top: 12px; padding: 14px 16px;

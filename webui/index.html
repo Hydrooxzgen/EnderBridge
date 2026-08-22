@@ -190,7 +190,16 @@
       </div>
 
       <div class="card">
-        <h3>🧰 工具配置</h3>
+        <h3>� Mod 开关</h3>
+        <h4 class="sub-h">🖥️ 客户端 Mod</h4>
+        <div class="mod-grid" id="modClientBox"></div>
+        <h4 class="sub-h">🖧 服务端 Mod</h4>
+        <div class="mod-grid" id="modServerBox"></div>
+        <p class="hint">勾选 = 启用对应 Mod;自定义 Mod 不在列表中时不受影响。修改后需重启服务器生效。</p>
+      </div>
+
+      <div class="card">
+        <h3>�🧰 工具配置</h3>
         <div class="switch-row">
           <label class="switch">
             <input id="cfg-tellall" type="checkbox">
@@ -214,6 +223,26 @@
           <div class="form-group"><label>私聊消息命令 (smsg)</label><input id="cfg-smsg"></div>
         </div>
         <p class="hint">游戏内 <b>!gmsg</b> / <b>!smsg</b> 消息发送命令名,修改后需重启服务器生效。</p>
+      </div>
+
+      <div class="card">
+        <h3>📢 刷屏数据</h3>
+        <div class="form-grid">
+          <div class="form-group full"><label>攻击文本</label><textarea id="cfg-spamattack" rows="2" placeholder="§c[示例] 刷屏文本"></textarea></div>
+          <div class="form-group full"><label>广告文本 (每行一条)</label><textarea id="cfg-spamad" rows="4" placeholder="§u示例广告 1 §7| §bexample.com"></textarea></div>
+          <div class="form-group"><label>广告推送间隔 (毫秒)</label><input id="cfg-spaminterval" type="number" min="0"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>📂 资源路径</h3>
+        <div class="form-grid">
+          <div class="form-group"><label>音乐 (midi) 路径</label><input id="cfg-path-music"></div>
+          <div class="form-group"><label>MCFunc 路径</label><input id="cfg-path-mcfunc"></div>
+          <div class="form-group"><label>Ezmatic 路径</label><input id="cfg-path-ezmatic"></div>
+          <div class="form-group"><label>图片路径</label><input id="cfg-path-image"></div>
+        </div>
+        <p class="hint">相对项目根目录,如 <b>./resources/midi</b>;修改后需重启服务器生效。</p>
       </div>
 
       <div class="card">

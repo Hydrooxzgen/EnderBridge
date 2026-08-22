@@ -64,7 +64,7 @@ On first run (or when `is_first_run = True` in `config.example.py`), the **web s
 - **基础模组 / 高级模组勾选**：客户端 / 服务端各模组开关，勾选后自动显示对应配置区（AI 对话、音乐、QQ 群互通、刷屏等）/ Toggle client / server mods; checking a mod reveals its config section (AI, music, QQ bridge, spam, etc.)
 - AI API Key / Base URL / 对话模型 / 指令模型 / 对话冷却 / AI API Key / Base URL / chat model / command model / chat cooldown
 - 音乐打击乐开关、QQ 桥接（群号 / 主机 / 端口 / 访问令牌）/ Music percussion toggle, QQ bridge (group ID / host / port / access token)
-- 刷屏设置（攻击文本 / 广告文本 / 推送间隔，用于 `$read` 模组）/ Spam settings (attack / ad text / interval, used by the `$read` mod)
+- 刷屏设置（攻击文本 / 广告文本 / 推送间隔，用于 `$chat` 模组）/ Spam settings (attack / ad text / interval, used by the `$chat` mod)
 - 玩家权限（服主 / 管理员 / 普通用户 / 屏蔽名单）/ Player permissions (owner / op / user / blocker)
 - **资源路径**（音乐 / MCFunc / Ezmatic / 图片，按勾选模组显示）/ Resource paths (music / MCFunc / Ezmatic / pictures, shown per enabled mod)
 - **高级配置（折叠区）**：命令限流、Web 管理界面（端口 / 令牌）、SAPI 指令、Utils 开关 / **Advanced (collapsible)**: rate limit, Web console (port / token), SAPI commands, Utils toggles

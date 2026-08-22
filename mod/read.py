@@ -150,7 +150,7 @@ def _cmd_c_line(_, text):
     Current.client.tellAll(f"\n§r\n{text}")
 
 
-# ===== 命令分发器(单一入口 $read) =====
+# ===== 命令分发器(单一入口 $chat) =====
 
 # (方法, 参数格式, 说明)
 READ_METHODS = [
@@ -172,21 +172,21 @@ READ_METHODS = [
 
 
 async def _cmd_read(_, method, p1=None, p2=None, p3=None, p4=None, p5=None):
-    """$read 方法分发器(终端命令,无权限检查)"""
+    """$chat 方法分发器(终端命令,无权限检查)"""
     if method is None:
-        print(f"< 未知方法: 未指定（输入 {Command.command_prefix}read help 查看全部方法）")
+        print(f"< 未知方法: 未指定（输入 {Command.command_prefix}chat help 查看全部方法）")
         return
 
     # help 显示本模组方法列表
     if method == "help":
         print("< 可用方法:")
         for mname, margs, mdesc, *_ in READ_METHODS:
-            print(f"  {Command.command_prefix}read {mname}{' ' + margs if margs else ''} - {mdesc}")
+            print(f"  {Command.command_prefix}chat {mname}{' ' + margs if margs else ''} - {mdesc}")
         return
 
     known = [m for m, _a, _d in READ_METHODS]
     if method not in known:
-        print(f"< 未知方法: {method}（输入 {Command.command_prefix}read help 查看全部方法）")
+        print(f"< 未知方法: {method}（输入 {Command.command_prefix}chat help 查看全部方法）")
         return
 
     # 分发到具体实现
@@ -225,7 +225,7 @@ async def _cmd_read(_, method, p1=None, p2=None, p3=None, p4=None, p5=None):
 
     elif method == "repeat":
         if p1 is None:
-            print(f"< 参数不足：{Command.command_prefix}read repeat <刷屏内容>")
+            print(f"< 参数不足：{Command.command_prefix}chat repeat <刷屏内容>")
             return
         _cmd_c_repeat(_, p1)
 
@@ -234,7 +234,7 @@ async def _cmd_read(_, method, p1=None, p2=None, p3=None, p4=None, p5=None):
 
     elif method == "line":
         if p1 is None:
-            print(f"< 参数不足：{Command.command_prefix}read line <发言内容>")
+            print(f"< 参数不足：{Command.command_prefix}chat line <发言内容>")
             return
         _cmd_c_line(_, p1)
 
@@ -280,10 +280,10 @@ class Mod:
 
         Current.set("loop", asyncio.get_running_loop().create_task(_run()))
 
-    # 命令定义(单一入口 $read,方法见 READ_METHODS)
+    # 命令定义(单一入口 $chat,方法见 READ_METHODS)
     commands = {
         "normal": [
-            Command.create("read", "终端命令（方法: test/list/reload/mod/bye/testx/attack/count/crash/clear/ad/repeat/stop/line）")
+            Command.create("chat", "终端命令（方法: test/list/reload/mod/bye/testx/attack/count/crash/clear/ad/repeat/stop/line）")
             .add_string("方法", False)
             .add_optional_string("参数1")
             .add_optional_string("参数2")
@@ -312,7 +312,7 @@ class Mod:
     async def read(self, input_text):
         is_command = input_text.startswith(Command.command_prefix)
 
-        # 执行命令(单一入口 $read)
+        # 执行命令(单一入口 $chat)
         if is_command:
             result = self.execute(input_text, self.commands["normal"])
             if not result:

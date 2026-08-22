@@ -211,6 +211,9 @@ def load_config() -> dict:
         "logLevel": ns.get("logLevel", "info"),
         "features": features,
         "rateLimit": rate_limit,
+        "mods": ns.get("mods", {"client": {}, "server": {}}),
+        "spam": ns.get("spam", {}),
+        "basePath": ns.get("basePath", {}),
         "webui": {
             "enabled": webui.get("enabled", True),
             "port": webui.get("port", 18888),
@@ -276,6 +279,10 @@ def save_config(new: dict) -> None:
     apply_line("logLevel", str(new.get("logLevel") or "info").strip())
     apply_block("features", new.get("features") or {})
     apply_block("rateLimit", new.get("rateLimit") or {})
+    # Mod 开关 / 刷屏数据 / 资源路径:整块替换;缺失时自动追加
+    apply_block_or_append("mods", new.get("mods") or {"client": {}, "server": {}}, "# Mod 加载配置（模块名，相对项目根目录）")
+    apply_block_or_append("spam", new.get("spam") or {}, "# 刷屏数据配置")
+    apply_block_or_append("basePath", new.get("basePath") or {}, "# 文件路径配置（所有平台统一使用相对路径）")
 
     # AI 对话配置:基于现有结构合并,保留 thinking / stream 等未暴露字段
     ns = _load_config_module()

@@ -43,7 +43,11 @@ class Mod:
 
         total = len(sorted_)
         total_pages = max(1, (total + per_page - 1) // per_page)
-        p = min(max(1, page), total_pages)
+        # 页码可能来自聊天参数(字符串),做类型安全转换,非法输入回退到第 1 页
+        try:
+            p = min(max(1, int(page)), total_pages)
+        except (TypeError, ValueError):
+            p = 1
         start = (p - 1) * per_page
         page_items = sorted_[start:start + per_page]
 

@@ -85,7 +85,7 @@ mods = {
         "ImageMod": "mod.image.main",
     },
     "server": {
-        "read": "mod.read",
+        "chat": "mod.read",
         "AI": "mod.ai",
     },
 }
