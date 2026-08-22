@@ -18,6 +18,7 @@ API 一览:
 - PUT  /api/permissions          保存权限配置(仅 admin)
 - GET  /api/mods                 列出 Mod 及加载状态(admin / guest 均可,只读)
 - POST /api/mods/reload-all      重载所有服务端 Mod(仅 admin)
+- POST /api/restart              一键重启服务器进程(优雅关闭后自动以相同参数重启,仅 admin)
 
 鉴权:config.webuiConfig.token 非空时,登录页询问令牌——
 - 令牌正确 → admin(全部权限)
@@ -72,6 +73,16 @@ def set_status_provider(fn):
     """注入状态提供者:main.py 启动后调用,返回 dict(如 {"clients": N})"""
     global _status_provider
     _status_provider = fn
+
+
+# 一键重启处理器(main.py 注入):Web 管理界面触发后由主程序后台执行优雅关闭与进程重启
+_restart_handler = None
+
+
+def set_restart_handler(fn):
+    """注入重启处理器:main.py 启动后调用,fn() 应发起服务器进程重启(不得阻塞请求线程)"""
+    global _restart_handler
+    _restart_handler = fn
 
 
 def _read_config_src() -> str:
@@ -491,6 +502,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/mods/reload-all":
             self._api_reload_all()
             return
+        if parsed.path == "/api/restart":
+            self._api_restart()
+            return
         self.send_response(404)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.end_headers()
@@ -654,6 +668,21 @@ class WebUIHandler(BaseHTTPRequestHandler):
             self._respond({"ok": True, "result": result})
         except Exception as e:
             self._respond({"ok": False, "message": f"重载失败: {e}"})
+
+    def _api_restart(self) -> None:
+        """一键重启:触发主程序后台执行优雅关闭并重启进程(仅 admin)"""
+        if not _require_admin(self):
+            return
+        if _restart_handler is None:
+            self._respond({"ok": False, "message": "重启处理器未注册(请通过 main.py 启动服务器)"})
+            return
+        try:
+            _restart_handler()
+        except Exception as e:
+            self._respond({"ok": False, "message": f"重启触发失败: {e}"})
+            return
+        # 处理器在后台线程执行,这里先响应,保证浏览器能收到结果
+        self._respond({"ok": True, "message": "服务器正在重启,请稍候..."})
 
 
 def _check_importable(mod_path: str) -> bool:

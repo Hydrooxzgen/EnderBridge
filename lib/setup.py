@@ -129,7 +129,8 @@ MOD_REGISTRY = {
         "ImageMod": {"path": "mod.image.main", "label": "图片", "basePath": "image"},
     },
     "server": {
-        "chat": {"path": "mod.read", "label": "聊天 / 刷屏", "config": "spam"},
+        "chat": {"path": "mod.read", "label": "聊天 / 终端"},
+        "spam": {"path": "mod.spam", "label": "刷屏", "config": "spam"},
     },
 }
 
@@ -813,7 +814,7 @@ button[type=submit]:disabled { opacity: 0.7; cursor: wait; transform: none; }
       <div class="grid">
         <div><label for="spamAdInterval">广告推送间隔（毫秒）</label><input id="spamAdInterval" name="spamAdInterval" type="number" min="0"></div>
       </div>
-      <p class="hint">用于 $chat 模组的 attack / ad 命令。</p>
+      <p class="hint">用于 $spam 模组的 attack / ad 命令。</p>
     </section>
 
     <section class="card">
@@ -923,7 +924,8 @@ var MOD_REGISTRY = {
     ImageMod: { label: "图片", basePath: "image" }
   },
   server: {
-    chat: { label: "聊天 / 刷屏", config: "spam" }
+    chat: { label: "聊天 / 终端" },
+    spam: { label: "刷屏", config: "spam" }
   }
 };
 var ADVANCED_MODS = {
@@ -987,7 +989,7 @@ function syncConfig() {
   var aiOn = $("advancedMods").querySelector('input[value="AI"]').checked;
   var qqOn = $("advancedMods").querySelector('input[value="QQ"]').checked;
   var musicOn = $("clientMods").querySelector('input[value="Music"]').checked;
-  var spamOn = $("serverMods").querySelector('input[value="chat"]').checked;
+  var spamOn = $("serverMods").querySelector('input[value="spam"]').checked;
   $("aiFields").classList.toggle("hidden", !aiOn);
   $("qqFields").classList.toggle("hidden", !qqOn);
   $("musicFields").classList.toggle("hidden", !musicOn);

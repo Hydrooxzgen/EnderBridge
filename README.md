@@ -64,7 +64,7 @@ On first run (or when `is_first_run = True` in `config.example.py`), the **web s
 - **基础模组 / 高级模组勾选**：客户端 / 服务端各模组开关，勾选后自动显示对应配置区（AI 对话、音乐、QQ 群互通、刷屏等）/ Toggle client / server mods; checking a mod reveals its config section (AI, music, QQ bridge, spam, etc.)
 - AI API Key / Base URL / 对话模型 / 指令模型 / 对话冷却 / AI API Key / Base URL / chat model / command model / chat cooldown
 - 音乐打击乐开关、QQ 桥接（群号 / 主机 / 端口 / 访问令牌）/ Music percussion toggle, QQ bridge (group ID / host / port / access token)
-- 刷屏设置（攻击文本 / 广告文本 / 推送间隔，用于 `$chat` 模组）/ Spam settings (attack / ad text / interval, used by the `$chat` mod)
+- 刷屏设置（攻击文本 / 广告文本 / 推送间隔，用于 `$spam` 模组）/ Spam settings (attack / ad text / interval, used by the `$spam` mod)
 - 玩家权限（服主 / 管理员 / 普通用户 / 屏蔽名单）/ Player permissions (owner / op / user / blocker)
 - **资源路径**（音乐 / MCFunc / Ezmatic / 图片，按勾选模组显示）/ Resource paths (music / MCFunc / Ezmatic / pictures, shown per enabled mod)
 - **高级配置（折叠区）**：命令限流、Web 管理界面（端口 / 令牌）、SAPI 指令、Utils 开关 / **Advanced (collapsible)**: rate limit, Web console (port / token), SAPI commands, Utils toggles
@@ -79,7 +79,7 @@ After saving, `config.py` and `permission.json` are generated (old files backed 
 
 **On every server start**, the Web management console listens on the configured port (default `18888`). Open `http://127.0.0.1:18888` in your browser:
 
-- 📊 **仪表盘 / Dashboard**：服务器名称、端口、客户端连接数、运行时间 / Server name, port, connected clients, uptime
+- 📊 **仪表盘 / Dashboard**：服务器名称、端口、客户端连接数、运行时间，一键重启服务器（优雅关闭后自动以相同参数重启进程）/ Server name, port, connected clients, uptime, one-click server restart
 - 👥 **权限管理 / Permissions**：在线查看与编辑 `owner` / `op` / `user` / `blocker`，保存后即时生效 / View & edit permission groups, applied immediately
 - ⚙️ **功能设置 / Settings**：修改名称、端口、命令前缀、日志等级、音乐 / QQ 开关、命令限流与 Web 管理本身（端口 / 令牌）/ Edit server settings, feature toggles, rate limit and Web console port / token
 - 🧩 **Mod 管理 / Mods**：查看已加载的客户端 / 服务端 Mod 及其可导入状态，一键重载服务端 Mod / View loaded mods and reload server mods
@@ -128,7 +128,8 @@ All built-in mods share a **single-entry command** format: `<prefix><entry> <met
 | 外接 WebSocket / MoreWS | `ws` | `!ws connect ws://127.0.0.1:8080` |
 | QQ 互通 / QQ | `qq` | `!qq send 你好` |
 | AI 对话 / AI | `ai` | `!ai chat 你好` |
-| 终端 / 刷屏 / Terminal | `chat` | `!chat list`（终端与游戏内均可用） |
+| 终端 / 聊天 / Terminal | `chat` | `!chat list`（终端与游戏内均可用） |
+| 刷屏 / Spam | `spam` | `!spam stop`（终端与游戏内均可用） |
 | Ezmatic 建筑 / Ezmatic | `ezmatic` | `!ezmatic preview <文件>` |
 
 全局 `help` 命令（`!help [页码]`）分页显示全部命令；每个入口输入 `help` 可查看该模组的全部方法：`!tool help`、`!music help`……
@@ -212,7 +213,8 @@ EnderBridge/
     ├── music.py             # MIDI 音乐播放 / MIDI music player
     ├── permission.py        # 游戏内权限命令 / In-game permission commands
     ├── position.py          # 坐标 / 区域 / 结构操作 / Position & structure ops
-    ├── read.py              # 终端交互模组 / Terminal interaction mod
+    ├── read.py              # 终端交互 / 聊天模组 / Terminal & chat mod
+    ├── spam.py              # 刷屏模组（attack/count/crash/clear/ad/repeat/stop）/ Spam mod
     ├── tool.py              # 工具 / 命令帮助 / 管理 / Tools & command help
     ├── image/               # 图片转像素画 / Image to pixel art
     ├── ezmatic/             # Ezmatic 建筑导入 / Ezmatic build import
@@ -235,7 +237,8 @@ EnderBridge/
 | `Ezmatic` | 客户端 / Client | `.litematic` 建筑导入、预览、修复、导出 `.mcstructure` / Build import & export |
 | `ImageMod` | 客户端 / Client | 图片转 MC 像素画（HSV/LAB 颜色匹配）/ Image to pixel art |
 | `QQ` | 客户端 / Client | QQ 群消息与游戏内消息互通 / QQ ↔ in-game chat bridge |
-| `chat` | 服务端 / Server | 终端与游戏内命令：重载 Mod、列出连接、刷屏攻击、广告推送等 / Terminal & in-game commands: reload, list, spam, ads. 终端无权限限制;游戏内 attack/crash/clear/ad/repeat 等方法需 op 权限 |
+| `chat` | 服务端 / Server | 终端交互与聊天命令：重载 Mod、列出连接、测试、换行发言等 / Terminal & chat commands: reload, list, test, line. 终端无权限限制;游戏内 line 方法需 op 权限 |
+| `spam` | 服务端 / Server | 刷屏命令：attack/count/crash/clear/ad/repeat/stop / Spam commands: attack/count/crash/clear/ad/repeat/stop. 终端无权限限制;游戏内方法均需 op 权限 |
 
 ---
 

@@ -1,20 +1,15 @@
-"""终端交互 Mod
+"""终端交互 / 聊天 Mod
 
 监听标准输入,提供终端级别的命令执行和消息发送功能
-支持游戏命令转发、聊天刷屏、Lumine 广告推送等
+支持游戏命令转发、聊天发言(终端与游戏内均可用)
+刷屏相关命令见 mod/spam.py(独立模组,可单独启用 / 禁用)
 """
 import asyncio
-import random
-import re
 import sys
 
-from config import spam
 from lib.command import Command
 from lib.current import Current
 from lib.mods import ClientModManager, ServerModManager
-
-# 清屏文本
-CLEAR_TEXT = "\n§r\n" * 31
 
 
 # ===== 命令实现(模块级函数,供 Mod.commands 引用) =====
@@ -87,64 +82,6 @@ def _cmd_testx(_):
     )
 
 
-def _cmd_c_attack(_):
-    Mod.start_spam(10, lambda: Current.client.sendCommand(f"me {Mod.replace_zeros(spam['attack'])}"), "正在攻击客户端聊天…")
-
-
-def _cmd_c_count(_):
-    count = {"n": 10}
-
-    def gen():
-        if count["n"] <= 0:
-            Current.get("loop").cancel()
-            print("< 倒计时结束")
-            return
-        Current.client.tellAll(f"§uLUMINEPROXY TOP! §l§cTHIS SERVER WILL CRASH IN {count['n']} SECONDS!")
-        count["n"] -= 1
-
-    Mod.start_spam(1000, gen, "正在进行倒计时…")
-
-
-def _cmd_c_crash(_):
-    count = {"n": 10}
-
-    def gen():
-        if count["n"] <= 0:
-            Current.get("loop").cancel()
-            print("< 正在进行崩溃…")
-            # 倒计时结束后启动攻击
-            Mod.start_spam(10, lambda: Current.client.sendCommand(f"me {Mod.replace_zeros(spam['attack'])}"), "正在进行崩溃攻击…")
-            return
-        Current.client.tellAll(f"§uLUMINEPROXY TOP! §l§cTHIS SERVER WILL CRASH IN {count['n']} SECONDS!")
-        count["n"] -= 1
-
-    Mod.start_spam(1000, gen, "正在进行倒计时…")
-
-
-def _cmd_c_clear(_):
-    def gen():
-        for _ in range(8):
-            Current.client.tellAll(CLEAR_TEXT)
-
-    Mod.start_spam(50, gen, "正在为客户端聊天清屏…")
-
-
-def _cmd_c_ad(_):
-    interval = spam.get("adInterval") or 60000
-    Mod.start_spam(interval, lambda: Current.client.tellAll(spam["ad"][random.randrange(len(spam["ad"]))]), "正在为客户端推送 AD…")
-
-
-def _cmd_c_repeat(_, text):
-    Mod.start_spam(50, lambda: Current.client.tellAll(text), "正在为刷屏客户端…")
-
-
-def _cmd_c_stop(_):
-    if Current.has("loop") and Current.get("loop"):
-        Current.get("loop").cancel()
-    Current.set("loop", None)
-    print("< 已停止客户端刷屏")
-
-
 def _cmd_c_line(_, text):
     # 在消息前插入换行以实现换行效果
     Current.client.tellAll(f"\n§r\n{text}")
@@ -160,13 +97,6 @@ READ_METHODS = [
     ("reload", "", "重载所有服务端 Mod + 所有客户端 Mod 全部实例", 2),
     ("bye", "", "强制退出当前房间 (WebSocket 专用)", 2),
     ("testx", "", "小测试 (WebSocket 专用)", 2),
-    ("attack", "", "攻击客户端聊天", 2),
-    ("count", "", "聊天室倒计时", 2),
-    ("crash", "", "崩溃客户端聊天", 2),
-    ("clear", "", "清屏聊天消息", 2),
-    ("ad", "", "推送广告", 2),
-    ("repeat", "<刷屏内容>", "刷屏指定内容", 2),
-    ("stop", "", "停止所有刷屏", 2),
     ("line", "<发言内容>", "换行发言", 2),
 ]
 
@@ -208,30 +138,6 @@ async def _cmd_read(_, method, p1=None, p2=None, p3=None, p4=None, p5=None):
     elif method == "testx":
         _cmd_testx(_)
 
-    elif method == "attack":
-        _cmd_c_attack(_)
-
-    elif method == "count":
-        _cmd_c_count(_)
-
-    elif method == "crash":
-        _cmd_c_crash(_)
-
-    elif method == "clear":
-        _cmd_c_clear(_)
-
-    elif method == "ad":
-        _cmd_c_ad(_)
-
-    elif method == "repeat":
-        if p1 is None:
-            print(f"< 参数不足：{Command.command_prefix}chat repeat <刷屏内容>")
-            return
-        _cmd_c_repeat(_, p1)
-
-    elif method == "stop":
-        _cmd_c_stop(_)
-
     elif method == "line":
         if p1 is None:
             print(f"< 参数不足：{Command.command_prefix}chat line <发言内容>")
@@ -242,48 +148,10 @@ async def _cmd_read(_, method, p1=None, p2=None, p3=None, p4=None, p5=None):
 class Mod:
     """终端读取 Mod(服务端)"""
 
-    # 0 值替换
-    @staticmethod
-    def replace_zeros(text):
-        """把字符串中的 0 替换为随机非数字字符(绕过聊天敏感词过滤)"""
-        chars = [chr(i) for i in range(33, 127) if i < 48 or i > 57]
-        random.shuffle(chars)
-        idx = 0
-
-        def _rep(_m):
-            nonlocal idx
-            if idx >= len(chars):
-                idx = 0
-            c = chars[idx]
-            idx += 1
-            return c
-
-        return re.sub(r"0", _rep, text)
-
-    # 通用刷屏启动方法
-    @staticmethod
-    def start_spam(interval, generator, log_message):
-        """启动一个周期性任务;已有任务会被替换"""
-        if Current.has("loop") and Current.get("loop"):
-            Current.get("loop").cancel()
-        print(f"< {log_message}")
-
-        async def _run():
-            try:
-                while True:
-                    await asyncio.sleep(interval / 1000)
-                    ret = generator()
-                    if asyncio.iscoroutine(ret):
-                        await ret
-            except asyncio.CancelledError:
-                pass
-
-        Current.set("loop", asyncio.get_running_loop().create_task(_run()))
-
     # 命令定义(单一入口 $chat,方法见 READ_METHODS)
     commands = {
         "normal": [
-            Command.create("chat", "终端命令（方法: test/list/reload/mod/bye/testx/attack/count/crash/clear/ad/repeat/stop/line）")
+            Command.create("chat", "终端命令（方法: test/list/reload/mod/bye/testx/line）")
             .add_string("方法", False)
             .add_optional_string("参数1")
             .add_optional_string("参数2")
@@ -315,9 +183,12 @@ class Mod:
         # 执行命令(单一入口 $chat)
         if is_command:
             result = self.execute(input_text, self.commands["normal"])
-            if not result:
-                # 无匹配命令提示
-                print(f"未知的命令 {input_text.split(' ')[0]}")
+            if result:
+                # 本 Mod 未匹配,转发给其他服务端 Mod(如 $spam)尝试执行
+                handled = await ServerModManager.execute_terminal(input_text, skip_mod=self.modName)
+                if not handled:
+                    # 无匹配命令提示
+                    print(f"未知的命令 {input_text.split(' ')[0]}")
             return
 
         # 检测主客户端连接状态
@@ -410,12 +281,8 @@ class Mod:
         # 复用命令分发执行(print 输出到服务器终端)
         await self.read(msg)
 
-    # 销毁方法:取消终端读取任务与刷屏任务
+    # 销毁方法:取消终端读取任务(刷屏任务由 spam 模组自行管理)
     def onDestroy(self):
         if getattr(self, "_read_task", None):
             self._read_task.cancel()
             self._read_task = None
-        # 清理刷屏任务,防止 reload 或关闭后任务继续回调
-        if Current.has("loop") and Current.get("loop"):
-            Current.get("loop").cancel()
-            Current.set("loop", None)

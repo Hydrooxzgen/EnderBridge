@@ -88,6 +88,7 @@ function applyRoleUI(role) {
   $("permReload").style.display = isGuest ? "none" : "";
   $("configSave").style.display = isGuest ? "none" : "";
   $("modReloadAll").style.display = isGuest ? "none" : "";
+  $("restartBtn").style.display = isGuest ? "none" : "";
   if (isGuest) showPage("dashboard");
 }
 $("loginBtn").addEventListener("click", function () {
@@ -224,6 +225,7 @@ var MOD_CATALOG = {
   ],
   server: [
     ["chat", "mod.read"],
+    ["spam", "mod.spam"],
     ["AI", "mod.ai"],
   ],
 };
@@ -255,7 +257,7 @@ function isModOn(side, key) {
 function syncConfigCards() {
   $("cfgCardMusic").classList.toggle("hidden", !isModOn("client", "Music"));
   $("cfgCardAi").classList.toggle("hidden", !(isModOn("client", "AI") || isModOn("server", "AI")));
-  $("cfgCardSpam").classList.toggle("hidden", !isModOn("server", "chat"));
+  $("cfgCardSpam").classList.toggle("hidden", !isModOn("server", "spam"));
   $("cfgCardTool").classList.toggle("hidden", !isModOn("client", "Tool"));
 }
 function loadConfig() {
@@ -456,6 +458,44 @@ $("modReloadAll").addEventListener("click", function () {
       toast(data.message || "重载完成", data.ok ? "ok" : "err");
     }).catch(function () {})
     .finally(function () { btn.disabled = false; });
+});
+
+// ===== 一键重启 =====
+$("restartBtn").addEventListener("click", function () {
+  if (!confirm("确定要重启服务器吗？\n当前所有连接将被断开,重启完成后页面将自动刷新。")) return;
+  var btn = this;
+  btn.disabled = true;
+  api("/restart", { method: "POST" })
+    .then(function (data) {
+      if (!data.ok) {
+        toast(data.message || "重启失败", "err");
+        btn.disabled = false;
+        return;
+      }
+      toast("服务器正在重启...", "ok");
+      // 轮询等待服务器恢复,恢复后自动刷新页面
+      var tries = 0;
+      var timer = setInterval(function () {
+        tries++;
+        fetch("/api/status")
+          .then(function (res) { return res.json(); })
+          .then(function (d) {
+            if (d.ok) {
+              clearInterval(timer);
+              location.reload();
+            }
+          })
+          .catch(function () { /* 服务器尚未就绪,继续等待 */ });
+        if (tries >= 60) {
+          clearInterval(timer);
+          btn.disabled = false;
+          toast("等待服务器恢复超时,请手动刷新页面", "err");
+        }
+      }, 2000);
+    })
+    .catch(function () {
+      btn.disabled = false;
+    });
 });
 
 // ===== 启动 =====

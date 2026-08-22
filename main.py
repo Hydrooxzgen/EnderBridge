@@ -10,6 +10,7 @@ import os
 import re
 import subprocess
 import sys
+import threading
 import time
 from uuid import uuid4
 
@@ -399,6 +400,8 @@ from websockets.protocol import State
 # 当前所有连接(含未初始化完成的),用于关闭时统一通知
 connections = set()
 server = None
+# 主事件循环引用(供 Web 管理界面线程提交关闭协程,实现一键重启)
+_main_loop = None
 
 
 async def connection_handler(ws):
@@ -525,15 +528,45 @@ def _webui_status() -> dict:
 def _start_webui() -> None:
     """启动 Web 管理界面(每次启动都监听配置的 Web 端口)"""
     try:
-        from webui.server import set_status_provider, start_webui
+        from webui.server import set_restart_handler, set_status_provider, start_webui
         set_status_provider(_webui_status)
+        set_restart_handler(_request_restart)
         start_webui()
     except Exception as error:
         shared.logger.warning(f"Web 管理界面启动失败: {error}")
 
 
+def _request_restart() -> None:
+    """由 Web 管理界面触发:后台线程优雅关闭服务器后,以相同参数重启进程
+
+    顺序:先经事件循环执行 destroy()(停 Web 界面 / 关 Mod / 断开客户端 /
+    关闭 WS 服务端,确保端口释放),再启动新进程,最后退出旧进程。
+    """
+    loop = _main_loop
+
+    def _do_restart():
+        # 1. 在事件循环中执行完整关闭流程(此时 Web 请求线程已返回响应,不会死锁)
+        if loop is not None and not loop.is_closed():
+            try:
+                fut = asyncio.run_coroutine_threadsafe(destroy(), loop)
+                fut.result(timeout=30)
+            except Exception as error:
+                shared.logger.warning(f"重启前关闭流程异常: {error}")
+        # 2. 端口已释放,以相同参数启动新进程(保持工作目录不变)
+        try:
+            shared.logger.info("正在以相同参数重新启动服务器...")
+            subprocess.Popen([sys.executable] + sys.argv, cwd=ROOT)
+        except Exception as error:
+            shared.logger.error(f"重启进程启动失败: {error}")
+        # 3. 立即终止旧进程,端口与句柄由操作系统回收
+        os._exit(0)
+
+    threading.Thread(target=_do_restart, daemon=True).start()
+
+
 async def main():
-    global server
+    global server, _main_loop
+    _main_loop = asyncio.get_running_loop()
     host = wsConfig.get("host") or None  # None = 监听所有接口
     port = wsConfig.get("port", 8800)
 

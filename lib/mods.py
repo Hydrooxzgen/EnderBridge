@@ -925,6 +925,38 @@ class ServerModManager:
         return name in cls.command_names
 
     @classmethod
+    async def execute_terminal(cls, msg: str, skip_mod: str = None) -> bool:
+        """终端命令跨 Mod 转发:让其他服务端 Mod 尝试执行命令
+
+        由 chat(mod.read)的终端读取循环调用;当 chat 自身未匹配命令时,
+        转发给其余服务端 Mod(如 spam)执行。返回 True 表示已处理。
+
+        Args:
+            msg: 终端输入的命令文本(如 $spam attack)
+            skip_mod: 跳过的 Mod 名称(通常是调用方自身,避免重复执行)
+
+        Returns:
+            True = 有 Mod 处理了该命令;False = 无 Mod 匹配
+        """
+        for name, instance in cls.mod_instances.items():
+            if skip_mod and name == skip_mod:
+                continue
+            exec_method = getattr(instance, "execute", None)
+            cmd_map = getattr(instance, "commands", None)
+            if not callable(exec_method) or not isinstance(cmd_map, dict):
+                continue
+            cmd_list = cmd_map.get("normal")
+            if not isinstance(cmd_list, list):
+                continue
+            try:
+                if not exec_method(msg, cmd_list):
+                    return True
+            except Exception as e:
+                shared.logger.error(f"Server Mod {name}.execute_terminal 错误: {e}")
+                shared.logger.debug(f"Server Mod {name}.execute_terminal 详情", exc_info=True)
+        return False
+
+    @classmethod
     def get_mod_path(cls, mod_name: str):
         """获取 Mod 的文件路径"""
         return _mods_config().get("server", {}).get(mod_name) or None
