@@ -128,7 +128,7 @@ All built-in mods share a **single-entry command** format: `<prefix><entry> <met
 | 外接 WebSocket / MoreWS | `ws` | `!ws connect ws://127.0.0.1:8080` |
 | QQ 互通 / QQ | `qq` | `!qq send 你好` |
 | AI 对话 / AI | `ai` | `!ai chat 你好` |
-| 终端 / Terminal | `read` | `!read list` |
+| 终端 / 刷屏 / Terminal | `chat` | `!chat list`（终端与游戏内均可用） |
 | Ezmatic 建筑 / Ezmatic | `ezmatic` | `!ezmatic preview <文件>` |
 
 全局 `help` 命令（`!help [页码]`）分页显示全部命令；每个入口输入 `help` 可查看该模组的全部方法：`!tool help`、`!music help`……
@@ -217,7 +217,7 @@ EnderBridge/
 | `Ezmatic` | 客户端 / Client | `.litematic` 建筑导入、预览、修复、导出 `.mcstructure` / Build import & export |
 | `ImageMod` | 客户端 / Client | 图片转 MC 像素画（HSV/LAB 颜色匹配）/ Image to pixel art |
 | `QQ` | 客户端 / Client | QQ 群消息与游戏内消息互通 / QQ ↔ in-game chat bridge |
-| `read` | 服务端 / Server | 终端命令：重载 Mod、列出连接、消息推送 / Terminal commands, reload, push |
+| `chat` | 服务端 / Server | 终端与游戏内命令：重载 Mod、列出连接、刷屏攻击、广告推送等 / Terminal & in-game commands: reload, list, spam, ads. 终端无权限限制;游戏内 attack/crash/clear/ad/repeat 等方法需 op 权限 |
 
 ---
 

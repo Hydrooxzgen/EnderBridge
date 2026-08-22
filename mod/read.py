@@ -152,22 +152,22 @@ def _cmd_c_line(_, text):
 
 # ===== 命令分发器(单一入口 $chat) =====
 
-# (方法, 参数格式, 说明)
+# (方法, 参数格式, 说明, 游戏内所需权限;终端使用不检查权限)
 READ_METHODS = [
-    ("test", "", "测试命令"),
-    ("list", "", "列出所有连接(主客户端 + IP 或 编号 + IP)"),
-    ("reload", "", "重载所有服务端 Mod + 所有客户端 Mod 全部实例"),
-    ("mod", "", "列出所有服务端 Mod 与客户端 Mod"),
-    ("bye", "", "强制退出当前房间 (WebSocket 专用)"),
-    ("testx", "", "小测试 (WebSocket 专用)"),
-    ("attack", "", "攻击客户端聊天"),
-    ("count", "", "聊天室倒计时"),
-    ("crash", "", "崩溃客户端聊天"),
-    ("clear", "", "清屏聊天消息"),
-    ("ad", "", "推送广告"),
-    ("repeat", "<刷屏内容>", "刷屏指定内容"),
-    ("stop", "", "停止所有刷屏"),
-    ("line", "<发言内容>", "换行发言"),
+    ("test", "", "测试命令", 0),
+    ("list", "", "列出所有连接(主客户端 + IP 或 编号 + IP)", 0),
+    ("mod", "", "列出所有服务端 Mod 与客户端 Mod", 0),
+    ("reload", "", "重载所有服务端 Mod + 所有客户端 Mod 全部实例", 2),
+    ("bye", "", "强制退出当前房间 (WebSocket 专用)", 2),
+    ("testx", "", "小测试 (WebSocket 专用)", 2),
+    ("attack", "", "攻击客户端聊天", 2),
+    ("count", "", "聊天室倒计时", 2),
+    ("crash", "", "崩溃客户端聊天", 2),
+    ("clear", "", "清屏聊天消息", 2),
+    ("ad", "", "推送广告", 2),
+    ("repeat", "<刷屏内容>", "刷屏指定内容", 2),
+    ("stop", "", "停止所有刷屏", 2),
+    ("line", "<发言内容>", "换行发言", 2),
 ]
 
 
@@ -184,7 +184,7 @@ async def _cmd_read(_, method, p1=None, p2=None, p3=None, p4=None, p5=None):
             print(f"  {Command.command_prefix}chat {mname}{' ' + margs if margs else ''} - {mdesc}")
         return
 
-    known = [m for m, _a, _d in READ_METHODS]
+    known = [m for m, *_ in READ_METHODS]
     if method not in known:
         print(f"< 未知方法: {method}（输入 {Command.command_prefix}chat help 查看全部方法）")
         return
@@ -361,6 +361,54 @@ class Mod:
             return False
 
         return True
+
+    # 游戏内 $chat 命令(服务端 Mod 专属命令,客户端命令系统不拦截)
+    # 终端使用无权限限制;游戏内按 READ_METHODS 中各方法的权限等级检查
+    async def onMessage(self, client, data):
+        """处理游戏内玩家发送的 $chat 命令(执行结果输出到服务器终端)"""
+        body = data.get("body", {})
+        sender = body.get("sender")
+        msg = body.get("message")
+        if not msg or not sender or body.get("type") != "chat" or len(msg) >= 256:
+            return
+        if not msg.startswith(Command.command_prefix + "chat"):
+            return
+
+        # 解析方法名
+        rest = msg[len(Command.command_prefix + "chat"):].strip()
+        method = rest.split(" ", 1)[0] if rest else None
+
+        # help 直接反馈给发送者
+        if method == "help":
+            lines = "\n".join(
+                f"§a{Command.command_prefix}chat {mname}{' ' + margs if margs else ''} §7- §f{mdesc}"
+                for mname, margs, mdesc, _l in READ_METHODS
+            )
+            client.tell(f"§eChat | §fHelp > §7可用方法\n{lines}", sender)
+            return
+
+        # 查询方法所需权限
+        required = None
+        for mname, _a, _d, plevel in READ_METHODS:
+            if mname == method:
+                required = plevel
+                break
+        if required is None:
+            client.tell(f"§cChat | §fError > §i未知方法: {method}（输入 {Command.command_prefix}chat help 查看全部方法）", sender)
+            return
+
+        # 权限检查
+        from lib.permission import PermissionManager
+        perm = await PermissionManager.query(sender)
+        if isinstance(perm, Exception):
+            client.tell("§cChat | §fError > §i权限查询失败", sender)
+            return
+        if perm < required:
+            client.tell("§cChat | §fError > §i权限不足", sender)
+            return
+
+        # 复用命令分发执行(print 输出到服务器终端)
+        await self.read(msg)
 
     # 销毁方法:取消终端读取任务与刷屏任务
     def onDestroy(self):

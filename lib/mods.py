@@ -492,6 +492,10 @@ class ClientModManager:
             if not msg.startswith(Command.command_prefix):
                 return
 
+            # 服务端 Mod 专属命令(如 $chat)由服务端处理,客户端不拦截、不报"未知的命令"
+            if ServerModManager.has_command(msg.split(" ")[0]):
+                return
+
             # 查询发送者权限
             permission = await PermissionManager.query(sender)
 
@@ -680,6 +684,9 @@ class ServerModManager:
     # 存储 Mod 实例(用于调用实例方法)
     mod_instances = {}
 
+    # 服务端 Mod 注册的命令名集合(不含前缀),用于客户端识别"由服务端处理"的命令
+    command_names = set()
+
     @classmethod
     def _resolve_method(cls, instance, name):
         return _resolve_mod_method(instance, name)
@@ -805,6 +812,9 @@ class ServerModManager:
                 shared.logger.error(f"Server Mod {name} 加载失败")
                 shared.logger.debug(str(e))
 
+        # 收集服务端 Mod 注册的命令名(供客户端识别服务端专属命令)
+        cls._collect_command_names()
+
     @classmethod
     def on_client_connect(cls, client, is_main_client: bool) -> None:
         """通知所有服务端 Mod 客户端已连接"""
@@ -886,6 +896,35 @@ class ServerModManager:
         return list(cls.loaded_mod.keys())
 
     @classmethod
+    def _collect_command_names(cls) -> None:
+        """重新收集服务端 Mod 注册的命令名(兼容 onCommand 方法与 commands 属性)"""
+        names = set()
+        for instance in cls.mod_instances.values():
+            command_method = getattr(instance, "onCommand", None) or getattr(instance, "commands", None)
+            try:
+                cmd_map = command_method() if callable(command_method) else command_method
+            except Exception:
+                continue
+            if not isinstance(cmd_map, dict):
+                continue
+            for cmd_list in cmd_map.values():
+                if not isinstance(cmd_list, list):
+                    continue
+                for cmd in cmd_list:
+                    name = getattr(cmd, "name", None)
+                    if name:
+                        names.add(name)
+        cls.command_names = names
+
+    @classmethod
+    def has_command(cls, token: str) -> bool:
+        """判断命令 token(如 $chat)是否为服务端 Mod 注册的命令"""
+        if not cls.command_names or not isinstance(token, str):
+            return False
+        name = token[len(Command.command_prefix):] if token.startswith(Command.command_prefix) else token
+        return name in cls.command_names
+
+    @classmethod
     def get_mod_path(cls, mod_name: str):
         """获取 Mod 的文件路径"""
         return _mods_config().get("server", {}).get(mod_name) or None
@@ -957,6 +996,7 @@ class ServerModManager:
 
             message = f"Server Mod {mod_name} 已重载"
             shared.logger.info(message)
+            cls._collect_command_names()
             return {"success": True, "message": message}
         except Exception as e:
             error_msg = f"Server Mod {mod_name} 重载失败: {e}"
@@ -989,6 +1029,7 @@ class ServerModManager:
                 except Exception:
                     shared.logger.error(f"Server Mod {mod_name} 恢复失败")
 
+            cls._collect_command_names()
             return {"success": False, "message": error_msg}
 
     @classmethod

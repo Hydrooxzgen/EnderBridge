@@ -239,7 +239,24 @@ function renderModSwitches() {
         '<label class="switch"><input type="checkbox" id="mod-' + side + '-' + key + '"' + (checked ? " checked" : "") + "><span class=\"track\"></span></label>" +
         '<span class="switch-label">' + escapeHtml(key) + " <span class=\"td-dim\">(" + escapeHtml(path) + ")</span></span></label>";
     }).join("");
+    // Mod 开关变化时联动隐藏/显示对应功能卡片
+    box.querySelectorAll("input[type=checkbox]").forEach(function (cb) {
+      cb.addEventListener("change", syncConfigCards);
+    });
   });
+}
+// 功能卡片与 Mod 开关联动:对应 Mod 未启用时隐藏配置卡片(与首次运行向导逻辑一致)
+function isModOn(side, key) {
+  var cb = $("mod-" + side + "-" + key);
+  if (cb) return cb.checked;
+  var enabled = (cfgData.mods || {})[side] || {};
+  return !!enabled[key];
+}
+function syncConfigCards() {
+  $("cfgCardMusic").classList.toggle("hidden", !isModOn("client", "Music"));
+  $("cfgCardAi").classList.toggle("hidden", !(isModOn("client", "AI") || isModOn("server", "AI")));
+  $("cfgCardSpam").classList.toggle("hidden", !isModOn("server", "chat"));
+  $("cfgCardTool").classList.toggle("hidden", !isModOn("client", "Tool"));
 }
 function loadConfig() {
   api("/config").then(function (data) {
@@ -307,6 +324,7 @@ function loadConfig() {
     $("cfg-path-image").value = bp.image || "";
 
     renderModSwitches();
+    syncConfigCards();
   }).catch(function () {});
 }
 function toggleSub(id, show) {
