@@ -1,11 +1,15 @@
 """Web 管理后端服务
 
 每次启动时随主程序启动,监听配置的 Web 端口,提供:
-- 前端页面(index.html)
+- 前端页面(index.html + static/ 静态资源)
 - REST API:仪表盘状态 / 配置管理 / 权限管理 / Mod 管理
+
+前端资源全部以独立文件存放于 static/ 目录(css/js/图片/字体等),
+不依赖 Python 内嵌模板,可自由使用任意前端技术(原生 JS / Vue 等)。
 
 API 一览:
 - GET  /                         返回前端页面
+- GET  /static/*                 静态资源(css/js/图片/字体,自动识别 MIME)
 - POST /api/auth                 登录校验(令牌正确→admin,错误→密码错误提示)
 - GET  /api/status               仪表盘状态(名称/端口/在线客户端/mod 等,无需鉴权)
 - GET  /api/config               读取可管理配置(仅 admin)
@@ -34,9 +38,31 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WEBUI_DIR = os.path.dirname(os.path.abspath(__file__))
+STATIC_DIR = os.path.join(WEBUI_DIR, "static")
 CONFIG_PY = os.path.join(ROOT, "config.py")
 CONFIG_PY_BAK = os.path.join(ROOT, "config.py.bak")
 PERMISSION_JSON = os.path.join(ROOT, "permission.json")
+
+# 静态资源 MIME 类型(前端可自由使用 css/js/图片/字体等,甚至接入 Vue 等框架)
+_MIME_TYPES = {
+    ".html": "text/html; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".js": "application/javascript; charset=utf-8",
+    ".mjs": "application/javascript; charset=utf-8",
+    ".json": "application/json; charset=utf-8",
+    ".svg": "image/svg+xml",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".ico": "image/x-icon",
+    ".woff": "font/woff",
+    ".woff2": "font/woff2",
+    ".ttf": "font/ttf",
+    ".otf": "font/otf",
+    ".map": "application/json",
+}
 
 # 在线客户端数量提供者(main.py 注入),避免跨线程直接访问 main 的 connections
 _status_provider = None
@@ -148,6 +174,25 @@ def _replace_line(src: str, varname: str, value) -> tuple:
 
 # ===== 配置读写 =====
 
+def _first_system_prompt(model_cfg: dict) -> str:
+    """提取模型配置中的第一条 system 提示词"""
+    for m in (model_cfg.get("messages") or []):
+        if isinstance(m, dict) and m.get("role") == "system":
+            return m.get("content", "")
+    return ""
+
+
+def _set_system_prompt(messages, content: str) -> list:
+    """将模型配置中的 system 提示词替换/插入为首条"""
+    msgs = [dict(m) for m in (messages or []) if isinstance(m, dict)]
+    content = str(content or "")
+    if msgs and msgs[0].get("role") == "system":
+        msgs[0]["content"] = content
+    else:
+        msgs.insert(0, {"role": "system", "content": content})
+    return msgs
+
+
 def load_config() -> dict:
     """读取可管理配置(供前端表单使用)"""
     ns = _load_config_module()
@@ -155,6 +200,10 @@ def load_config() -> dict:
     features = ns.get("features", {})
     rate_limit = ns.get("rateLimit", {})
     webui = ns.get("webuiConfig", {})
+    ai = ns.get("AIConfig", {})
+    ai_models = ai.get("models", {})
+    utils = ns.get("utilsConfig", {})
+    sapi = ns.get("sapiConfig", {})
     return {
         "name": cfg.get("name", "EnderBridge"),
         "port": cfg.get("port", 8800),
@@ -166,6 +215,25 @@ def load_config() -> dict:
             "enabled": webui.get("enabled", True),
             "port": webui.get("port", 18888),
             "token": webui.get("token", ""),
+        },
+        "ai": {
+            "baseURL": (ai.get("options") or {}).get("baseURL", ""),
+            "apiKey": (ai.get("options") or {}).get("apiKey", ""),
+            "chatModel": (ai_models.get("chat") or {}).get("model", "deepseek-chat"),
+            "chatMaxTokens": (ai_models.get("chat") or {}).get("max_tokens", 512),
+            "chatPrompt": _first_system_prompt(ai_models.get("chat") or {}),
+            "cmdModel": (ai_models.get("command") or {}).get("model", "deepseek-chat"),
+            "cmdMaxTokens": (ai_models.get("command") or {}).get("max_tokens", 1024),
+            "cmdPrompt": _first_system_prompt(ai_models.get("command") or {}),
+            "chatCooldown": ai.get("chatCooldown", 5000),
+        },
+        "utils": {
+            "tellAllToTell": utils.get("tellAllToTell", False),
+            "enablePolling": utils.get("enablePolling", True),
+        },
+        "sapi": {
+            "gmsg": sapi.get("gmsg", "gmsg"),
+            "smsg": sapi.get("smsg", "smsg"),
         },
     }
 
@@ -180,6 +248,17 @@ def save_config(new: dict) -> None:
         src, ok = _replace_block(src, name, value)
         if not ok:
             raise RuntimeError(f"config.py 中未找到 {name} 配置块")
+
+    def apply_block_or_append(name, value, comment=""):
+        """块替换;旧版 config.py 缺少该块时自动追加到文件末尾"""
+        nonlocal src
+        src, ok = _replace_block(src, name, value)
+        if ok:
+            return
+        text = _py_dump(value)
+        if not src.endswith("\n"):
+            src += "\n"
+        src += f"\n{comment}# {name}\n{name} = {text}\n"
 
     def apply_line(name, value):
         nonlocal src
@@ -197,6 +276,42 @@ def save_config(new: dict) -> None:
     apply_line("logLevel", str(new.get("logLevel") or "info").strip())
     apply_block("features", new.get("features") or {})
     apply_block("rateLimit", new.get("rateLimit") or {})
+
+    # AI 对话配置:基于现有结构合并,保留 thinking / stream 等未暴露字段
+    ns = _load_config_module()
+    ai = dict(ns.get("AIConfig") or {})
+    ai.setdefault("options", {})
+    ai.setdefault("models", {})
+    ai_form = new.get("ai") or {}
+    ai["options"]["baseURL"] = str(ai_form.get("baseURL") or "").strip()
+    ai["options"]["apiKey"] = str(ai_form.get("apiKey") or "").strip()
+    chat = dict(ai["models"].get("chat") or {})
+    cmd = dict(ai["models"].get("command") or {})
+    chat["model"] = str(ai_form.get("chatModel") or "deepseek-chat").strip()
+    chat["max_tokens"] = int(ai_form.get("chatMaxTokens") or 512)
+    chat["messages"] = _set_system_prompt(chat.get("messages"), ai_form.get("chatPrompt"))
+    cmd["model"] = str(ai_form.get("cmdModel") or "deepseek-chat").strip()
+    cmd["max_tokens"] = int(ai_form.get("cmdMaxTokens") or 1024)
+    cmd["messages"] = _set_system_prompt(cmd.get("messages"), ai_form.get("cmdPrompt"))
+    ai["models"]["chat"] = chat
+    ai["models"]["command"] = cmd
+    ai["chatCooldown"] = int(ai_form.get("chatCooldown") or 5000)
+    apply_block_or_append("AIConfig", ai, "# AI 对话配置")
+
+    # 工具配置
+    utils_form = new.get("utils") or {}
+    apply_block_or_append("utilsConfig", {
+        "tellAllToTell": bool(utils_form.get("tellAllToTell", False)),
+        "enablePolling": bool(utils_form.get("enablePolling", True)),
+    }, "# 工具配置")
+
+    # 消息通道配置
+    sapi_form = new.get("sapi") or {}
+    apply_block_or_append("sapiConfig", {
+        "gmsg": str(sapi_form.get("gmsg") or "gmsg").strip(),
+        "smsg": str(sapi_form.get("smsg") or "smsg").strip(),
+    }, "# 消息通道配置")
+
     # webuiConfig:整体块替换;旧版 config.py 无该块时自动追加到文件末尾
     webui = new.get("webui") or {}
     webui_value = {
@@ -204,12 +319,7 @@ def save_config(new: dict) -> None:
         "port": int(webui.get("port") or 18888),
         "token": str(webui.get("token") or "").strip(),
     }
-    src, ok = _replace_block(src, "webuiConfig", webui_value)
-    if not ok:
-        text = _py_dump(webui_value)
-        if not src.endswith("\n"):
-            src += "\n"
-        src += "\n# Web 管理界面配置（每次启动时监听该端口）\nwebuiConfig = " + text + "\n"
+    apply_block_or_append("webuiConfig", webui_value, "# Web 管理界面配置（每次启动时监听该端口）")
 
     if src == orig:
         return
@@ -322,6 +432,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if path in ("/", "/index.html"):
             self._serve_index()
             return
+        if path.startswith("/static/"):
+            self._serve_static(path)
+            return
         if path == "/api/status":
             self._api_status()
             return
@@ -379,6 +492,41 @@ class WebUIHandler(BaseHTTPRequestHandler):
             return
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _serve_static(self, path: str) -> None:
+        """提供 static 目录下的静态资源(css/js/图片/字体等,支持任意前端框架产物)"""
+        # 防目录穿越:解析后必须仍位于 static 目录内
+        rel = path[len("/static/"):]
+        base = os.path.realpath(STATIC_DIR)
+        full = os.path.realpath(os.path.join(base, rel))
+        if full != base and not full.startswith(base + os.sep):
+            self.send_response(403)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(b"Forbidden")
+            return
+        if not os.path.isfile(full):
+            self.send_response(404)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(b"Not Found")
+            return
+        try:
+            with open(full, "rb") as f:
+                body = f.read()
+        except Exception:
+            self.send_response(500)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(b"Internal Server Error")
+            return
+        ext = os.path.splitext(full)[1].lower()
+        ctype = _MIME_TYPES.get(ext, "application/octet-stream")
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
