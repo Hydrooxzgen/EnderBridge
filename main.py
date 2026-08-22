@@ -571,7 +571,13 @@ async def main():
     port = wsConfig.get("port", 8800)
 
     # 创建 WebSocket 服务端
-    server = await websockets.serve(connection_handler, host, port)
+    # 禁用压缩(MCBE 不支持 permessage-deflate)和 ping 保活(MCBE 不响应 ping)
+    server = await websockets.serve(
+        connection_handler, host, port,
+        compression=None,
+        ping_interval=None,
+        ping_timeout=None,
+    )
 
     # 启动 Web 管理界面(独立线程,不阻塞主流程)
     _start_webui()
