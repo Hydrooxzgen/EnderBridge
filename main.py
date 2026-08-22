@@ -295,7 +295,7 @@ is_first_run = _m is not None and _m.group(1) == "True"
 
 # 首次运行检查:is_first_run 为 True 时启动图形化配置向导(向导中可设置 Web 管理端口)
 if is_first_run:
-    shared.logger.info("检测到首次运行，启动图形化配置向导...")
+    shared.logger.info("检测到首次运行或是被更新，启动图形化配置向导...")
     from lib.setup import start_setup_server
     try:
         asyncio.run(start_setup_server())
