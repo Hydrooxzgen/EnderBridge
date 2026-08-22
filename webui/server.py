@@ -332,7 +332,7 @@ def save_config(new: dict) -> None:
 # ===== 权限读写 =====
 
 def load_permissions() -> dict:
-    """读取 permission.json(不存在时返回默认结构)"""
+    """读取 permission.json(不存在时创建默认结构并落盘,避免查询永远显示默认值)"""
     try:
         with open(PERMISSION_JSON, "r", encoding="utf-8") as f:
             perm = json.load(f)
@@ -340,16 +340,27 @@ def load_permissions() -> dict:
             raise ValueError
         return perm
     except Exception:
-        return {"owner": "YourXboxName", "op": [], "user": [], "blocker": []}
+        default = {"owner": "YourXboxName", "op": [], "user": [], "blocker": []}
+        try:
+            save_permissions(default)
+        except Exception:
+            pass
+        return default
 
 
 def save_permissions(perm: dict) -> None:
-    """原子写入 permission.json"""
+    """原子写入 permission.json,并清除 PermissionManager 缓存使游戏内权限立即生效"""
     tmp = PERMISSION_JSON + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(perm, f, ensure_ascii=False, indent=2)
         f.write("\n")
     os.replace(tmp, PERMISSION_JSON)
+    # 同步清除 lib.permission 的缓存,否则游戏内查询权限仍用旧数据
+    try:
+        from lib.permission import PermissionManager
+        PermissionManager._cache = None
+    except Exception:
+        pass
 
 
 def _perm_groups() -> list:

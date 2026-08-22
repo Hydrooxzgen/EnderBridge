@@ -164,6 +164,15 @@ function loadPermissions() {
     });
   }).catch(function () {});
 }
+// 保存到服务器(添加/删除/保存按钮共用),成功后重载确认
+function savePerm(tip) {
+  permData.owner = $("perm-owner").value.trim() || "YourXboxName";
+  return api("/permissions", { method: "PUT", body: JSON.stringify({ permissions: permData }) })
+    .then(function (data) {
+      toast(data.message || tip, data.ok ? "ok" : "err");
+      if (data.ok) loadPermissions();
+    }).catch(function () {});
+}
 document.querySelectorAll('[data-group]').forEach(function (btn) {
   if (btn.tagName === "BUTTON") {
     btn.addEventListener("click", function () {
@@ -172,9 +181,13 @@ document.querySelectorAll('[data-group]').forEach(function (btn) {
       var name = input.value.trim();
       if (!name) return;
       permData[g] = permData[g] || [];
-      if (permData[g].indexOf(name) < 0) permData[g].push(name);
+      if (permData[g].indexOf(name) < 0) {
+        permData[g].push(name);
+        savePerm("已添加 " + name + " → " + g);
+      } else {
+        toast(name + " 已在 " + g + " 列表中", "err");
+      }
       input.value = "";
-      loadPermissions();
     });
   }
 });
@@ -183,18 +196,16 @@ document.addEventListener("click", function (e) {
     var g = e.target.getAttribute("data-group");
     var name = e.target.getAttribute("data-name");
     permData[g] = (permData[g] || []).filter(function (n) { return n !== name; });
-    loadPermissions();
+    savePerm("已移除 " + name + " ← " + g);
   }
 });
 $("permSave").addEventListener("click", function () {
-  permData.owner = $("perm-owner").value.trim() || "YourXboxName";
-  api("/permissions", { method: "PUT", body: JSON.stringify({ permissions: permData }) })
-    .then(function (data) {
-      toast(data.message, data.ok ? "ok" : "err");
-      if (data.ok) loadPermissions();
-    }).catch(function () {});
+  savePerm("权限已保存");
 });
-$("permReload").addEventListener("click", loadPermissions);
+$("permReload").addEventListener("click", function () {
+  loadPermissions();
+  toast("已重新加载", "ok");
+});
 
 // ===== 功能设置 =====
 var cfgData = null;

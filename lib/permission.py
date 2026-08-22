@@ -18,6 +18,8 @@ class PermissionManager:
 
     # 权限缓存(避免每次查询都读取磁盘)
     _cache = None
+    # 缓存对应的文件修改时间(检测文件被外部修改后自动刷新)
+    _cache_mtime = None
 
     @classmethod
     async def get(cls, object_: str = "all"):
@@ -27,10 +29,15 @@ class PermissionManager:
         Raises:
             ValueError: 对象参数非法
         """
-        # 缓存命中时直接使用,避免重复读取磁盘
-        if cls._cache is None:
+        # 文件修改时间变化时自动刷新缓存,保证 webui/手动编辑/命令修改立即生效
+        try:
+            mtime = os.path.getmtime(PERMISSION_PATH)
+        except OSError:
+            mtime = None
+        if cls._cache is None or mtime != cls._cache_mtime:
             with open(PERMISSION_PATH, "r", encoding="utf-8") as f:
                 cls._cache = json.load(f)
+            cls._cache_mtime = mtime
 
         permission = cls._cache
 
@@ -52,6 +59,7 @@ class PermissionManager:
             os.replace(TEMP_PATH, PERMISSION_PATH)
             # 写入后清除缓存,下次读取重新加载
             cls._cache = None
+            cls._cache_mtime = None
             return True
         except Exception as error:
             return error
