@@ -13,6 +13,7 @@ EnderBridge is a Python-based mod loader for Minecraft Bedrock Edition. It runs 
 
 - 🧩 **模组加载框架 / Mod loading framework**：客户端 Mod（每个连接实例化）与服务端 Mod（静态）两层架构，动态导入 + 热重载
 - 🌐 **WebSocket 桥接 / WebSocket bridge**：默认监听 `8800` 端口，支持多客户端并存，首个连接自动成为主客户端
+- 🌐 **Web 管理界面 / Web console**：每次启动自动监听 `18888`（可配置），浏览器管理权限、功能开关与仪表盘
 - 🤖 **AI 对话 / AI chat**：OpenAI 兼容接口（默认 DeepSeek），支持对话 / 指令两种模式
 - 💬 **QQ 群互通 / QQ bridge**：通过 NapCat（OneBot v11 协议）实现 QQ 群消息与游戏内消息双向转发
 - 🎵 **音乐播放 / Music playback**：解析 MIDI/JSON 音乐，映射为游戏内 `playsound` 音效
@@ -60,14 +61,48 @@ python main.py
 On first run (or when `is_first_run = True` in `config.example.py`), the **web setup wizard** starts automatically. Open `http://127.0.0.1:18888` in your browser to configure:
 
 - 服务器名称、WebSocket 端口、命令前缀、日志等级 / Server name, WebSocket port, command prefix, log level
-- AI API Key / Base URL / 对话模型 / 指令模型 / AI API Key / Base URL / chat model / command model
+- **基础模组 / 高级模组勾选**：客户端 / 服务端各模组开关，勾选后自动显示对应配置区（AI 对话、音乐、QQ 群互通、刷屏等）/ Toggle client / server mods; checking a mod reveals its config section (AI, music, QQ bridge, spam, etc.)
+- AI API Key / Base URL / 对话模型 / 指令模型 / 对话冷却 / AI API Key / Base URL / chat model / command model / chat cooldown
 - 音乐打击乐开关、QQ 桥接（群号 / 主机 / 端口 / 访问令牌）/ Music percussion toggle, QQ bridge (group ID / host / port / access token)
-- 命令限流（开关 / 时间窗口 / 窗口内最大次数）/ Command rate limit (toggle / window / max per window)
+- 刷屏设置（攻击文本 / 广告文本 / 推送间隔，用于 `$read` 模组）/ Spam settings (attack / ad text / interval, used by the `$read` mod)
 - 玩家权限（服主 / 管理员 / 普通用户 / 屏蔽名单）/ Player permissions (owner / op / user / blocker)
+- **资源路径**（音乐 / MCFunc / Ezmatic / 图片，按勾选模组显示）/ Resource paths (music / MCFunc / Ezmatic / pictures, shown per enabled mod)
+- **高级配置（折叠区）**：命令限流、Web 管理界面（端口 / 令牌）、SAPI 指令、Utils 开关 / **Advanced (collapsible)**: rate limit, Web console (port / token), SAPI commands, Utils toggles
 
-保存后自动生成 `config.py` 与 `permission.json`（旧文件备份为 `.bak`），**重启服务器生效**。
+保存后自动生成 `config.py` 与 `permission.json`（旧文件备份为 `.bak`），**服务器自动启动**，无需手动重启。
 
-After saving, `config.py` and `permission.json` are generated (old files backed up as `.bak`). **Restart the server to apply.**
+After saving, `config.py` and `permission.json` are generated (old files backed up as `.bak`). **The server starts automatically** — no manual restart needed.
+
+### 🌐 Web 管理界面 / Web Management Console
+
+**每次启动服务器时**，Web 管理界面会自动监听配置的端口（默认 `18888`）。浏览器打开 `http://127.0.0.1:18888` 即可管理：
+
+**On every server start**, the Web management console listens on the configured port (default `18888`). Open `http://127.0.0.1:18888` in your browser:
+
+- 📊 **仪表盘 / Dashboard**：服务器名称、端口、客户端连接数、运行时间 / Server name, port, connected clients, uptime
+- 👥 **权限管理 / Permissions**：在线查看与编辑 `owner` / `op` / `user` / `blocker`，保存后即时生效 / View & edit permission groups, applied immediately
+- ⚙️ **功能设置 / Settings**：修改名称、端口、命令前缀、日志等级、音乐 / QQ 开关、命令限流与 Web 管理本身（端口 / 令牌）/ Edit server settings, feature toggles, rate limit and Web console port / token
+- 🧩 **Mod 管理 / Mods**：查看已加载的客户端 / 服务端 Mod 及其可导入状态，一键重载服务端 Mod / View loaded mods and reload server mods
+
+配置存放于 `config.py` 的 `webuiConfig` 块：
+
+```python
+webuiConfig = {
+    "enabled": True,     # 是否启用 Web 管理界面
+    "port": 18888,       # 监听端口
+    "token": "",         # 管理令牌,留空则仅限本机访问(无鉴权)
+}
+```
+
+> 令牌（`token`）非空时，登录页需输入令牌：
+>
+> - **令牌正确** → 管理员（全部管理权限：权限管理 / 功能设置 / Mod 重载）
+> - **令牌错误** → 提示「密码错误，请重新输入」，停留在登录页（不再自动进入访客模式）
+> - **点击"以访客身份浏览 (Guest)"** → 访客模式（仅基础功能：仪表盘 / Mod 列表，只读）
+>
+> 建议在非本机访问时设置。部分设置（如名称 / 端口）保存后需重启服务器生效，权限与 Mod 重载即时生效。
+>
+> When a token is set, the login page requires it: a correct token grants full admin access; a wrong token shows "wrong password" and stays on the login page (no automatic guest fallback); the Guest button enters read-only guest mode (dashboard + mod list only). Leave it empty for localhost-only access without login.
 
 ### 3. 在游戏内连接 / Connect from the game
 
@@ -107,7 +142,6 @@ The global `help` command (`!help [page]`) lists all commands with paging; type 
 | 命令 / Command | 说明 / Description |
 |------|------|
 | `python main.py` | 正常启动服务器 / Start the server normally |
-| `python main.py -set` / `--set` | 手动启动图形化配置向导（不重启服务器）/ Manually launch the setup wizard |
 | `python main.py --reset-all` | 一键重置：删除 `config.py` / `permission.json` 及其备份，并将模板复位为首次运行状态 / Reset all configs and restore first-run state |
 | `python main.py update <压缩包>` | 一键升级：从新版本压缩包（zip / tar.gz）升级，保留设置与用户数据 / Upgrade from a release archive, keeping your settings |
 | `python setup.py` | 安装 / 检测依赖 / Install / check dependencies |
@@ -136,7 +170,7 @@ python main.py update 路径/到/新版本.zip
 
 ```
 EnderBridge/
-├── main.py                  # 入口：依赖自愈、配置生成、向导、WebSocket 服务器、一键升级 / Entry: self-healing, config gen, wizard, WS server, one-key upgrade
+├── main.py                  # 入口：依赖自愈、配置生成、向导、WebSocket 服务器、Web 管理、一键升级 / Entry: self-healing, config gen, wizard, WS server, Web console, one-key upgrade
 ├── config.py                # 真实配置（由向导生成）/ Actual config (generated by wizard)
 ├── config.example.py        # 配置模板（含 is_first_run 标记与平台检测）/ Config template
 ├── permission.json          # 玩家权限（由向导生成）/ Player permissions (generated by wizard)
@@ -148,8 +182,11 @@ EnderBridge/
 │   ├── sapi.py              # SAPI 桥接（gmsg / smsg 与服务器通信）/ SAPI bridge
 │   ├── permission.py        # 权限管理（四级权限、原子写入）/ Permission manager
 │   ├── logger.py            # 分级日志（控制台 + ./logs，北京时间）/ Logging
-│   ├── setup.py             # 图形化配置向导（HTTP 18888）/ Setup wizard
+│   ├── setup.py             # 图形化配置向导（HTTP 18888，仅首次运行）/ Setup wizard (first run only)
 │   └── ...
+├── webui/                   # Web 管理界面 / Web management console
+│   ├── server.py            # 后端：HTTP 服务 + REST API（/api/config、/api/permissions、/api/mods 等）/ Backend: HTTP + REST API
+│   └── index.html           # 前端：登录 + 仪表盘 / 权限 / 功能设置 / Mod 管理（单文件）/ Frontend SPA (single file)
 └── mod/                     # 模组目录 / Mods directory
     ├── ai.py                # AI 对话模组 / AI chat mod
     ├── mcfunc.py            # .mcfunction 执行（嵌套、定时循环）/ .mcfunction executor
@@ -196,6 +233,7 @@ EnderBridge/
 | `logLevel` | `"info"` | 日志等级 / Log level：`debug` < `info` < `warning` < `error` |
 | `rateLimit.command` | `enabled: False, windowMs: 1000, maxPerWindow: 20` | 命令限流：开关、时间窗口（毫秒）、窗口内最大次数 / Rate limit: toggle, window (ms), max per window |
 | `features.qq` | 关闭 / off | QQ 桥接：群号、主机、端口、访问令牌 / QQ bridge settings |
+| `webuiConfig` | `enabled: True, port: 18888, token: ""` | Web 管理界面：启用开关、监听端口、管理令牌（非空需登录）/ Web console: toggle, port, admin token |
 | `AIConfig` | DeepSeek | AI 对话 / 指令模型、API Key、Base URL / AI models & API |
 | `sapiConfig` | `gmsg` / `smsg` | 与服务器 SAPI 通信的命令名 / SAPI command names |
 
@@ -231,8 +269,8 @@ graph LR
 ## ❓ 常见问题 / FAQ
 
 **Q：首次启动没有自动打开配置向导？/ The wizard doesn't open on first run?**
-检查 `config.example.py` 中 `is_first_run` 是否为 `True`，或直接运行 `python main.py -set` 手动打开向导。
-Check `is_first_run` in `config.example.py`, or run `python main.py -set`.
+检查 `config.example.py` 中 `is_first_run` 是否为 `True`，或运行 `python main.py --reset-all` 复位后重启（向导仅在首次运行时启动）。日常管理请使用 Web 管理界面：启动服务器后访问 `http://127.0.0.1:18888`。
+Check `is_first_run` in `config.example.py`, or run `python main.py --reset-all` to reset and restart (the wizard only starts on first run). For daily management, use the Web console at `http://127.0.0.1:18888` after starting the server.
 
 **Q：向导保存报「模板匹配失败」？/ Wizard reports "template match failed"?**
 确保 `config.example.py` 未被手动改动关键字段格式（向导按模板原文匹配替换）。

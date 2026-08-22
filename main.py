@@ -1,7 +1,8 @@
 """程序入口
 
-包含:依赖自愈引导、--reset-all 重置、-set 手动配置向导、config 自动生成、
-首次运行向导、WebSocket 服务器、连接生命周期(1 秒延迟初始化)与正常关闭流程。
+包含:依赖自愈引导、--reset-all 重置、config 自动生成、
+首次运行向导、WebSocket 服务器、Web 管理界面、
+连接生命周期(1 秒延迟初始化)与正常关闭流程。
 """
 import asyncio
 import json
@@ -9,13 +10,13 @@ import os
 import re
 import subprocess
 import sys
+import time
 from uuid import uuid4
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PY = os.path.join(ROOT, "config.py")
 CONFIG_EXAMPLE = os.path.join(ROOT, "config.example.py")
 WANT_RESET = "--reset-all" in sys.argv
-WANT_SETUP = "-set" in sys.argv or "--set" in sys.argv
 
 # ===== 依赖检测(必须早于任何第三方模块使用) =====
 # websockets 使用动态导入:缺失时自动运行 setup.py 安装,成功后继续启动。
@@ -292,20 +293,23 @@ with open(CONFIG_EXAMPLE, "r", encoding="utf-8") as f:
 _m = re.search(r"is_first_run = (True|False)", _example_src)
 is_first_run = _m is not None and _m.group(1) == "True"
 
-# 首次运行检查:is_first_run 为 True(或指定 -set/--set 手动配置)时启动图形化配置向导
-if is_first_run or WANT_SETUP:
-    if WANT_SETUP:
-        shared.logger.info("检测到 -set 参数，启动图形化配置向导...")
-    else:
-        shared.logger.info("检测到首次运行，启动图形化配置向导...")
+# 首次运行检查:is_first_run 为 True 时启动图形化配置向导(向导中可设置 Web 管理端口)
+if is_first_run:
+    shared.logger.info("检测到首次运行，启动图形化配置向导...")
     from lib.setup import start_setup_server
     try:
         asyncio.run(start_setup_server())
-        shared.logger.info("配置已保存，请重新启动服务器以应用配置")
+        shared.logger.info("配置已保存，正在自动启动服务器...")
     except Exception as error:
         shared.logger.error(f"配置向导异常: {error}")
-    close_log_streams()
-    sys.exit(0)
+        close_log_streams()
+        sys.exit(1)
+    # 向导已基于模板生成新的 config.py:重新加载配置模块,
+    # 使下方服务器启动代码使用用户在向导中保存的值(不退出,自动启动服务器)
+    import importlib
+    import config as _config_module
+    importlib.reload(_config_module)
+    wsConfig = _config_module.wsConfig
 
 # ===== WebSocket 服务器 =====
 import websockets
@@ -425,6 +429,28 @@ async def connection_handler(ws):
 
 
 # ===== 主入口 =====
+# 启动时刻(供 Web 仪表盘展示运行时间)
+_start_time = time.time()
+
+
+def _webui_status() -> dict:
+    """为 Web 仪表盘提供实时状态"""
+    return {
+        "clients": len(connections),
+        "uptime": int(time.time() - _start_time),
+    }
+
+
+def _start_webui() -> None:
+    """启动 Web 管理界面(每次启动都监听配置的 Web 端口)"""
+    try:
+        from webui.server import set_status_provider, start_webui
+        set_status_provider(_webui_status)
+        start_webui()
+    except Exception as error:
+        shared.logger.warning(f"Web 管理界面启动失败: {error}")
+
+
 async def main():
     global server
     host = wsConfig.get("host") or None  # None = 监听所有接口
@@ -432,6 +458,9 @@ async def main():
 
     # 创建 WebSocket 服务端
     server = await websockets.serve(connection_handler, host, port)
+
+    # 启动 Web 管理界面(独立线程,不阻塞主流程)
+    _start_webui()
 
     # 加载服务端 Mod 和客户端 Mod 的静态定义
     await ServerModManager.load()
@@ -448,7 +477,7 @@ async def main():
 
 
 # ===== 关闭函数 =====
-# 依次销毁 Mod、关闭 WebSocket 服务端
+# 依次销毁 Mod、关闭 WebSocket 服务端、停止 Web 管理界面
 # 防重入:重复调用直接忽略
 destroying = False
 
@@ -458,6 +487,13 @@ async def destroy():
     if destroying:
         return
     destroying = True
+
+    shared.logger.info("正在停止 Web 管理界面...")
+    try:
+        from webui.server import stop_webui
+        stop_webui()
+    except Exception:
+        pass
 
     shared.logger.info("正在关闭服务端 Mod...")
     ServerModManager.destroy()

@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EnderBridge Web 管理</title>
+<style>
+:root {
+  --text: #e2e8f0;
+  --text-dim: #94a3b8;
+  --text-faint: #64748b;
+  --accent: #818cf8;
+  --accent2: #8b5cf6;
+  --card: rgba(30, 41, 59, 0.55);
+  --card-border: rgba(148, 163, 184, 0.14);
+  --input-bg: rgba(15, 23, 42, 0.65);
+  --input-border: rgba(148, 163, 184, 0.22);
+  --danger: #f43f5e;
+  --ok: #10b981;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+  background: radial-gradient(1200px 800px at 20% -10%, #1e1b4b 0%, #0f172a 55%, #0b1120 100%);
+  color: var(--text);
+  min-height: 100vh;
+}
+a { color: var(--accent); text-decoration: none; }
+button { font-family: inherit; }
+
+/* ===== 登录页 ===== */
+#loginView {
+  min-height: 100vh; display: none;
+  align-items: center; justify-content: center; padding: 24px;
+}
+#loginView.show { display: flex; }
+.login-card {
+  width: 100%; max-width: 380px;
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  padding: 36px 32px;
+  backdrop-filter: blur(8px);
+}
+.login-card .logo { font-size: 40px; text-align: center; margin-bottom: 8px; }
+.login-card h1 { text-align: center; font-size: 20px; margin-bottom: 4px; letter-spacing: 1px; }
+.login-card .sub { text-align: center; color: var(--text-dim); font-size: 13px; margin-bottom: 24px; }
+.login-card label { display: block; font-size: 13px; color: var(--text-dim); margin-bottom: 6px; }
+.login-card input {
+  width: 100%; padding: 11px 14px; margin-bottom: 16px;
+  background: var(--input-bg); color: var(--text);
+  border: 1px solid var(--input-border); border-radius: 10px; outline: none;
+}
+.login-card input:focus { border-color: var(--accent); }
+.login-card button {
+  width: 100%; padding: 12px; font-size: 15px; font-weight: 700;
+  color: #fff; border: none; border-radius: 10px; cursor: pointer;
+  background: linear-gradient(90deg, #6366f1, #8b5cf6);
+  letter-spacing: 2px;
+}
+.login-card button:hover { filter: brightness(1.1); }
+.login-card .guest-btn {
+  width: 100%; padding: 10px; font-size: 13px; font-weight: 600;
+  color: var(--text-dim); background: transparent;
+  border: 1px solid var(--input-border); border-radius: 10px; cursor: pointer;
+  margin-bottom: 4px; letter-spacing: 1px;
+}
+.login-card .guest-btn:hover { color: var(--text); border-color: var(--accent); background: rgba(148, 163, 184, 0.06); }
+.login-msg { margin-top: 12px; font-size: 13px; text-align: center; color: var(--danger); min-height: 18px; }
+.login-hint { font-size: 12px; color: var(--text-faint); text-align: center; margin-top: 16px; line-height: 1.6; }
+
+/* 访客模式徽标 */
+.guest-badge {
+  padding: 8px 12px; font-size: 12px; color: #fbbf24;
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  border-radius: 10px; text-align: center; margin-bottom: 4px;
+  display: none;
+}
+
+/* ===== 主界面 ===== */
+#appView { display: none; min-height: 100vh; }
+#appView.show { display: flex; }
+.sidebar {
+  width: 220px; flex-shrink: 0;
+  background: rgba(15, 23, 42, 0.7);
+  border-right: 1px solid var(--card-border);
+  padding: 20px 12px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.sidebar .brand { display: flex; align-items: center; gap: 10px; padding: 6px 10px 18px; }
+.sidebar .brand .logo { font-size: 26px; }
+.sidebar .brand .name { font-weight: 700; font-size: 16px; letter-spacing: 1px; }
+.sidebar .brand .ver { font-size: 11px; color: var(--text-faint); }
+.nav-item {
+  padding: 10px 12px; border-radius: 10px; cursor: pointer;
+  color: var(--text-dim); font-size: 14px; display: flex; align-items: center; gap: 10px;
+  transition: background 0.15s, color 0.15s;
+  user-select: none;
+}
+.nav-item:hover { background: rgba(148, 163, 184, 0.08); color: var(--text); }
+.nav-item.active { background: linear-gradient(90deg, rgba(99, 102, 241, 0.25), rgba(139, 92, 246, 0.15)); color: #fff; }
+.sidebar .spacer { flex: 1; }
+.sidebar .logout {
+  padding: 10px 12px; border-radius: 10px; cursor: pointer;
+  color: var(--text-faint); font-size: 13px; display: flex; align-items: center; gap: 10px;
+}
+.sidebar .logout:hover { color: var(--danger); background: rgba(244, 63, 94, 0.08); }
+
+.main { flex: 1; padding: 24px 28px; overflow-x: hidden; }
+.page { display: none; max-width: 960px; margin: 0 auto; }
+.page.active { display: block; }
+.page h2 { font-size: 20px; margin-bottom: 18px; display: flex; align-items: center; gap: 10px; }
+
+/* 卡片 */
+.card {
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  padding: 20px;
+  margin-bottom: 16px;
+  backdrop-filter: blur(8px);
+}
+.card h3 { font-size: 15px; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+
+/* 仪表盘 */
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.stat {
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  padding: 16px;
+  text-align: center;
+}
+.stat .val { font-size: 26px; font-weight: 700; margin-bottom: 4px; }
+.stat .label { font-size: 12px; color: var(--text-dim); }
+
+/* 表单 */
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.form-group label { display: block; font-size: 13px; color: var(--text-dim); margin-bottom: 6px; }
+.form-group input, .form-group select {
+  width: 100%; padding: 10px 12px;
+  background: var(--input-bg); color: var(--text);
+  border: 1px solid var(--input-border); border-radius: 10px; outline: none;
+  font-size: 14px;
+}
+.form-group input:focus, .form-group select:focus { border-color: var(--accent); }
+.form-group.full { grid-column: 1 / -1; }
+.form-group textarea {
+  width: 100%; padding: 10px 12px; min-height: 60px;
+  background: var(--input-bg); color: var(--text);
+  border: 1px solid var(--input-border); border-radius: 10px; outline: none;
+  font-family: inherit; font-size: 13px; resize: vertical;
+}
+.hint { font-size: 12px; color: var(--text-faint); margin-top: 4px; line-height: 1.5; }
+
+/* 开关 */
+.switch-row { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.switch { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch .track {
+  position: absolute; inset: 0; border-radius: 12px;
+  background: rgba(148, 163, 184, 0.25); border: 1px solid var(--input-border);
+  transition: background 0.25s ease;
+}
+.switch .track::after {
+  content: ""; position: absolute; top: 2px; left: 2px;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+  transition: transform 0.25s ease;
+}
+.switch input:checked + .track { background: linear-gradient(90deg, #6366f1, #8b5cf6); border-color: transparent; }
+.switch input:checked + .track::after { transform: translateX(18px); }
+.switch-label { font-size: 14px; }
+
+/* 子设置块 */
+.sub-box {
+  margin-top: 12px; padding: 14px 16px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.45);
+  border: 1px dashed rgba(148, 163, 184, 0.18);
+  display: none;
+}
+.sub-box.show { display: block; }
+
+/* 按钮 */
+.btn {
+  padding: 10px 22px; font-size: 14px; font-weight: 700;
+  color: #fff; border: none; border-radius: 10px; cursor: pointer;
+  background: linear-gradient(90deg, #6366f1, #8b5cf6);
+  letter-spacing: 1px;
+}
+.btn:hover { filter: brightness(1.1); }
+.btn:disabled { opacity: 0.6; cursor: wait; }
+.btn-danger { background: linear-gradient(90deg, #f43f5e, #e11d48); }
+.btn-ghost { background: rgba(148, 163, 184, 0.15); color: var(--text); }
+.btn-sm { padding: 5px 12px; font-size: 12px; border-radius: 8px; letter-spacing: 0; }
+
+/* 提示 */
+#toast {
+  position: fixed; top: 20px; right: 20px; z-index: 999;
+  padding: 12px 18px; border-radius: 10px; font-size: 14px;
+  display: none; max-width: 360px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+#toast.ok { background: rgba(16, 185, 129, 0.2); color: #6ee7b7; border: 1px solid rgba(16,185,129,0.4); }
+#toast.err { background: rgba(244, 63, 94, 0.2); color: #fda4af; border: 1px solid rgba(244,63,94,0.4); }
+
+/* 权限管理 */
+.perm-group { margin-bottom: 20px; }
+.perm-group .ghead { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.perm-group .ghead .badge {
+  font-size: 11px; padding: 2px 8px; border-radius: 6px;
+  background: rgba(129, 140, 248, 0.18); color: var(--accent);
+}
+.perm-group .ghead .count { font-size: 12px; color: var(--text-faint); }
+.perm-group input {
+  padding: 8px 12px; background: var(--input-bg); color: var(--text);
+  border: 1px solid var(--input-border); border-radius: 8px; outline: none;
+  font-size: 13px; width: 220px;
+}
+.chip-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: rgba(129, 140, 248, 0.12);
+  border: 1px solid rgba(129, 140, 248, 0.25);
+  padding: 5px 10px; border-radius: 8px; font-size: 13px;
+}
+.chip .x { cursor: pointer; color: var(--text-faint); font-weight: 700; }
+.chip .x:hover { color: var(--danger); }
+.owner-input {
+  width: 100% !important; max-width: 320px; margin-top: 6px;
+}
+
+/* Mod 管理 */
+.mod-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.mod-table th, .mod-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid rgba(148,163,184,0.1); }
+.mod-table th { color: var(--text-dim); font-weight: 600; }
+.status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+.status-dot.ok { background: var(--ok); }
+.status-dot.bad { background: var(--danger); }
+.tab-split { display: flex; gap: 8px; margin-bottom: 14px; }
+.tab-split .chip-tab {
+  padding: 6px 14px; border-radius: 8px; cursor: pointer; font-size: 13px;
+  background: rgba(148,163,184,0.1); color: var(--text-dim);
+}
+.tab-split .chip-tab.active { background: linear-gradient(90deg, #6366f1, #8b5cf6); color: #fff; }
+
+@media (max-width: 760px) {
+  .sidebar { width: 64px; padding: 16px 8px; }
+  .sidebar .brand .name, .sidebar .brand .ver, .nav-item span, .sidebar .logout span { display: none; }
+  .main { padding: 16px; }
+  .form-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- 登录页 -->
+<div id="loginView">
+  <div class="login-card">
+    <div class="logo">⛏️</div>
+    <h1>EnderBridge Web 管理</h1>
+    <p class="sub">请输入管理令牌以继续</p>
+    <label for="tokenInput">管理令牌</label>
+    <input id="tokenInput" type="password" placeholder="请输入令牌" autocomplete="off">
+    <button id="loginBtn" type="button">登 录</button>
+    <button id="guestBtn" type="button" class="guest-btn">以访客身份浏览 (Guest)</button>
+    <div class="login-msg" id="loginMsg"></div>
+    <div class="login-hint">令牌在 config.py 的 webuiConfig.token 中设置。<br>令牌正确:开放全部管理权限;令牌错误:提示密码错误;或点击下方按钮以访客身份浏览(仅仪表盘 / Mod 列表)。</div>
+  </div>
+</div>
+
+<!-- 主界面 -->
+<div id="appView">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="logo">⛏️</span>
+      <div>
+        <div class="name" id="srvName">EnderBridge</div>
+        <div class="ver" id="srvVer">Web 管理</div>
+      </div>
+    </div>
+    <div class="nav-item active" data-page="dashboard"><span>📊</span><span>仪表盘</span></div>
+    <div class="nav-item" data-page="permissions"><span>👥</span><span>权限管理</span></div>
+    <div class="nav-item" data-page="config"><span>⚙️</span><span>功能设置</span></div>
+    <div class="nav-item" data-page="mods"><span>🧩</span><span>Mod 管理</span></div>
+    <div class="spacer"></div>
+    <div class="guest-badge" id="guestBadge">👤 访客模式</div>
+    <div class="nav-item" id="adminLoginBtn" style="display:none"><span>🔑</span><span>管理员登录</span></div>
+    <div class="logout" id="logoutBtn"><span>🚪</span><span>退出登录</span></div>
+  </aside>
+
+  <div class="main">
+    <!-- 仪表盘 -->
+    <div class="page active" id="page-dashboard">
+      <h2>📊 仪表盘</h2>
+      <div class="stat-grid" id="statGrid"></div>
+      <div class="card" style="margin-top:16px">
+        <h3>ℹ️ 说明</h3>
+        <p style="font-size:13px;color:var(--text-dim);line-height:1.8">
+          此页面用于在浏览器中管理 EnderBridge 服务器。<br>
+          · <b>权限管理</b>：增删 owner / op / user / blocker 玩家列表<br>
+          · <b>功能设置</b>：开关 QQ 桥接、音乐打击乐、限流等,以及 Web 端口与令牌<br>
+          · <b>Mod 管理</b>：查看客户端/服务端 Mod 加载配置,一键重载服务端 Mod<br>
+          <span style="color:var(--text-faint)">注意:功能设置的修改需重启服务器后完全生效。</span>
+        </p>
+      </div>
+    </div>
+
+    <!-- 权限管理 -->
+    <div class="page" id="page-permissions">
+      <h2>👥 权限管理</h2>
+      <div class="card">
+        <h3>👑 服主 (owner)</h3>
+        <p class="hint">拥有全部权限,通常只有一人。</p>
+        <input class="owner-input" id="perm-owner" placeholder="YourXboxName">
+      </div>
+      <div class="card perm-group">
+        <div class="ghead"><h3 style="margin:0">🛡️ 管理员 (op)</h3><span class="badge">op</span><span class="count" id="count-op">0 人</span></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="input-op" placeholder="输入玩家名">
+          <button class="btn btn-sm" data-group="op">添加</button>
+        </div>
+        <div class="chip-list" id="chips-op"></div>
+      </div>
+      <div class="card perm-group">
+        <div class="ghead"><h3 style="margin:0">🙂 普通用户 (user)</h3><span class="badge">user</span><span class="count" id="count-user">0 人</span></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="input-user" placeholder="输入玩家名">
+          <button class="btn btn-sm" data-group="user">添加</button>
+        </div>
+        <div class="chip-list" id="chips-user"></div>
+      </div>
+      <div class="card perm-group">
+        <div class="ghead"><h3 style="margin:0">🚫 屏蔽名单 (blocker)</h3><span class="badge">blocker</span><span class="count" id="count-blocker">0 人</span></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="input-blocker" placeholder="输入玩家名">
+          <button class="btn btn-sm" data-group="blocker">添加</button>
+        </div>
+        <div class="chip-list" id="chips-blocker"></div>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn" id="permSave">保存权限</button>
+        <button class="btn btn-ghost" id="permReload">重新加载</button>
+      </div>
+    </div>
+
+    <!-- 功能设置 -->
+    <div class="page" id="page-config">
+      <h2>⚙️ 功能设置</h2>
+      <div class="card">
+        <h3>🔧 基础设置</h3>
+        <div class="form-grid">
+          <div class="form-group"><label>服务器名称</label><input id="cfg-name"></div>
+          <div class="form-group"><label>WebSocket 端口</label><input id="cfg-port" type="number" min="1" max="65535"></div>
+          <div class="form-group"><label>命令前缀</label><input id="cfg-prefix" maxlength="4"></div>
+          <div class="form-group"><label>日志等级</label>
+            <select id="cfg-loglevel">
+              <option value="debug">debug</option>
+              <option value="info">info</option>
+              <option value="warning">warning</option>
+              <option value="error">error</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>🎵 音乐 Mod</h3>
+        <div class="switch-row">
+          <label class="switch">
+            <input id="cfg-percussion" type="checkbox">
+            <span class="track"></span>
+          </label>
+          <span class="switch-label">播放打击乐</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>💬 QQ 群消息桥接</h3>
+        <div class="switch-row">
+          <label class="switch">
+            <input id="cfg-qq" type="checkbox">
+            <span class="track"></span>
+          </label>
+          <span class="switch-label">启用 QQ 桥接</span>
+        </div>
+        <div class="sub-box" id="qqFields">
+          <div class="form-grid">
+            <div class="form-group"><label>QQ 群号</label><input id="cfg-qqgroup" type="number"></div>
+            <div class="form-group"><label>桥接端口</label><input id="cfg-qqport" type="number" min="1" max="65535"></div>
+            <div class="form-group"><label>桥接主机</label><input id="cfg-qqhost"></div>
+            <div class="form-group"><label>访问令牌</label><input id="cfg-qqtoken" type="password" autocomplete="off"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>🚦 命令限流</h3>
+        <div class="switch-row">
+          <label class="switch">
+            <input id="cfg-ratelimit" type="checkbox">
+            <span class="track"></span>
+          </label>
+          <span class="switch-label">启用命令限流</span>
+        </div>
+        <div class="sub-box" id="rlFields">
+          <div class="form-grid">
+            <div class="form-group"><label>时间窗口 (毫秒)</label><input id="cfg-rlwindow" type="number" min="1"></div>
+            <div class="form-group"><label>窗口内最大命令数</label><input id="cfg-rlmax" type="number" min="1"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>🌐 Web 管理</h3>
+        <div class="switch-row">
+          <label class="switch">
+            <input id="cfg-webui" type="checkbox">
+            <span class="track"></span>
+          </label>
+          <span class="switch-label">启用 Web 管理界面</span>
+        </div>
+        <div class="sub-box" id="webuiFields">
+          <div class="form-grid">
+            <div class="form-group"><label>Web 管理端口</label><input id="cfg-webport" type="number" min="1" max="65535"></div>
+            <div class="form-group"><label>管理令牌 (留空=仅本机访问)</label><input id="cfg-webtoken" type="password" autocomplete="off"></div>
+          </div>
+          <p class="hint">修改端口或令牌后需重启服务器生效。</p>
+        </div>
+      </div>
+
+      <button class="btn" id="configSave">保存配置</button>
+    </div>
+
+    <!-- Mod 管理 -->
+    <div class="page" id="page-mods">
+      <h2>🧩 Mod 管理</h2>
+      <div style="display:flex;gap:10px;margin-bottom:16px">
+        <button class="btn" id="modReloadAll">🔄 重载所有服务端 Mod</button>
+        <button class="btn btn-ghost" id="modRefresh">刷新列表</button>
+      </div>
+      <div class="card">
+        <h3>🖥️ 客户端 Mod</h3>
+        <table class="mod-table">
+          <thead><tr><th>名称</th><th>模块路径</th><th>状态</th></tr></thead>
+          <tbody id="modBodyClient"></tbody>
+        </table>
+      </div>
+      <div class="card">
+        <h3>🖧 服务端 Mod</h3>
+        <table class="mod-table">
+          <thead><tr><th>名称</th><th>模块路径</th><th>状态</th></tr></thead>
+          <tbody id="modBodyServer"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ===== 工具 =====
+function $(id) { return document.getElementById(id); }
+var TOKEN_KEY = "enderbridge_web_token";
+var ROLE_KEY = "enderbridge_web_role";
+
+function clearAuth() {
+  sessionStorage.removeItem(TOKEN_KEY);
+  sessionStorage.removeItem(ROLE_KEY);
+}
+
+function toast(msg, type) {
+  var t = $("toast");
+  t.className = type || "ok";
+  t.textContent = msg;
+  t.style.display = "block";
+  clearTimeout(t._timer);
+  t._timer = setTimeout(function () { t.style.display = "none"; }, 3000);
+}
+
+function api(path, options) {
+  options = options || {};
+  options.headers = options.headers || {};
+  options.headers["Content-Type"] = "application/json";
+  var role = sessionStorage.getItem(ROLE_KEY) || "";
+  if (role === "guest") {
+    options.headers["X-Auth-Guest"] = "1";
+  } else {
+    var token = sessionStorage.getItem(TOKEN_KEY) || "";
+    if (token) options.headers["X-Auth-Token"] = token;
+  }
+  return fetch("/api" + path, options).then(function (res) {
+    return res.json().then(function (data) {
+      if (res.status === 401) {
+        clearAuth();
+        showLogin();
+        return Promise.reject(data);
+      }
+      if (res.status === 403) {
+        toast(data.message || "无权限", "err");
+        return Promise.reject(data);
+      }
+      return data;
+    });
+  });
+}
+
+// ===== 页面切换 =====
+var pages = ["dashboard", "permissions", "config", "mods"];
+function showPage(name) {
+  pages.forEach(function (p) {
+    $("page-" + p).classList.toggle("active", p === name);
+  });
+  document.querySelectorAll(".nav-item").forEach(function (el) {
+    el.classList.toggle("active", el.getAttribute("data-page") === name);
+  });
+  if (name === "dashboard") refreshStatus();
+  if (name === "permissions") loadPermissions();
+  if (name === "config") loadConfig();
+  if (name === "mods") loadMods();
+}
+document.querySelectorAll(".nav-item").forEach(function (el) {
+  el.addEventListener("click", function () { showPage(el.getAttribute("data-page")); });
+});
+
+// ===== 登录 =====
+function showLogin() {
+  $("appView").classList.remove("show");
+  $("loginView").classList.add("show");
+}
+function showApp() {
+  $("loginView").classList.remove("show");
+  $("appView").classList.add("show");
+}
+function enterApp(role) {
+  sessionStorage.setItem(ROLE_KEY, role);
+  applyRoleUI(role);
+  showApp();
+  refreshStatus();
+}
+function applyRoleUI(role) {
+  var isGuest = role === "guest";
+  // 访客仅保留仪表盘与 Mod 列表(只读)
+  document.querySelectorAll('.nav-item[data-page="permissions"], .nav-item[data-page="config"]')
+    .forEach(function (el) { el.style.display = isGuest ? "none" : ""; });
+  $("guestBadge").style.display = isGuest ? "block" : "none";
+  $("adminLoginBtn").style.display = isGuest ? "flex" : "none";
+  $("permSave").style.display = isGuest ? "none" : "";
+  $("permReload").style.display = isGuest ? "none" : "";
+  $("configSave").style.display = isGuest ? "none" : "";
+  $("modReloadAll").style.display = isGuest ? "none" : "";
+  if (isGuest) showPage("dashboard");
+}
+$("loginBtn").addEventListener("click", function () {
+  var token = $("tokenInput").value.trim();
+  sessionStorage.setItem(TOKEN_KEY, token);
+  api("/auth", { method: "POST", body: JSON.stringify({ token: token }) })
+    .then(function (data) {
+      if (data.ok && data.role === "admin") {
+        $("loginMsg").textContent = "";
+        enterApp("admin");
+      } else {
+        // 密码错误:停留登录页并提示,不自动进入访客模式
+        sessionStorage.removeItem(TOKEN_KEY);
+        $("loginMsg").textContent = data.message || "密码错误";
+      }
+    }).catch(function () {
+      $("loginMsg").textContent = "无法连接服务器";
+    });
+});
+$("guestBtn").addEventListener("click", function () {
+  sessionStorage.removeItem(TOKEN_KEY);
+  $("loginMsg").textContent = "";
+  enterApp("guest");
+});
+$("tokenInput").addEventListener("keydown", function (e) {
+  if (e.key === "Enter") $("loginBtn").click();
+});
+$("adminLoginBtn").addEventListener("click", function () {
+  clearAuth();
+  showLogin();
+});
+$("logoutBtn").addEventListener("click", function () {
+  clearAuth();
+  showLogin();
+});
+
+// ===== 仪表盘 =====
+function refreshStatus() {
+  api("/status").then(function (data) {
+    if (!data.ok) return;
+    $("srvName").textContent = data.name;
+    var uptime = data.uptime || 0;
+    var s = Math.floor(uptime % 60), m = Math.floor(uptime / 60) % 60, h = Math.floor(uptime / 3600);
+    var uptimeText = (h > 0 ? h + "时 " : "") + (m > 0 ? m + "分 " : "") + s + "秒";
+    $("statGrid").innerHTML =
+      statCard("📛", data.name, "服务器名称") +
+      statCard("🔌", data.port, "WebSocket 端口") +
+      statCard("🌐", data.webPort, "Web 管理端口") +
+      statCard("👥", data.clients, "在线客户端") +
+      statCard("⏱️", uptimeText, "运行时间") +
+      statCard("🔑", data.webTokenSet ? "已设置" : "未设置", "管理令牌");
+  }).catch(function () {});
+}
+function statCard(icon, val, label) {
+  return '<div class="stat"><div class="val">' + icon + " " + escapeHtml(String(val)) + '</div><div class="label">' + label + "</div></div>";
+}
+function escapeHtml(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// ===== 权限管理 =====
+var permData = { owner: "YourXboxName", op: [], user: [], blocker: [] };
+function loadPermissions() {
+  api("/permissions").then(function (data) {
+    if (!data.ok) return;
+    permData = data.permissions;
+    $("perm-owner").value = permData.owner || "";
+    ["op", "user", "blocker"].forEach(function (g) {
+      var list = permData[g] || [];
+      $("count-" + g).textContent = list.length + " 人";
+      $("chips-" + g).innerHTML = list.map(function (name) {
+        return '<span class="chip">' + escapeHtml(name) + '<span class="x" data-group="' + g + '" data-name="' + escapeHtml(name) + '">✕</span></span>';
+      }).join("") || '<span class="hint" style="margin-top:0">暂无成员</span>';
+    });
+  }).catch(function () {});
+}
+document.querySelectorAll('[data-group]').forEach(function (btn) {
+  if (btn.tagName === "BUTTON") {
+    btn.addEventListener("click", function () {
+      var g = btn.getAttribute("data-group");
+      var input = $("input-" + g);
+      var name = input.value.trim();
+      if (!name) return;
+      permData[g] = permData[g] || [];
+      if (permData[g].indexOf(name) < 0) permData[g].push(name);
+      input.value = "";
+      loadPermissions();
+    });
+  }
+});
+document.addEventListener("click", function (e) {
+  if (e.target.classList.contains("x")) {
+    var g = e.target.getAttribute("data-group");
+    var name = e.target.getAttribute("data-name");
+    permData[g] = (permData[g] || []).filter(function (n) { return n !== name; });
+    loadPermissions();
+  }
+});
+$("permSave").addEventListener("click", function () {
+  permData.owner = $("perm-owner").value.trim() || "YourXboxName";
+  api("/permissions", { method: "PUT", body: JSON.stringify({ permissions: permData }) })
+    .then(function (data) {
+      toast(data.message, data.ok ? "ok" : "err");
+      if (data.ok) loadPermissions();
+    }).catch(function () {});
+});
+$("permReload").addEventListener("click", loadPermissions);
+
+// ===== 功能设置 =====
+var cfgData = null;
+function loadConfig() {
+  api("/config").then(function (data) {
+    if (!data.ok) return;
+    cfgData = data.config;
+    var f = data.config.features || {};
+    var qq = f.qq || {};
+    var music = f.music || {};
+    var rl = data.config.rateLimit || {};
+    var rlCmd = rl.command || {};
+    var webui = data.config.webui || {};
+
+    $("cfg-name").value = data.config.name || "EnderBridge";
+    $("cfg-port").value = data.config.port || 8800;
+    $("cfg-prefix").value = data.config.commandPrefix || "!";
+    $("cfg-loglevel").value = data.config.logLevel || "info";
+
+    $("cfg-percussion").checked = !!music.playPercussion;
+
+    $("cfg-qq").checked = !!qq.enabled;
+    $("cfg-qqgroup").value = qq.groupId || "";
+    $("cfg-qqport").value = qq.port || "";
+    $("cfg-qqhost").value = qq.host || "";
+    $("cfg-qqtoken").value = qq.accessToken || "";
+    toggleSub("qqFields", $("cfg-qq").checked);
+
+    $("cfg-ratelimit").checked = !!rlCmd.enabled;
+    $("cfg-rlwindow").value = rlCmd.windowMs || "";
+    $("cfg-rlmax").value = rlCmd.maxPerWindow || "";
+    toggleSub("rlFields", $("cfg-ratelimit").checked);
+
+    $("cfg-webui").checked = webui.enabled !== false;
+    $("cfg-webport").value = webui.port || 18888;
+    $("cfg-webtoken").value = webui.token || "";
+    toggleSub("webuiFields", $("cfg-webui").checked);
+  }).catch(function () {});
+}
+function toggleSub(id, show) {
+  $(id).classList.toggle("show", !!show);
+}
+$("cfg-qq").addEventListener("change", function () { toggleSub("qqFields", this.checked); });
+$("cfg-ratelimit").addEventListener("change", function () { toggleSub("rlFields", this.checked); });
+$("cfg-webui").addEventListener("change", function () { toggleSub("webuiFields", this.checked); });
+
+$("configSave").addEventListener("click", function () {
+  if (!cfgData) return;
+  var f = cfgData.features || {};
+  f.music = f.music || {};
+  f.qq = f.qq || {};
+  f.music.playPercussion = $("cfg-percussion").checked;
+  f.qq.enabled = $("cfg-qq").checked;
+  f.qq.groupId = parseInt($("cfg-qqgroup").value, 10) || 0;
+  f.qq.port = parseInt($("cfg-qqport").value, 10) || 0;
+  f.qq.host = $("cfg-qqhost").value.trim() || "127.0.0.1";
+  f.qq.accessToken = $("cfg-qqtoken").value.trim();
+
+  var rl = cfgData.rateLimit || {};
+  rl.command = rl.command || {};
+  rl.command.enabled = $("cfg-ratelimit").checked;
+  rl.command.windowMs = parseInt($("cfg-rlwindow").value, 10) || 1000;
+  rl.command.maxPerWindow = parseInt($("cfg-rlmax").value, 10) || 20;
+
+  var webui = cfgData.webui || {};
+  webui.enabled = $("cfg-webui").checked;
+  webui.port = parseInt($("cfg-webport").value, 10) || 18888;
+  webui.token = $("cfg-webtoken").value.trim();
+
+  var payload = {
+    config: {
+      name: $("cfg-name").value.trim() || "EnderBridge",
+      port: parseInt($("cfg-port").value, 10) || 8800,
+      commandPrefix: $("cfg-prefix").value.trim() || "!",
+      logLevel: $("cfg-loglevel").value,
+      features: f,
+      rateLimit: rl,
+      webui: webui,
+    }
+  };
+  api("/config", { method: "PUT", body: JSON.stringify(payload) })
+    .then(function (data) {
+      toast(data.message, data.ok ? "ok" : "err");
+      if (data.ok) loadConfig();
+    }).catch(function () {});
+});
+
+// ===== Mod 管理 =====
+function loadMods() {
+  api("/mods").then(function (data) {
+    if (!data.ok) return;
+    $("modBodyClient").innerHTML = renderModRows(data.mods.client);
+    $("modBodyServer").innerHTML = renderModRows(data.mods.server);
+  }).catch(function () {});
+}
+function renderModRows(mods) {
+  var keys = Object.keys(mods || {});
+  if (!keys.length) return '<tr><td colspan="3" style="color:var(--text-faint)">无</td></tr>';
+  return keys.map(function (name) {
+    var info = mods[name];
+    var ok = info.importable;
+    return '<tr>' +
+      "<td>" + escapeHtml(name) + "</td>" +
+      "<td style='color:var(--text-dim)'>" + escapeHtml(info.path) + "</td>" +
+      '<td><span class="status-dot ' + (ok ? "ok" : "bad") + '"></span>' + (ok ? "可导入" : "导入失败") + "</td>" +
+      "</tr>";
+  }).join("");
+}
+$("modRefresh").addEventListener("click", loadMods);
+$("modReloadAll").addEventListener("click", function () {
+  var btn = this;
+  btn.disabled = true;
+  api("/mods/reload-all", { method: "POST" })
+    .then(function (data) {
+      toast(data.message || "重载完成", data.ok ? "ok" : "err");
+    }).catch(function () {})
+    .finally(function () { btn.disabled = false; });
+});
+
+// ===== 启动 =====
+api("/status").then(function (data) {
+  if (!data.ok) { showLogin(); return; }
+  var role = sessionStorage.getItem(ROLE_KEY) || "";
+  if (!data.webTokenSet) {
+    // 未设置令牌:本机直接开放全部权限
+    sessionStorage.removeItem(TOKEN_KEY);
+    enterApp("admin");
+    return;
+  }
+  if (role === "guest") {
+    // 上次以访客进入
+    enterApp("guest");
+  } else if (role === "admin" && sessionStorage.getItem(TOKEN_KEY)) {
+    // 校验上次的令牌是否仍有效
+    api("/config").then(function (d) {
+      if (d.ok) enterApp("admin");
+      else { clearAuth(); showLogin(); }
+    }).catch(function () { clearAuth(); showLogin(); });
+  } else {
+    showLogin();
+  }
+}).catch(function () {
+  showLogin();
+});
+</script>
+</body>
+</html>

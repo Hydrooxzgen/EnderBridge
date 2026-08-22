@@ -2,7 +2,7 @@
 # ===== 首次运行 =====
 # True：启动图形化配置向导（浏览器访问 http://127.0.0.1:18888 完成配置）
 # 保存后自动生成 config.py 与 permission.json，并将本标记写为 False
-is_first_run = False
+is_first_run = True
 
 # ===== 平台检测 =====
 # 所有平台统一使用相对路径写法（如 ./resources/pictures）
@@ -34,6 +34,16 @@ def resolvePath(relPath):
 wsConfig = {
     "name": "EnderBridge",
     "port": 8800,
+}
+
+# Web 管理界面配置（每次启动时监听该端口，可在浏览器中管理权限/功能开关等）
+# enabled: 是否启用 Web 管理界面
+# port: Web 管理端口（首次运行向导中也可设置）
+# token: 管理令牌，非空时访问需在登录页输入；留空则仅限本机访问
+webuiConfig = {
+    "enabled": True,
+    "port": 18888,
+    "token": "",
 }
 
 # 日志等级配置：只显示该等级及更高等级的错误

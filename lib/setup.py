@@ -6,7 +6,7 @@
 # 3. 保存时基于 config.example.py 模板生成 config.py(剔除 isFirstRun 标记,
 #    config.py 只存储用户真实配置),并将玩家权限写入 permission.json
 #    (旧文件自动备份为 .bak)
-# 4. 保存成功后关闭临时服务器,提示用户重启
+# 4. 保存成功后关闭临时服务器,由 main.py 自动启动服务器
 """首次运行图形化配置向导"""
 import asyncio
 import json
@@ -53,6 +53,132 @@ def make_rule(pattern, build):
     return apply
 
 
+def _py_dump(value, level: int = 0) -> str:
+    """将 dict/list 序列化为 Python 字面量文本(True/False/None 而非 true/false/null)"""
+    pad = "    " * level
+    if isinstance(value, dict):
+        if not value:
+            return "{}"
+        lines = [pad + "{"]
+        for k, v in value.items():
+            lines.append(f'{pad}    {json.dumps(str(k), ensure_ascii=False)}: {_py_dump(v, level + 1)},')
+        lines.append(pad + "}")
+        return "\n".join(lines)
+    if isinstance(value, (list, tuple)):
+        if not value:
+            return "[]"
+        lines = [pad + "["]
+        for v in value:
+            lines.append(f"{pad}    {_py_dump(v, level + 1)},")
+        lines.append(pad + "]")
+        return "\n".join(lines)
+    if value is True:
+        return "True"
+    if value is False:
+        return "False"
+    if value is None:
+        return "None"
+    if isinstance(value, str):
+        return json.dumps(value, ensure_ascii=False)
+    return repr(value)
+
+
+def _replace_block_text(src: str, varname: str, text: str):
+    """将源码中 `varname = { ... }` 块整体替换为指定文本(括号配对定位)"""
+    m = re.search(rf"(?m)^{re.escape(varname)}\s*=\s*\{{", src)
+    if not m:
+        return src, False
+    start = m.start()
+    i = src.index("{", m.start())
+    depth = 0
+    end = -1
+    for j in range(i, len(src)):
+        c = src[j]
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                end = j + 1
+                break
+    if end < 0:
+        return src, False
+    return src[:start] + f"{varname} = {text}\n" + src[end:], True
+
+
+def make_block_rule(varname, build):
+    """生成整块替换规则:`varname = { ... }` 整体替换为 build(f) 生成的文本"""
+    def apply(src, f):
+        new_src, ok = _replace_block_text(src, varname, build(f))
+        return new_src if ok else None
+    return apply
+
+
+# 模组注册表:供向导勾选启用(与 config.example.py 的 mods 块对应)
+# config: 该模组启用时显示的同名配置区(spam)
+# basePath: 该模组启用时显示的资源路径配置项
+MOD_REGISTRY = {
+    "client": {
+        "PermissionCommands": {"path": "mod.permission", "label": "权限命令"},
+        "Tool": {"path": "mod.tool", "label": "工具"},
+        "Position": {"path": "mod.position", "label": "坐标"},
+        "Music": {"path": "mod.music", "label": "音乐", "config": "music", "basePath": "music"},
+        "MCFunc": {"path": "mod.mcfunc", "label": "MCFunc", "basePath": "mcfunc"},
+        "MoreWS": {"path": "mod.morews", "label": "MoreWS"},
+        "Ezmatic": {"path": "mod.ezmatic.main", "label": "Ezmatic 结构", "basePath": "ezmatic"},
+        "ImageMod": {"path": "mod.image.main", "label": "图片", "basePath": "image"},
+    },
+    "server": {
+        "read": {"path": "mod.read", "label": "读取 / 刷屏", "config": "spam"},
+    },
+}
+
+# 高级模组(同时勾选多个,启用后显示对应配置区)
+ADVANCED_MODS = {
+    "AI": {"label": "AI 对话（客户端 + 服务端）", "clientPath": "mod.ai", "serverPath": "mod.ai", "config": "ai"},
+    "QQ": {"label": "QQ 群互通", "config": "qq"},
+}
+
+
+def _build_mods(f) -> dict:
+    """根据勾选的模组生成 mods 字典"""
+    mods = {"client": {}, "server": {}}
+    for name in f.get("clientMods") or []:
+        meta = MOD_REGISTRY["client"].get(name)
+        if meta:
+            mods["client"][name] = meta["path"]
+    for name in f.get("serverMods") or []:
+        meta = MOD_REGISTRY["server"].get(name)
+        if meta:
+            mods["server"][name] = meta["path"]
+    for name in f.get("advancedMods") or []:
+        meta = ADVANCED_MODS.get(name)
+        if meta:
+            if meta.get("clientPath"):
+                mods["client"][name] = meta["clientPath"]
+            if meta.get("serverPath"):
+                mods["server"][name] = meta["serverPath"]
+    return mods
+
+
+def _build_base_path(f) -> str:
+    """生成 basePath 块(resolvePath 包裹,与模板风格一致)"""
+    lines = ["{"]
+    for key, label in (("music", "音乐"), ("mcfunc", "MCFunc"), ("ezmatic", "Ezmatic"), ("image", "图片")):
+        val = str(f.get(f"basePath{key.capitalize()}") or "").strip() or f"./resources/{key}"
+        lines.append(f'    {json.dumps(key, ensure_ascii=False)}: resolvePath({json.dumps(val, ensure_ascii=False)}),')
+    lines.append("}")
+    return "\n".join(lines)
+
+
+def _normalize(f: dict) -> dict:
+    """将向导表单数据规范化:高级模组勾选 → 对应的启用开关"""
+    f = dict(f)
+    advanced = f.get("advancedMods") or []
+    f["qqEnabled"] = "QQ" in advanced
+    return f
+
+
 # chat 与 command 的 model 字段按各自后面的 max_tokens 值精确定位(互不影响)
 CHAT_MODEL = re.compile(
     r'"model": "deepseek-chat"(?=,\s*\n\s*"thinking": \{\s*"type": "disabled"\s*\},\s*\n\s*"max_tokens": 512)'
@@ -72,6 +198,7 @@ RULES = [
     {"key": "AI Base URL", "apply": make_rule('"baseURL": "https://api.deepseek.com"', lambda f: f'"baseURL": {_json(f["baseURL"])}')},
     {"key": "对话模型", "apply": make_rule(CHAT_MODEL, lambda f: f'"model": {_json(f["chatModel"])}')},
     {"key": "指令模型", "apply": make_rule(COMMAND_MODEL, lambda f: f'"model": {_json(f["commandModel"])}')},
+    {"key": "AI 对话冷却", "apply": make_rule('"chatCooldown": 5000', lambda f: f'"chatCooldown": {_num(f["aiChatCooldown"])}')},
     {"key": "音乐打击乐", "apply": make_rule('"playPercussion": True', lambda f: f'"playPercussion": {_bool(f["playPercussion"])}')},
     # qq 块的 enabled 后面紧跟 groupId,用它做上下文锚点,避免误匹配其他 enabled
     {"key": "QQ 启用", "apply": make_rule(re.compile(r'"enabled": (True|False)(?=,\s*\n\s*"groupId")'), lambda f: f'"enabled": {_bool(f["qqEnabled"])}')},
@@ -79,10 +206,34 @@ RULES = [
     {"key": "QQ 主机", "apply": make_rule('"host": "127.0.0.1"', lambda f: f'"host": {_json(f["qqHost"])}')},
     {"key": "QQ 端口", "apply": make_rule('"port": 3001', lambda f: f'"port": {_num(f["qqPort"])}')},
     {"key": "QQ 访问令牌", "apply": make_rule('"accessToken": ""', lambda f: f'"accessToken": {_json(f["qqToken"])}')},
+    # SAPI 配置块
+    {"key": "SAPI 配置", "apply": make_block_rule("sapiConfig", lambda f: _py_dump({
+        "gmsg": f.get("sapiGmsg", "gmsg"),
+        "smsg": f.get("sapiSmsg", "smsg"),
+    }))},
+    # Utils 配置块
+    {"key": "Utils 配置", "apply": make_block_rule("utilsConfig", lambda f: _py_dump({
+        "tellAllToTell": bool(f.get("utilsTellAllToTell")),
+        "enablePolling": bool(f.get("utilsEnablePolling")),
+    }))},
+    # basePath 资源路径块
+    {"key": "资源路径", "apply": make_block_rule("basePath", _build_base_path)},
+    # Mods 勾选块
+    {"key": "Mods 配置", "apply": make_block_rule("mods", lambda f: _py_dump(_build_mods(f)))},
+    # 刷屏数据配置块
+    {"key": "刷屏配置", "apply": make_block_rule("spam", lambda f: _py_dump({
+        "attack": f.get("spamAttack", ""),
+        "ad": split_list(f.get("spamAd", "")),
+        "adInterval": int(f.get("spamAdInterval") or 60000),
+    }))},
     # rateLimit 块的 enabled 后面紧跟 windowMs,用它做上下文锚点,避免误匹配其他 enabled
     {"key": "限流启用", "apply": make_rule(re.compile(r'"enabled": (True|False)(?=,\s*\n\s*"windowMs")'), lambda f: f'"enabled": {_bool(f["rateLimitEnabled"])}')},
     {"key": "限流窗口", "apply": make_rule('"windowMs": 1000', lambda f: f'"windowMs": {_num(f["rateLimitWindowMs"])}')},
     {"key": "限流次数", "apply": make_rule('"maxPerWindow": 20', lambda f: f'"maxPerWindow": {_num(f["rateLimitMax"])}')},
+    # webuiConfig 块:enabled 后面紧跟 port 18888,用它做上下文锚点,避免误匹配其他 enabled
+    {"key": "Web 管理启用", "apply": make_rule(re.compile(r'"enabled": (True|False)(?=,\s*\n\s*"port": 18888)'), lambda f: f'"enabled": {_bool(f["webuiEnabled"])}')},
+    {"key": "Web 管理端口", "apply": make_rule('"port": 18888', lambda f: f'"port": {_num(f["webuiPort"])}')},
+    {"key": "Web 管理令牌", "apply": make_rule('"token": ""', lambda f: f'"token": {_json(f["webuiToken"])}')},
     # 注意:config.py 不包含 isFirstRun 标记(判定仅存在于模板 config.example.py)
 ]
 
@@ -136,6 +287,15 @@ def load_defaults() -> dict:
                 return default
         return cur if cur is not None else default
 
+    mods = cfg.get("mods") or {}
+    client_mods = [k for k in (mods.get("client") or {}).keys() if k in MOD_REGISTRY["client"]]
+    server_mods = [k for k in (mods.get("server") or {}).keys() if k in MOD_REGISTRY["server"]]
+    advanced_mods = []
+    if "AI" in (mods.get("client") or {}):
+        advanced_mods.append("AI")
+    if _get(cfg, "features", "qq", "enabled", default=False):
+        advanced_mods.append("QQ")
+
     return {
         "name": _get(cfg, "wsConfig", "name", default="EnderBridge"),
         "port": _get(cfg, "wsConfig", "port", default=8800),
@@ -145,15 +305,33 @@ def load_defaults() -> dict:
         "baseURL": _get(cfg, "AIConfig", "options", "baseURL", default="https://api.deepseek.com"),
         "chatModel": _get(cfg, "AIConfig", "models", "chat", "model", default="deepseek-chat"),
         "commandModel": _get(cfg, "AIConfig", "models", "command", "model", default="deepseek-chat"),
+        "aiChatCooldown": _get(cfg, "AIConfig", "chatCooldown", default=5000),
         "playPercussion": _get(cfg, "features", "music", "playPercussion", default=True),
         "qqEnabled": _get(cfg, "features", "qq", "enabled", default=False),
         "qqGroupId": _get(cfg, "features", "qq", "groupId", default=123456789),
         "qqHost": _get(cfg, "features", "qq", "host", default="127.0.0.1"),
         "qqPort": _get(cfg, "features", "qq", "port", default=3001),
         "qqToken": _get(cfg, "features", "qq", "accessToken", default=""),
+        "sapiGmsg": _get(cfg, "sapiConfig", "gmsg", default="gmsg"),
+        "sapiSmsg": _get(cfg, "sapiConfig", "smsg", default="smsg"),
+        "utilsTellAllToTell": _get(cfg, "utilsConfig", "tellAllToTell", default=False),
+        "utilsEnablePolling": _get(cfg, "utilsConfig", "enablePolling", default=True),
+        "basePathMusic": _get(cfg, "basePath", "music", default="./resources/midi"),
+        "basePathMcfunc": _get(cfg, "basePath", "mcfunc", default="./resources/mcfunc"),
+        "basePathEzmatic": _get(cfg, "basePath", "ezmatic", default="./resources/ezmatic"),
+        "basePathImage": _get(cfg, "basePath", "image", default="./resources/pictures"),
+        "spamAttack": _get(cfg, "spam", "attack", default=""),
+        "spamAd": "\n".join(_get(cfg, "spam", "ad", default=[]) or []),
+        "spamAdInterval": _get(cfg, "spam", "adInterval", default=60000),
         "rateLimitEnabled": _get(cfg, "rateLimit", "command", "enabled", default=False),
         "rateLimitWindowMs": _get(cfg, "rateLimit", "command", "windowMs", default=1000),
         "rateLimitMax": _get(cfg, "rateLimit", "command", "maxPerWindow", default=20),
+        "webuiEnabled": _get(cfg, "webuiConfig", "enabled", default=True),
+        "webuiPort": _get(cfg, "webuiConfig", "port", default=18888),
+        "webuiToken": _get(cfg, "webuiConfig", "token", default=""),
+        "clientMods": client_mods,
+        "serverMods": server_mods,
+        "advancedMods": advanced_mods,
         "owner": perm.get("owner", "YourXboxName"),
         "op": perm.get("op") if isinstance(perm.get("op"), list) else [],
         "user": perm.get("user") if isinstance(perm.get("user"), list) else [],
@@ -181,6 +359,18 @@ def validate(f):
             return "限流时间窗口与次数必须是整数"
         if window_ms <= 0 or max_per <= 0:
             return "限流时间窗口与次数必须大于 0"
+    try:
+        web_port = int(f.get("webuiPort"))
+    except (TypeError, ValueError):
+        return "Web 管理端口必须是 1-65535 的整数"
+    if web_port < 1 or web_port > 65535:
+        return "Web 管理端口必须是 1-65535 的整数"
+    try:
+        ad_interval = int(f.get("spamAdInterval") or 0)
+    except (TypeError, ValueError):
+        return "广告推送间隔必须是整数(毫秒)"
+    if ad_interval < 0:
+        return "广告推送间隔不能为负数"
     return None
 
 
@@ -200,6 +390,7 @@ def clear_first_run_flag() -> None:
 
 def save_config(f) -> None:
     """基于模板生成 config.py 并写入 permission.json(均先备份旧文件)"""
+    f = _normalize(f)
     try:
         with open(CONFIG_EXAMPLE, "r", encoding="utf-8") as fp:
             src = fp.read()
@@ -241,7 +432,6 @@ def save_config(f) -> None:
         fp.write("\n")
 
 
-# 配置向导页面(内嵌 JS 不使用反引号,避免与外层字符串冲突)
 PAGE_HTML = """<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -405,6 +595,75 @@ select {
 .sub-box .hint { margin-top: 10px; }
 .hint { font-size: 12px; color: var(--text-faint); margin-top: 4px; line-height: 1.5; }
 
+/* 模组勾选列表 */
+.mod-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 16px;
+  margin-top: 6px;
+}
+.mod-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.45);
+  border: 1px solid var(--input-border);
+  cursor: pointer;
+  user-select: none;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+.mod-check:hover { border-color: rgba(129, 140, 248, 0.5); }
+.mod-check input { width: 16px; height: 16px; accent-color: #818cf8; cursor: pointer; flex-shrink: 0; }
+.mod-check .name { font-size: 14px; color: var(--text); }
+.mod-check .tag {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-faint);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 6px;
+  padding: 1px 8px;
+  white-space: nowrap;
+}
+.mod-check:has(input:checked) {
+  border-color: rgba(99, 102, 241, 0.55);
+  background: rgba(99, 102, 241, 0.1);
+}
+
+/* 条件显示区块 */
+section.conditional { display: block; }
+section.hidden { display: none; }
+
+/* 折叠高级配置 */
+details.advanced {
+  border-radius: 12px;
+}
+details.advanced summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #c7d2fe;
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  padding-bottom: 4px;
+}
+details.advanced summary::-webkit-details-marker { display: none; }
+details.advanced summary::after {
+  content: "▾";
+  margin-left: auto;
+  font-size: 14px;
+  color: var(--text-faint);
+  transition: transform 0.2s ease;
+}
+details.advanced[open] summary::after { transform: rotate(180deg); }
+
+/* 资源路径行(默认隐藏,勾选对应模组后显示) */
+.bp-row { display: none; }
+
 /* 保存按钮 */
 .btn-wrap { margin-top: 8px; }
 button[type=submit] {
@@ -479,6 +738,21 @@ button[type=submit]:disabled { opacity: 0.7; cursor: wait; transform: none; }
     </section>
 
     <section class="card">
+      <h2><span class="icon">�</span>基础模组</h2>
+      <p class="hint">勾选要启用的模组；部分模组启用后会出现对应配置区。</p>
+      <label>客户端模组</label>
+      <div id="clientMods" class="mod-list"></div>
+      <label>服务端模组</label>
+      <div id="serverMods" class="mod-list"></div>
+    </section>
+
+    <section class="card">
+      <h2><span class="icon">🚀</span>高级模组</h2>
+      <p class="hint">勾选后启用并显示对应配置区。</p>
+      <div id="advancedMods" class="mod-list"></div>
+    </section>
+
+    <section class="card" id="aiFields">
       <h2><span class="icon">🤖</span>AI 设置</h2>
       <label for="apiKey">API Key</label>
       <input id="apiKey" name="apiKey" type="password" placeholder="sk-..." autocomplete="off">
@@ -488,49 +762,44 @@ button[type=submit]:disabled { opacity: 0.7; cursor: wait; transform: none; }
         <div><label for="chatModel">对话模型</label><input id="chatModel" name="chatModel" type="text"></div>
         <div><label for="commandModel">指令模型</label><input id="commandModel" name="commandModel" type="text"></div>
       </div>
+      <label for="aiChatCooldown">对话冷却（毫秒）</label>
+      <input id="aiChatCooldown" name="aiChatCooldown" type="number" min="0">
       <p class="hint">API Key 留空表示不启用 AI 功能。</p>
     </section>
 
-    <section class="card">
-      <h2><span class="icon">🧩</span>功能设置</h2>
+    <section class="card" id="musicFields">
+      <h2><span class="icon">🎵</span>音乐设置</h2>
       <div class="switch-row">
         <label class="switch">
           <input id="playPercussion" name="playPercussion" type="checkbox">
           <span class="track"></span>
-          <span class="switch-label">音乐 Mod：播放打击乐</span>
+          <span class="switch-label">播放打击乐</span>
         </label>
       </div>
-      <div class="switch-row">
-        <label class="switch">
-          <input id="qqEnabled" name="qqEnabled" type="checkbox">
-          <span class="track"></span>
-          <span class="switch-label">启用 QQ 群消息桥接</span>
-        </label>
+    </section>
+
+    <section class="card" id="qqFields">
+      <h2><span class="icon">💬</span>QQ 群互通设置</h2>
+      <div class="grid">
+        <div><label for="qqGroupId">QQ 群号</label><input id="qqGroupId" name="qqGroupId" type="number"></div>
+        <div><label for="qqPort">桥接端口</label><input id="qqPort" name="qqPort" type="number" min="1" max="65535"></div>
       </div>
-      <div id="qqFields" class="sub-box">
-        <div class="grid">
-          <div><label for="qqGroupId">QQ 群号</label><input id="qqGroupId" name="qqGroupId" type="number"></div>
-          <div><label for="qqPort">桥接端口</label><input id="qqPort" name="qqPort" type="number" min="1" max="65535"></div>
-        </div>
-        <div class="grid">
-          <div><label for="qqHost">桥接主机</label><input id="qqHost" name="qqHost" type="text"></div>
-          <div><label for="qqToken">访问令牌</label><input id="qqToken" name="qqToken" type="password" autocomplete="off"></div>
-        </div>
+      <div class="grid">
+        <div><label for="qqHost">桥接主机</label><input id="qqHost" name="qqHost" type="text"></div>
+        <div><label for="qqToken">访问令牌</label><input id="qqToken" name="qqToken" type="password" autocomplete="off"></div>
       </div>
-      <div class="switch-row">
-        <label class="switch">
-          <input id="rateLimitEnabled" name="rateLimitEnabled" type="checkbox">
-          <span class="track"></span>
-          <span class="switch-label">启用命令限流</span>
-        </label>
+    </section>
+
+    <section class="card" id="spamFields">
+      <h2><span class="icon">📢</span>刷屏设置</h2>
+      <label for="spamAttack">攻击文本</label>
+      <textarea id="spamAttack" name="spamAttack" placeholder="§c[示例] 刷屏文本"></textarea>
+      <label for="spamAd">广告文本（每行一条）</label>
+      <textarea id="spamAd" name="spamAd" placeholder="§u示例广告 1 §7| §bexample.com"></textarea>
+      <div class="grid">
+        <div><label for="spamAdInterval">广告推送间隔（毫秒）</label><input id="spamAdInterval" name="spamAdInterval" type="number" min="0"></div>
       </div>
-      <div id="rateLimitFields" class="sub-box">
-        <div class="grid">
-          <div><label for="rateLimitWindowMs">时间窗口 (毫秒)</label><input id="rateLimitWindowMs" name="rateLimitWindowMs" type="number" min="1"></div>
-          <div><label for="rateLimitMax">窗口内最大命令数</label><input id="rateLimitMax" name="rateLimitMax" type="number" min="1"></div>
-        </div>
-        <p class="hint">例如：窗口 1000ms、最大 20 次，表示每个玩家每秒最多执行 20 条命令。</p>
-      </div>
+      <p class="hint">用于 $read 模组的 attack / ad 命令。</p>
     </section>
 
     <section class="card">
@@ -546,6 +815,73 @@ button[type=submit]:disabled { opacity: 0.7; cursor: wait; transform: none; }
       <p class="hint">权限数据将保存到 permission.json。</p>
     </section>
 
+    <section class="card" id="basePathFields">
+      <h2><span class="icon">📁</span>资源路径</h2>
+      <p class="hint">勾选对应模组后显示该模组的资源路径。</p>
+      <div class="grid">
+        <div data-basepath="music" class="bp-row"><label for="basePathMusic">音乐（midi）路径</label><input id="basePathMusic" name="basePathMusic" type="text"></div>
+        <div data-basepath="mcfunc" class="bp-row"><label for="basePathMcfunc">MCFunc 路径</label><input id="basePathMcfunc" name="basePathMcfunc" type="text"></div>
+      </div>
+      <div class="grid">
+        <div data-basepath="ezmatic" class="bp-row"><label for="basePathEzmatic">Ezmatic 路径</label><input id="basePathEzmatic" name="basePathEzmatic" type="text"></div>
+        <div data-basepath="image" class="bp-row"><label for="basePathImage">图片路径</label><input id="basePathImage" name="basePathImage" type="text"></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <details class="advanced">
+        <summary><span class="icon">⚡</span>高级配置</summary>
+        <div class="sub-box">
+          <div class="switch-row">
+            <label class="switch">
+              <input id="rateLimitEnabled" name="rateLimitEnabled" type="checkbox">
+              <span class="track"></span>
+              <span class="switch-label">启用命令限流</span>
+            </label>
+          </div>
+          <div id="rateLimitFields" class="sub-box">
+            <div class="grid">
+              <div><label for="rateLimitWindowMs">时间窗口 (毫秒)</label><input id="rateLimitWindowMs" name="rateLimitWindowMs" type="number" min="1"></div>
+              <div><label for="rateLimitMax">窗口内最大命令数</label><input id="rateLimitMax" name="rateLimitMax" type="number" min="1"></div>
+            </div>
+            <p class="hint">例如：窗口 1000ms、最大 20 次，表示每个玩家每秒最多执行 20 条命令。</p>
+          </div>
+          <div class="switch-row">
+            <label class="switch">
+              <input id="webuiEnabled" name="webuiEnabled" type="checkbox">
+              <span class="track"></span>
+              <span class="switch-label">启用 Web 管理界面</span>
+            </label>
+          </div>
+          <div id="webuiFields" class="sub-box">
+            <div class="grid">
+              <div><label for="webuiPort">Web 管理端口</label><input id="webuiPort" name="webuiPort" type="number" min="1" max="65535"></div>
+              <div><label for="webuiToken">管理令牌（留空 = 仅本机访问）</label><input id="webuiToken" name="webuiToken" type="password" autocomplete="off"></div>
+            </div>
+            <p class="hint">每次启动时监听该端口，可在浏览器中管理权限、功能开关与仪表盘。</p>
+          </div>
+          <div class="grid">
+            <div><label for="sapiGmsg">SAPI 群聊指令</label><input id="sapiGmsg" name="sapiGmsg" type="text"></div>
+            <div><label for="sapiSmsg">SAPI 私聊指令</label><input id="sapiSmsg" name="sapiSmsg" type="text"></div>
+          </div>
+          <div class="switch-row">
+            <label class="switch">
+              <input id="utilsTellAllToTell" name="utilsTellAllToTell" type="checkbox">
+              <span class="track"></span>
+              <span class="switch-label">Utils：tellall 转发为 tell</span>
+            </label>
+          </div>
+          <div class="switch-row">
+            <label class="switch">
+              <input id="utilsEnablePolling" name="utilsEnablePolling" type="checkbox">
+              <span class="track"></span>
+              <span class="switch-label">Utils：启用轮询</span>
+            </label>
+          </div>
+        </div>
+      </details>
+    </section>
+
     <div class="btn-wrap">
       <button type="submit">保存配置</button>
     </div>
@@ -559,6 +895,125 @@ button[type=submit]:disabled { opacity: 0.7; cursor: wait; transform: none; }
 <script>
 var DEFAULTS = __DEFAULTS__;
 function $(id) { return document.getElementById(id); }
+
+// 模组注册表(与后端 MOD_REGISTRY / ADVANCED_MODS 对应)
+var MOD_REGISTRY = {
+  client: {
+    PermissionCommands: { label: "权限命令" },
+    Tool: { label: "工具" },
+    Position: { label: "坐标" },
+    Music: { label: "音乐", config: "music", basePath: "music" },
+    MCFunc: { label: "MCFunc", basePath: "mcfunc" },
+    MoreWS: { label: "MoreWS" },
+    Ezmatic: { label: "Ezmatic 结构", basePath: "ezmatic" },
+    ImageMod: { label: "图片", basePath: "image" }
+  },
+  server: {
+    read: { label: "读取 / 刷屏", config: "spam" }
+  }
+};
+var ADVANCED_MODS = {
+  AI: { label: "AI 对话（客户端 + 服务端）", config: "ai" },
+  QQ: { label: "QQ 群互通", config: "qq" }
+};
+
+function buildModList(containerId, side) {
+  var box = $(containerId);
+  box.innerHTML = "";
+  Object.keys(MOD_REGISTRY[side]).forEach(function (name) {
+    var meta = MOD_REGISTRY[side][name];
+    var label = document.createElement("label");
+    label.className = "mod-check";
+    var input = document.createElement("input");
+    input.type = "checkbox";
+    input.value = name;
+    input.dataset.config = meta.config || "";
+    input.dataset.basepath = meta.basePath || "";
+    input.dataset.side = side;
+    input.checked = (DEFAULTS[containerId] || []).indexOf(name) !== -1;
+    label.appendChild(input);
+    var span = document.createElement("span");
+    span.className = "name";
+    span.textContent = meta.label;
+    label.appendChild(span);
+    var tag = document.createElement("span");
+    tag.className = "tag";
+    tag.textContent = side === "client" ? "客户端" : "服务端";
+    label.appendChild(tag);
+    box.appendChild(label);
+  });
+}
+function buildAdvancedList() {
+  var box = $("advancedMods");
+  box.innerHTML = "";
+  Object.keys(ADVANCED_MODS).forEach(function (name) {
+    var meta = ADVANCED_MODS[name];
+    var label = document.createElement("label");
+    label.className = "mod-check";
+    var input = document.createElement("input");
+    input.type = "checkbox";
+    input.value = name;
+    input.dataset.config = meta.config || "";
+    input.checked = (DEFAULTS.advancedMods || []).indexOf(name) !== -1;
+    label.appendChild(input);
+    var span = document.createElement("span");
+    span.className = "name";
+    span.textContent = meta.label;
+    label.appendChild(span);
+    var tag = document.createElement("span");
+    tag.className = "tag";
+    tag.textContent = "高级";
+    label.appendChild(tag);
+    box.appendChild(label);
+  });
+}
+
+// 根据勾选状态切换各配置区的显示
+function syncConfig() {
+  var aiOn = $("advancedMods").querySelector('input[value="AI"]').checked;
+  var qqOn = $("advancedMods").querySelector('input[value="QQ"]').checked;
+  var musicOn = $("clientMods").querySelector('input[value="Music"]').checked;
+  var spamOn = $("serverMods").querySelector('input[value="read"]').checked;
+  $("aiFields").classList.toggle("hidden", !aiOn);
+  $("qqFields").classList.toggle("hidden", !qqOn);
+  $("musicFields").classList.toggle("hidden", !musicOn);
+  $("spamFields").classList.toggle("hidden", !spamOn);
+  // 资源路径:仅显示勾选模组对应的行
+  document.querySelectorAll(".bp-row").forEach(function (row) {
+    var key = row.getAttribute("data-basepath");
+    var on = false;
+    document.querySelectorAll("#clientMods input[data-basepath]").forEach(function (el) {
+      if (el.dataset.basepath === key && el.checked) on = true;
+    });
+    row.style.display = on ? "block" : "none";
+  });
+  var basePathAny = document.querySelectorAll("#clientMods input[data-basepath]:checked").length > 0;
+  $("basePathFields").classList.toggle("hidden", !basePathAny);
+  toggleRateLimit();
+  toggleWebui();
+}
+function toggleRateLimit() {
+  $("rateLimitFields").style.display = $("rateLimitEnabled").checked ? "block" : "none";
+}
+function toggleWebui() {
+  $("webuiFields").style.display = $("webuiEnabled").checked ? "block" : "none";
+}
+
+function collectMods(side) {
+  var result = [];
+  document.querySelectorAll("#" + side + "Mods input:checked").forEach(function (el) {
+    result.push(el.value);
+  });
+  return result;
+}
+function collectAdvanced() {
+  var result = [];
+  document.querySelectorAll("#advancedMods input:checked").forEach(function (el) {
+    result.push(el.value);
+  });
+  return result;
+}
+
 function fill() {
   $("name").value = DEFAULTS.name;
   $("port").value = DEFAULTS.port;
@@ -568,27 +1023,37 @@ function fill() {
   $("baseURL").value = DEFAULTS.baseURL;
   $("chatModel").value = DEFAULTS.chatModel;
   $("commandModel").value = DEFAULTS.commandModel;
+  $("aiChatCooldown").value = DEFAULTS.aiChatCooldown;
   $("playPercussion").checked = !!DEFAULTS.playPercussion;
-  $("qqEnabled").checked = !!DEFAULTS.qqEnabled;
   $("qqGroupId").value = DEFAULTS.qqGroupId;
   $("qqHost").value = DEFAULTS.qqHost;
   $("qqPort").value = DEFAULTS.qqPort;
   $("qqToken").value = DEFAULTS.qqToken;
+  $("sapiGmsg").value = DEFAULTS.sapiGmsg;
+  $("sapiSmsg").value = DEFAULTS.sapiSmsg;
+  $("utilsTellAllToTell").checked = !!DEFAULTS.utilsTellAllToTell;
+  $("utilsEnablePolling").checked = DEFAULTS.utilsEnablePolling !== false;
+  $("basePathMusic").value = DEFAULTS.basePathMusic;
+  $("basePathMcfunc").value = DEFAULTS.basePathMcfunc;
+  $("basePathEzmatic").value = DEFAULTS.basePathEzmatic;
+  $("basePathImage").value = DEFAULTS.basePathImage;
+  $("spamAttack").value = DEFAULTS.spamAttack;
+  $("spamAd").value = DEFAULTS.spamAd;
+  $("spamAdInterval").value = DEFAULTS.spamAdInterval;
   $("rateLimitEnabled").checked = !!DEFAULTS.rateLimitEnabled;
   $("rateLimitWindowMs").value = DEFAULTS.rateLimitWindowMs;
   $("rateLimitMax").value = DEFAULTS.rateLimitMax;
+  $("webuiEnabled").checked = DEFAULTS.webuiEnabled !== false;
+  $("webuiPort").value = DEFAULTS.webuiPort;
+  $("webuiToken").value = DEFAULTS.webuiToken;
   $("owner").value = DEFAULTS.owner;
   $("op").value = (DEFAULTS.op || []).join(", ");
   $("user").value = (DEFAULTS.user || []).join(", ");
   $("blocker").value = (DEFAULTS.blocker || []).join(", ");
-  toggleQq();
-  toggleRateLimit();
-}
-function toggleQq() {
-  $("qqFields").style.display = $("qqEnabled").checked ? "block" : "none";
-}
-function toggleRateLimit() {
-  $("rateLimitFields").style.display = $("rateLimitEnabled").checked ? "block" : "none";
+  buildModList("clientMods", "client");
+  buildModList("serverMods", "server");
+  buildAdvancedList();
+  syncConfig();
 }
 function showResult(ok, msg) {
   var r = $("result");
@@ -610,19 +1075,36 @@ document.getElementById("cfg").addEventListener("submit", function (e) {
     baseURL: $("baseURL").value.trim(),
     chatModel: $("chatModel").value.trim(),
     commandModel: $("commandModel").value.trim(),
+    aiChatCooldown: parseInt($("aiChatCooldown").value, 10),
     playPercussion: $("playPercussion").checked,
-    qqEnabled: $("qqEnabled").checked,
     qqGroupId: parseInt($("qqGroupId").value, 10),
     qqHost: $("qqHost").value.trim(),
     qqPort: parseInt($("qqPort").value, 10),
     qqToken: $("qqToken").value.trim(),
+    sapiGmsg: $("sapiGmsg").value.trim(),
+    sapiSmsg: $("sapiSmsg").value.trim(),
+    utilsTellAllToTell: $("utilsTellAllToTell").checked,
+    utilsEnablePolling: $("utilsEnablePolling").checked,
+    basePathMusic: $("basePathMusic").value.trim(),
+    basePathMcfunc: $("basePathMcfunc").value.trim(),
+    basePathEzmatic: $("basePathEzmatic").value.trim(),
+    basePathImage: $("basePathImage").value.trim(),
+    spamAttack: $("spamAttack").value.trim(),
+    spamAd: $("spamAd").value,
+    spamAdInterval: parseInt($("spamAdInterval").value, 10),
     rateLimitEnabled: $("rateLimitEnabled").checked,
     rateLimitWindowMs: parseInt($("rateLimitWindowMs").value, 10),
     rateLimitMax: parseInt($("rateLimitMax").value, 10),
+    webuiEnabled: $("webuiEnabled").checked,
+    webuiPort: parseInt($("webuiPort").value, 10),
+    webuiToken: $("webuiToken").value.trim(),
     owner: $("owner").value.trim(),
     op: $("op").value,
     user: $("user").value,
-    blocker: $("blocker").value
+    blocker: $("blocker").value,
+    clientMods: collectMods("client"),
+    serverMods: collectMods("server"),
+    advancedMods: collectAdvanced()
   };
   fetch("/api/save", {
     method: "POST",
@@ -638,8 +1120,11 @@ document.getElementById("cfg").addEventListener("submit", function (e) {
     btn.textContent = "保存配置";
   });
 });
-$("qqEnabled").addEventListener("change", toggleQq);
-$("rateLimitEnabled").addEventListener("change", toggleRateLimit);
+document.addEventListener("change", function (e) {
+  if (e.target && e.target.closest && e.target.closest(".mod-list")) syncConfig();
+  if (e.target && e.target.id === "rateLimitEnabled") toggleRateLimit();
+  if (e.target && e.target.id === "webuiEnabled") toggleWebui();
+});
 fill();
 </script>
 </body>
@@ -706,7 +1191,7 @@ def _make_handler(html: str, save_fn, shutdown_fn):
                 self._respond({"ok": False, "message": str(e)})
                 return
 
-            self._respond({"ok": True, "message": "✅ 配置已保存！\n请关闭本页面，然后重新启动服务器。"})
+            self._respond({"ok": True, "message": "✅ 配置已保存！\n服务器即将自动启动，请稍候..."})
             # 延迟关闭,确保响应已发送
             threading.Timer(0.3, shutdown_fn).start()
 
@@ -746,7 +1231,7 @@ async def start_setup_server(preferred_port: int = SETUP_PORT_START) -> None:
     print("========================================")
     print("  EnderBridge 配置向导已启动")
     print(f"  请在浏览器打开: http://127.0.0.1:{server.server_address[1]}")
-    print("  配置完成后请重新启动服务器")
+    print("  配置保存后服务器将自动启动")
     print("========================================")
     print("")
 
