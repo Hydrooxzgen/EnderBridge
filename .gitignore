@@ -15,3 +15,4 @@ resources/ezmatic/*
 resources/pictures/*
 structures/*
 !.gitkeep
+wiki/

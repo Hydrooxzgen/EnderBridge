@@ -260,5 +260,6 @@ This project is open-sourced under the [GPL-3.0](LICENSE) license. Minecraft and
 
 ---
 
+***You should try our sister project: [ModLoader-WS-For-MCBE](https://github.com/StarAwA117/ModLoader-WS-For-MCBE)***<br>
 *EnderBridge · Minecraft Bedrock 服务器管理框架*
 
