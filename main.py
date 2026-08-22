@@ -19,6 +19,7 @@ CONFIG_PY = os.path.join(ROOT, "config.py")
 CONFIG_EXAMPLE = os.path.join(ROOT, "config.example.py")
 WANT_RESET = "--reset-all" in sys.argv
 WANT_EXPORT = "export" in sys.argv
+WANT_LOAD_WITHOUT_CONFIG = "--load-without-config" in sys.argv
 
 # ===== 依赖检测(必须早于任何第三方模块使用) =====
 # websockets 使用动态导入:缺失时自动运行 setup.py 安装,成功后继续启动。
@@ -55,12 +56,16 @@ if not WANT_RESET and not WANT_EXPORT and not _dependencies_ok():
 if not WANT_RESET and not os.path.exists(CONFIG_PY):
     with open(CONFIG_EXAMPLE, "r", encoding="utf-8") as f:
         tpl = f.read()
-    # config.py 只存真实配置:剔除模板携带的 isFirstRun 标记块
-    cfg = re.sub(
-        r"# ===== 首次运行 =====[\s\S]*?is_first_run = (True|False)\r?\n(\r?\n)?",
-        "",
-        tpl,
-    )
+    if WANT_LOAD_WITHOUT_CONFIG:
+        # --load-without-config:直接使用模板全部内容(含 is_first_run),后续跳过向导
+        cfg = tpl
+    else:
+        # config.py 只存真实配置:剔除模板携带的 isFirstRun 标记块
+        cfg = re.sub(
+            r"# ===== 首次运行 =====[\s\S]*?is_first_run = (True|False)\r?\n(\r?\n)?",
+            "",
+            tpl,
+        )
     with open(CONFIG_PY, "w", encoding="utf-8") as f:
         f.write(cfg)
     print("未找到 config.py，已根据模板自动生成默认配置（可在向导中修改）")
@@ -376,7 +381,8 @@ _m = re.search(r"is_first_run = (True|False)", _example_src)
 is_first_run = _m is not None and _m.group(1) == "True"
 
 # 首次运行检查:is_first_run 为 True 时启动图形化配置向导(向导中可设置 Web 管理端口)
-if is_first_run:
+# --load-without-config 模式跳过向导,直接使用默认配置运行
+if is_first_run and not WANT_LOAD_WITHOUT_CONFIG:
     shared.logger.info("检测到首次运行或是被更新，启动图形化配置向导...")
     from lib.setup import start_setup_server
     try:
@@ -564,6 +570,96 @@ def _request_restart() -> None:
     threading.Thread(target=_do_restart, daemon=True).start()
 
 
+# ===== 交互式终端提示符 =====
+CONSOLE_PROMPT = "EnderBridge> "
+CONSOLE_PREFIX = "$"  # 命令前缀
+
+
+def console_out(msg):
+    """终端输出消息后恢复提示符"""
+    sys.stdout.write("\r\x1b[K")
+    print(msg)
+    sys.stdout.write(CONSOLE_PROMPT)
+    sys.stdout.flush()
+
+
+def _console_help():
+    """显示帮助信息"""
+    print("可用命令:")
+    print(f"  {CONSOLE_PREFIX}help       - 显示此帮助")
+    print(f"  {CONSOLE_PREFIX}status     - 显示服务器状态")
+    print(f"  {CONSOLE_PREFIX}list       - 列出所有客户端连接")
+    print(f"  {CONSOLE_PREFIX}say <msg>  - 向主客户端发送消息")
+    print(f"  {CONSOLE_PREFIX}cmd <cmd>  - 向主客户端发送命令")
+    print(f"  exit/quit  - 退出程序")
+
+
+def _console_status():
+    """显示服务器状态"""
+    uptime = int(time.time() - _start_time)
+    h, m, s = uptime // 3600, (uptime % 3600) // 60, uptime % 60
+    print(f"客户端连接数: {len(connections)}")
+    print(f"运行时间: {h}h {m}m {s}s")
+    print(f"WebSocket 端口: {wsConfig.get('port', 8800)}")
+    print(f"Web 管理端口: {wsConfig.get('web_port', 18888)}")
+
+
+def _console_list():
+    """列出所有连接"""
+    if not connections:
+        print("当前无客户端连接")
+        return
+    for i, conn in enumerate(connections, 1):
+        ip = conn.ws.remote_address[0] if conn.ws.remote_address else "unknown"
+        role = "主客户端" if conn is Current.client else "副客户端"
+        print(f"  {i}. {ip} ({role})")
+
+
+async def _dispatch_console_command(text):
+    """分发终端命令"""
+    text = text.strip()
+    if not text:
+        sys.stdout.write(CONSOLE_PROMPT)
+        sys.stdout.flush()
+        return
+
+    if text in ("exit", "quit"):
+        print("bye")
+        os._exit(0)
+
+    if not text.startswith(CONSOLE_PREFIX):
+        console_out(f"§7命令需以 {CONSOLE_PREFIX} 开头，输入 {CONSOLE_PREFIX}help 查看帮助")
+        return
+
+    cmd = text[len(CONSOLE_PREFIX):].strip()
+
+    if cmd in ("help", "h", "?"):
+        _console_help()
+    elif cmd in ("status", "info"):
+        _console_status()
+    elif cmd == "list":
+        _console_list()
+    elif cmd.startswith("say "):
+        msg = cmd[4:]
+        if Current.client:
+            Current.client.tell(msg)
+            console_out(f"§a已发送: §f{msg}")
+        else:
+            console_out("§c无客户端连接")
+    elif cmd.startswith("cmd "):
+        c = cmd[4:]
+        if Current.client:
+            await Current.client.runCommand(c)
+            console_out(f"§a已执行: §f{c}")
+        else:
+            console_out("§c无客户端连接")
+    else:
+        console_out(f"§c未知命令: §f{cmd}，输入 {CONSOLE_PREFIX}help 查看帮助")
+
+    sys.stdout.write(CONSOLE_PROMPT)
+    sys.stdout.flush()
+
+
 async def main():
     global server, _main_loop
     _main_loop = asyncio.get_running_loop()
@@ -586,6 +682,31 @@ async def main():
     await ServerModManager.load()
     await ClientModManager.load()
     shared.logger.info("服务器已启动")
+
+    # 启动终端交互式输入循环(独立线程,Windows 不支持 asyncio add_reader)
+    def on_line(text):
+        text = text.strip()
+        task = asyncio.ensure_future(_dispatch_console_command(text))
+        def _done(fut):
+            try:
+                fut.result()
+            except Exception as e:
+                console_out(f"§c错误: §f{e}")
+        task.add_done_callback(_done)
+
+    def stdin_loop():
+        while True:
+            try:
+                line = sys.stdin.readline()
+            except (EOFError, KeyboardInterrupt):
+                break
+            if not line:
+                break
+            _main_loop.call_soon_threadsafe(on_line, line.rstrip("\n"))
+
+    threading.Thread(target=stdin_loop, daemon=True).start()
+    sys.stdout.write(CONSOLE_PROMPT)
+    sys.stdout.flush()
 
     try:
         # 运行直到收到信号
