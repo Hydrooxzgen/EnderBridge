@@ -923,7 +923,7 @@ var MOD_REGISTRY = {
     ImageMod: { label: "图片", basePath: "image" }
   },
   server: {
-    read: { label: "读取 / 刷屏", config: "spam" }
+    chat: { label: "聊天 / 刷屏", config: "spam" }
   }
 };
 var ADVANCED_MODS = {
