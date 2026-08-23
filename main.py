@@ -306,14 +306,16 @@ if WANT_EXPORT:
                     continue
                 yield rel, os.path.join(dirpath, fname)
 
-    # 输出路径:默认上级目录 EnderBridge_export_<时间戳>.zip
+    # 输出路径:默认当前工作目录 EnderBridge_export_<时间戳>.zip
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    default_name = f"EnderBridge_export_{stamp}.zip"
     if len(sys.argv) > sys.argv.index("export") + 1:
         out = os.path.abspath(sys.argv[sys.argv.index("export") + 1])
+        # 若路径是目录或不以 .zip 结尾,自动在其下生成默认文件名
+        if os.path.isdir(out) or not out.lower().endswith(".zip"):
+            out = os.path.join(out, default_name)
     else:
-        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        out = os.path.abspath(
-            os.path.join(os.path.dirname(ROOT), f"EnderBridge_export_{stamp}.zip")
-        )
+        out = os.path.abspath(os.path.join(os.getcwd(), default_name))
 
     # 输出文件不能位于项目目录内,否则会把自己打进压缩包
     if out == ROOT or out.startswith(ROOT + os.sep):
