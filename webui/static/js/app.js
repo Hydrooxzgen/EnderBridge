@@ -53,7 +53,7 @@ function showPage(name) {
   document.querySelectorAll(".nav-item").forEach(function (el) {
     el.classList.toggle("active", el.getAttribute("data-page") === name);
   });
-  if (name === "dashboard") refreshStatus();
+  if (name === "dashboard") { refreshStatus(); loadReleaseNotes(); }
   if (name === "permissions") loadPermissions();
   if (name === "config") loadConfig();
   if (name === "mods") loadMods();
@@ -76,6 +76,7 @@ function enterApp(role) {
   applyRoleUI(role);
   showApp();
   refreshStatus();
+  loadReleaseNotes();
 }
 function applyRoleUI(role) {
   var isGuest = role === "guest";
@@ -147,6 +148,59 @@ function statCard(icon, val, label) {
 }
 function escapeHtml(s) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// ===== Release Notes =====
+function loadReleaseNotes() {
+  api("/release-notes").then(function (data) {
+    if (!data.ok) return;
+    var card = $("releaseNotesCard");
+    card.style.display = "";
+    if (!data.release) {
+      // 仓库暂无 Release
+      $("releaseTag").textContent = "";
+      $("releaseBody").innerHTML = '<span class="td-dim">' + escapeHtml(data.message || "暂无 Release Notes") + '</span>';
+      $("releaseLink").style.display = "none";
+      return;
+    }
+    var r = data.release;
+    $("releaseTag").textContent = r.tag ? ("(" + r.tag + ")") : "";
+    var body = r.body || "";
+    if (body.trim()) {
+      $("releaseBody").innerHTML = renderMarkdown(body);
+    } else {
+      $("releaseBody").innerHTML = '<span class="td-dim">无 Release Notes</span>';
+    }
+    if (r.html_url) {
+      $("releaseLink").href = r.html_url;
+      $("releaseLink").style.display = "";
+    }
+  }).catch(function () {});
+}
+// 轻量 Markdown 渲染器(支持常用语法)
+function renderMarkdown(md) {
+  var html = escapeHtml(md);
+  // 代码块(```...```)
+  html = html.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
+  // 行内代码
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+  // 标题 ### / ## / #
+  html = html.replace(/^### (.+)$/gm, '<h4>$1</h4>');
+  html = html.replace(/^## (.+)$/gm, '<h3>$1</h3>');
+  html = html.replace(/^# (.+)$/gm, '<h2>$1</h2>');
+  // 粗体/斜体
+  html = html.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+  html = html.replace(/\*(.+?)\*/g, '<i>$1</i>');
+  // 链接 [text](url)
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  // 无序列表
+  html = html.replace(/^[*-] (.+)$/gm, '<li>$1</li>');
+  html = html.replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>');
+  // 合并连续 ul
+  html = html.replace(/<\/ul>\s*<ul>/g, '');
+  // 换行
+  html = html.replace(/\n/g, '<br>');
+  return html;
 }
 
 // ===== 权限管理 =====

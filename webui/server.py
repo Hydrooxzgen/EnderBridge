@@ -2,7 +2,7 @@
 
 每次启动时随主程序启动,监听配置的 Web 端口,提供:
 - 前端页面(index.html + static/ 静态资源)
-- REST API:仪表盘状态 / 配置管理 / 权限管理 / Mod 管理
+- REST API:仪表盘状态 / 配置管理 / 权限管理 / Mod 管理 / Release Notes
 
 前端资源全部以独立文件存放于 static/ 目录(css/js/图片/字体等),
 不依赖 Python 内嵌模板,可自由使用任意前端技术(原生 JS / Vue 等)。
@@ -12,6 +12,7 @@ API 一览:
 - GET  /static/*                 静态资源(css/js/图片/字体,自动识别 MIME)
 - POST /api/auth                 登录校验(令牌正确→admin,错误→密码错误提示)
 - GET  /api/status               仪表盘状态(名称/端口/在线客户端/mod 等,无需鉴权)
+- GET  /api/release-notes        当前版本 Release Notes(GitHub API,无需鉴权)
 - GET  /api/config               读取可管理配置(仅 admin)
 - PUT  /api/config               保存可管理配置(写回 config.py,仅 admin)
 - GET  /api/permissions          读取权限配置(仅 admin)
@@ -35,6 +36,7 @@ import sys
 import threading
 import time
 import urllib.parse
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -43,6 +45,7 @@ STATIC_DIR = os.path.join(WEBUI_DIR, "static")
 CONFIG_PY = os.path.join(ROOT, "config.py")
 CONFIG_PY_BAK = os.path.join(ROOT, "config.py.bak")
 PERMISSION_JSON = os.path.join(ROOT, "permission.json")
+APP_VERSION = "b0.1.0"
 
 # 静态资源 MIME 类型(前端可自由使用 css/js/图片/字体等,甚至接入 Vue 等框架)
 _MIME_TYPES = {
@@ -83,6 +86,24 @@ def set_restart_handler(fn):
     """注入重启处理器:main.py 启动后调用,fn() 应发起服务器进程重启(不得阻塞请求线程)"""
     global _restart_handler
     _restart_handler = fn
+
+
+# 应用信息(main.py 注入):用于 Release Notes 获取
+_github_repo = ""    # e.g. "UserXYY123/EnderBridge"
+_app_version = APP_VERSION    # e.g. "b0.1.0"
+
+
+def set_app_info(github_repo: str, version: str) -> None:
+    """注入应用信息:main.py 启动后调用,提供 GitHub 仓库名与当前版本"""
+    global _github_repo, _app_version
+    _github_repo = github_repo
+    _app_version = version
+
+
+# Release Notes 缓存:避免每次请求都调 GitHub API
+_release_cache = None    # {"tag": str, "name": str, "body": str, "html_url": str, "published_at": str}
+_release_cache_time = 0  # 上次拉取时间戳
+_RELEASE_CACHE_TTL = 300  # 缓存有效期(秒)
 
 
 def _read_config_src() -> str:
@@ -467,6 +488,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if path == "/api/status":
             self._api_status()
             return
+        if path == "/api/release-notes":
+            self._api_release_notes()
+            return
         if path == "/api/config":
             self._api_get_config()
             return
@@ -595,8 +619,63 @@ class WebUIHandler(BaseHTTPRequestHandler):
             "webTokenSet": bool(str(webui.get("token", "") or "").strip()),
             "clients": extra.get("clients", 0),
             "uptime": extra.get("uptime", 0),
-            "version": "EnderBridge",
+            "version": _app_version or "EnderBridge",
         })
+
+    def _api_release_notes(self) -> None:
+        """从 GitHub API 获取当前版本的 Release Notes(带缓存,无需鉴权)"""
+        global _release_cache, _release_cache_time
+        now = time.time()
+
+        # 检查缓存是否有效
+        if _release_cache and (now - _release_cache_time) < _RELEASE_CACHE_TTL:
+            self._respond({"ok": True, "release": _release_cache})
+            return
+
+        if not _github_repo or not _app_version:
+            self._respond({"ok": False, "message": "未配置 GitHub 仓库信息"})
+            return
+
+        try:
+            # 尝试按 tag 查找当前版本的 Release
+            tag = _app_version
+            api_url = f"https://api.github.com/repos/{_github_repo}/releases/tags/{tag}"
+            req = urllib.request.Request(api_url, headers={
+                "Accept": "application/vnd.github.v3+json",
+                "User-Agent": f"EnderBridge/{_app_version}",
+            })
+            try:
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+            except urllib.error.HTTPError:
+                # tag 未找到,回退到 latest release
+                api_url = f"https://api.github.com/repos/{_github_repo}/releases/latest"
+                req = urllib.request.Request(api_url, headers={
+                    "Accept": "application/vnd.github.v3+json",
+                    "User-Agent": f"EnderBridge/{_app_version}",
+                })
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+
+            _release_cache = {
+                "tag": data.get("tag_name", ""),
+                "name": data.get("name", ""),
+                "body": data.get("body", ""),
+                "html_url": data.get("html_url", ""),
+                "published_at": data.get("published_at", ""),
+            }
+            _release_cache_time = now
+            self._respond({"ok": True, "release": _release_cache})
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                self._respond({"ok": True, "release": None, "message": "当前版本不是 Release 版"})
+            else:
+                self._respond({"ok": False, "message": f"GitHub API 错误: {e.code}"})
+        except Exception as e:
+            try:
+                self._respond({"ok": False, "message": f"获取 Release Notes 失败: {e}"})
+            except Exception:
+                pass  # 连接已断开,忽略写入失败
 
     def _api_get_config(self) -> None:
         if not _require_admin(self):

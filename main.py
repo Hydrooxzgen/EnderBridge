@@ -17,6 +17,8 @@ from uuid import uuid4
 ROOT = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PY = os.path.join(ROOT, "config.py")
 CONFIG_EXAMPLE = os.path.join(ROOT, "config.example.py")
+VERSION = "b0.1.0"
+GITHUB_REPO = "Hydrooxzgen/EnderBridge"  # You can edit this to your own repository if you fork it :)
 WANT_RESET = "--reset-all" in sys.argv
 WANT_EXPORT = "export" in sys.argv
 WANT_LOAD_WITHOUT_CONFIG = "--load-without-config" in sys.argv
@@ -194,12 +196,15 @@ if WANT_UPDATE:
         else:
             _update_err(f"不支持的压缩包格式: {archive}（仅支持 zip / tar.gz）")
 
-    def _do_update(archive):
+    def _do_update(archive, new_version=None):
         if not os.path.isfile(archive):
             _update_err(f"找不到压缩包: {archive}")
 
         print("========================================")
         print(f"  正在升级 EnderBridge ...")
+        print(f"  当前版本: {VERSION}")
+        if new_version:
+            print(f"  目标版本: {new_version}")
         print(f"  压缩包: {archive}")
         print("========================================")
 
@@ -245,7 +250,27 @@ if WANT_UPDATE:
                     copied += 1
             print(f"  已覆盖 {copied} 个文件")
 
-            # 5. 重新生成 requirements.txt 缺失依赖的自动安装由下次启动完成
+            # 5. 更新版本号
+            if new_version:
+                main_path = os.path.join(ROOT, "main.py")
+                try:
+                    with open(main_path, "r", encoding="utf-8") as f:
+                        src = f.read()
+                    new_src = re.sub(
+                        r'^VERSION\s*=\s*"[^"]*"',
+                        f'VERSION = "{new_version}"',
+                        src,
+                        count=1,
+                        flags=re.MULTILINE,
+                    )
+                    if new_src != src:
+                        with open(main_path, "w", encoding="utf-8") as f:
+                            f.write(new_src)
+                        print(f"  版本号已更新: {VERSION} → {new_version}")
+                except Exception as e:
+                    print(f"  警告: 版本号更新失败 ({e}),请手动修改 VERSION")
+
+            # 6. 重新生成 requirements.txt 缺失依赖的自动安装由下次启动完成
             print("========================================")
             print("  升级完成!")
             print("  已保留: config.py / permission.json 等设置与用户数据")
@@ -255,11 +280,238 @@ if WANT_UPDATE:
             shutil.rmtree(tmp, ignore_errors=True)
         sys.exit(0)
 
-    # update 后跟压缩包路径
-    if len(sys.argv) > sys.argv.index("update") + 1:
+    def _download_release(tag=None):
+        """从 GitHub Releases 下载压缩包,返回本地临时文件路径
+
+        Args:
+            tag: 版本标签(如 "b0.1.0"),None 表示最新版本
+        """
+        import urllib.request
+        import urllib.error
+
+        if tag:
+            api_url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/tags/{tag}"
+        else:
+            api_url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+
+        print(f"  正在查询 GitHub Releases ...")
+        print(f"  API: {api_url}")
+
+        # 1. 查询 release 信息
+        try:
+            req = urllib.request.Request(api_url, headers={"Accept": "application/vnd.github.v3+json"})
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                ver = tag or "latest"
+                _update_err(f"GitHub 上未找到版本 {ver}\n  仓库: {GITHUB_REPO}")
+            _update_err(f"查询 GitHub Releases 失败: {e}")
+        except Exception as e:
+            _update_err(f"网络请求失败: {e}")
+
+        release_tag = data.get("tag_name", "unknown")
+        release_name = data.get("name") or release_tag
+        print(f"  版本: {release_name} ({release_tag})")
+
+        # 2. 查找 zip 或 tar.gz 资源
+        assets = data.get("assets", [])
+        asset = None
+        for a in assets:
+            name = a.get("name", "").lower()
+            if name.endswith(".zip") or name.endswith((".tar.gz", ".tgz")):
+                asset = a
+                break
+
+        if not asset:
+            _update_err(f"版本 {release_tag} 中未找到 zip/tar.gz 压缩包资源")
+
+        download_url = asset["browser_download_url"]
+        asset_name = asset["name"]
+        print(f"  资源: {asset_name}")
+        print(f"  下载: {download_url}")
+
+        # 3. 下载到临时文件
+        tmp_fd, tmp_path = tempfile.mkstemp(suffix=os.path.splitext(asset_name)[1], prefix="enderbridge_dl_")
+        try:
+            print(f"  正在下载 ...")
+            req = urllib.request.Request(download_url)
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                total = int(resp.headers.get("Content-Length", 0))
+                downloaded = 0
+                with os.fdopen(tmp_fd, "wb") as f:
+                    tmp_fd = -1  # fdopen 会接管关闭
+                    while True:
+                        chunk = resp.read(8192)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        if total:
+                            pct = downloaded * 100 // total
+                            sys.stdout.write(f"\r  下载进度: {pct}% ({downloaded}/{total})")
+                            sys.stdout.flush()
+                if total:
+                    print()  # 换行
+            print(f"  下载完成: {tmp_path}")
+            return tmp_path
+        except Exception as e:
+            if tmp_fd >= 0:
+                os.close(tmp_fd)
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
+            _update_err(f"下载失败: {e}")
+
+    def _download_commit(ref=None):
+        """从 GitHub 下载指定 commit 的源码压缩包
+
+        Args:
+            ref: commit SHA 或分支名(如 "abc1234","HEAD","main"),None 表示默认分支最新
+        Returns:
+            (本地临时文件路径, 版本号字符串)
+        """
+        import urllib.request
+        import urllib.error
+
+        ref = ref or "HEAD"
+
+        # 1. 解析 ref → 获取 commit 信息
+        if ref.upper() == "HEAD" or ref == "":
+            # 获取默认分支最新 commit
+            api_url = f"https://api.github.com/repos/{GITHUB_REPO}/commits/HEAD"
+        else:
+            api_url = f"https://api.github.com/repos/{GITHUB_REPO}/commits/{ref}"
+
+        print(f"  正在查询 GitHub Commits ...")
+        print(f"  API: {api_url}")
+
+        try:
+            req = urllib.request.Request(api_url, headers={"Accept": "application/vnd.github.v3+json"})
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                commit_data = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                _update_err(f"GitHub 上未找到 commit: {ref}\n  仓库: {GITHUB_REPO}")
+            _update_err(f"查询 GitHub Commits 失败: {e}")
+        except Exception as e:
+            _update_err(f"网络请求失败: {e}")
+
+        sha = commit_data["sha"]
+        short_sha = sha[:7]
+        commit_msg = commit_data.get("commit", {}).get("message", "").split("\n")[0]
+        print(f"  Commit: {short_sha} - {commit_msg}")
+
+        # 2. 检查此 commit 是否有 tag
+        version = None
+        try:
+            tags_url = f"https://api.github.com/repos/{GITHUB_REPO}/tags"
+            req = urllib.request.Request(tags_url, headers={"Accept": "application/vnd.github.v3+json"})
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                tags = json.loads(resp.read().decode("utf-8"))
+            for tag in tags:
+                tag_sha = tag.get("commit", {}).get("sha", "")
+                if tag_sha == sha:
+                    version = tag["name"]
+                    print(f"  已关联 Tag: {version}")
+                    break
+        except Exception:
+            pass
+
+        if not version:
+            version = short_sha
+            print(f"  无关联 Tag,使用 Commit ID: {version}")
+
+        # 3. 下载源码压缩包(zipball)
+        download_url = f"https://api.github.com/repos/{GITHUB_REPO}/zipball/{sha}"
+        print(f"  下载: {download_url}")
+
+        tmp_fd, tmp_path = tempfile.mkstemp(suffix=".zip", prefix="enderbridge_commit_")
+        try:
+            print(f"  正在下载 ...")
+            req = urllib.request.Request(download_url, headers={"Accept": "application/vnd.github.v3+json"})
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                total = int(resp.headers.get("Content-Length", 0))
+                downloaded = 0
+                with os.fdopen(tmp_fd, "wb") as f:
+                    tmp_fd = -1
+                    while True:
+                        chunk = resp.read(8192)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        if total:
+                            pct = downloaded * 100 // total
+                            sys.stdout.write(f"\r  下载进度: {pct}% ({downloaded}/{total})")
+                            sys.stdout.flush()
+                if total:
+                    print()
+            print(f"  下载完成: {tmp_path}")
+            return tmp_path, version
+        except Exception as e:
+            if tmp_fd >= 0:
+                os.close(tmp_fd)
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
+            _update_err(f"下载失败: {e}")
+
+    # update 命令解析
+    if "--local" in sys.argv:
+        # 本地更新:py main.py update --local <压缩包>
+        idx = sys.argv.index("--local")
+        if len(sys.argv) > idx + 1:
+            _do_update(sys.argv[idx + 1])
+        else:
+            _update_err("用法: python main.py update --local <新版本压缩包路径>")
+    elif "--online" in sys.argv:
+        idx = sys.argv.index("--online")
+        rest = sys.argv[idx + 1:]
+
+        if rest and rest[0].lower() == "commit":
+            # commit 模式:py main.py update --online commit [HEAD|commitID]
+            ref = rest[1] if len(rest) > 1 else None
+            dl_path, new_ver = _download_commit(ref)
+            try:
+                _do_update(dl_path, new_version=new_ver)
+            finally:
+                try:
+                    os.unlink(dl_path)
+                except Exception:
+                    pass
+        else:
+            # release 模式:py main.py update --online [release] [版本号]
+            tag = None
+            if rest:
+                if rest[0].lower() == "release":
+                    if len(rest) > 1:
+                        tag = rest[1]
+                else:
+                    tag = rest[0]
+            dl_path = _download_release(tag)
+            try:
+                _do_update(dl_path, new_version=tag)
+            finally:
+                try:
+                    os.unlink(dl_path)
+                except Exception:
+                    pass
+    elif len(sys.argv) > sys.argv.index("update") + 1:
+        # 无标志但有参数:py main.py update <压缩包> → 当作 --local
         _do_update(sys.argv[sys.argv.index("update") + 1])
     else:
-        _update_err("用法: python main.py update <新版本压缩包路径>")
+        # 无参数:默认从 GitHub 下载最新 release
+        dl_path = _download_release()
+        try:
+            _do_update(dl_path)
+        finally:
+            try:
+                os.unlink(dl_path)
+            except Exception:
+                pass
 
 # ===== 一键导出:python main.py export [输出路径] =====
 # 将项目代码打包为 zip(排除用户数据/设置,与 update 命令的保留规则对称),
@@ -536,9 +788,10 @@ def _webui_status() -> dict:
 def _start_webui() -> None:
     """启动 Web 管理界面(每次启动都监听配置的 Web 端口)"""
     try:
-        from webui.server import set_restart_handler, set_status_provider, start_webui
+        from webui.server import set_app_info, set_restart_handler, set_status_provider, start_webui
         set_status_provider(_webui_status)
         set_restart_handler(_request_restart)
+        set_app_info(GITHUB_REPO, VERSION)
         start_webui()
     except Exception as error:
         shared.logger.warning(f"Web 管理界面启动失败: {error}")

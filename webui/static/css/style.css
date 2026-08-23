@@ -267,6 +267,36 @@ button { font-family: inherit; }
 }
 .tab-split .chip-tab.active { background: linear-gradient(90deg, #6366f1, #8b5cf6); color: #fff; }
 
+/* Release Notes */
+.release-body {
+  font-size: 13px; color: var(--text-dim); line-height: 1.8;
+  max-height: 320px; overflow-y: auto;
+  padding-right: 8px;
+}
+.release-body::-webkit-scrollbar { width: 4px; }
+.release-body::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.25); border-radius: 4px; }
+.release-body h2, .release-body h3, .release-body h4 {
+  color: var(--text); font-size: 14px; margin: 12px 0 6px;
+}
+.release-body pre {
+  background: rgba(15,23,42,0.6); border-radius: 8px;
+  padding: 10px 14px; margin: 8px 0; overflow-x: auto;
+  font-size: 12px; line-height: 1.5;
+}
+.release-body code {
+  background: rgba(15,23,42,0.5); padding: 1px 5px; border-radius: 4px;
+  font-size: 12px; font-family: "Cascadia Code", "Consolas", monospace;
+}
+.release-body pre code { background: none; padding: 0; }
+.release-body ul { margin: 4px 0 4px 20px; }
+.release-body li { margin-bottom: 2px; }
+.release-body a { color: var(--accent); }
+.release-link {
+  display: inline-block; margin-top: 10px; font-size: 13px;
+  color: var(--accent); text-decoration: none;
+}
+.release-link:hover { text-decoration: underline; }
+
 @media (max-width: 760px) {
   .sidebar { width: 64px; padding: 16px 8px; }
   .sidebar .brand .name, .sidebar .brand .ver, .sidebar .brand .try-modloader, .nav-item span, .sidebar .logout span { display: none; }
