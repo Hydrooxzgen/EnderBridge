@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EnderBridge Web 管理 - 登录</title>
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<div id="loginView" class="show">
+  <div class="login-card">
+    <div class="logo">⛏️</div>
+    <h1>EnderBridge Web 管理</h1>
+    <p class="sub">请输入管理令牌以继续</p>
+    <label for="tokenInput">管理令牌</label>
+    <input id="tokenInput" type="password" placeholder="请输入令牌" autocomplete="off">
+    <button id="loginBtn" type="button">登 录</button>
+    <button id="guestBtn" type="button" class="guest-btn">以访客身份浏览 (Guest)</button>
+    <div class="login-msg" id="loginMsg"></div>
+    <div class="login-hint">令牌在 config.py 的 webuiConfig.token 中设置。<br>令牌正确:开放全部管理权限;令牌错误:提示密码错误;或点击下方按钮以访客身份浏览(仅仪表盘 / Mod 列表)。</div>
+  </div>
+</div>
+<div id="toast"></div>
+<script src="/static/js/app.js"></script>
+<script>
+(function() {
+  var role = sessionStorage.getItem(ROLE_KEY) || "";
+  if (role === "guest" || (role === "admin" && sessionStorage.getItem(TOKEN_KEY))) {
+    location.href = "/dashboard"; return;
+  }
+  $("loginBtn").addEventListener("click", doLogin);
+  $("guestBtn").addEventListener("click", function() {
+    sessionStorage.removeItem(TOKEN_KEY);
+    sessionStorage.setItem(ROLE_KEY, "guest");
+    location.href = "/dashboard";
+  });
+  $("tokenInput").addEventListener("keydown", function(e) { if (e.key === "Enter") doLogin(); });
+  function doLogin() {
+    var token = $("tokenInput").value.trim();
+    sessionStorage.setItem(TOKEN_KEY, token);
+    api("/auth", { method: "POST", body: JSON.stringify({ token: token }) })
+      .then(function(data) {
+        if (data.ok && data.role === "admin") {
+          sessionStorage.setItem(ROLE_KEY, "admin");
+          location.href = "/dashboard";
+        } else {
+          sessionStorage.removeItem(TOKEN_KEY);
+          $("loginMsg").textContent = data.message || "密码错误";
+        }
+      }).catch(function() { $("loginMsg").textContent = "无法连接服务器"; });
+  }
+})();
+</script>
+</body>
+</html>

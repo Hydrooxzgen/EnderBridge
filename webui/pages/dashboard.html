@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EnderBridge - 仪表盘</title>
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<aside class="sidebar">
+  <div class="brand">
+    <span class="logo">⛏️</span>
+    <div>
+      <div class="name" id="srvName">EnderBridge</div>
+      <div class="ver" id="srvVer">Web 管理</div>
+      <div class="try-modloader">Also try ModLoader!</div>
+    </div>
+  </div>
+  <div class="nav-item" data-page="dashboard"><span>📊</span><span>仪表盘</span></div>
+  <div class="nav-item" data-page="permissions"><span>👥</span><span>权限管理</span></div>
+  <div class="nav-item" data-page="config"><span>⚙️</span><span>功能设置</span></div>
+  <div class="nav-item" data-page="mods"><span>🧩</span><span>Mod 管理</span></div>
+  <div class="nav-item" data-page="update"><span>🔄</span><span>检查更新</span></div>
+  <div class="spacer"></div>
+  <div class="guest-badge" id="guestBadge">👤 访客模式</div>
+  <div class="nav-item hidden" id="adminLoginBtn"><span>🔑</span><span>管理员登录</span></div>
+  <div class="logout" id="logoutBtn"><span>🚪</span><span>退出登录</span></div>
+</aside>
+<div class="main">
+  <h2>📊 仪表盘</h2>
+  <div class="stat-grid" id="statGrid"></div>
+  <div class="card card-gap">
+    <h3>🔄 服务器控制</h3>
+    <div class="row gap-10">
+      <button class="btn btn-danger" id="restartBtn">♻️ 一键重启服务器</button>
+    </div>
+    <p class="hint">优雅关闭后自动以相同参数重启进程;重启期间本页面将暂时无法访问,服务器恢复后自动刷新。</p>
+  </div>
+  <div class="card card-gap">
+    <h3>ℹ️ 说明</h3>
+    <p class="desc">
+      此页面用于在浏览器中管理 EnderBridge 服务器。<br>
+      · <b>权限管理</b>：增删 owner / op / user / blocker 玩家列表<br>
+      · <b>功能设置</b>：开关 QQ 桥接、音乐打击乐、限流等,以及 Web 端口与令牌<br>
+      · <b>Mod 管理</b>：查看客户端/服务端 Mod 加载配置,一键重载服务端 Mod<br>
+      <span class="muted">注意:功能设置的修改需重启服务器后完全生效。</span>
+    </p>
+  </div>
+  <div class="card card-gap" id="releaseNotesCard" style="display:none;">
+    <h3>📝 Release Notes <span id="releaseTag" class="td-dim"></span></h3>
+    <div id="releaseBody" class="release-body"></div>
+    <a id="releaseLink" href="#" target="_blank" class="release-link" style="display:none;">在 GitHub 上查看 →</a>
+  </div>
+</div>
+<div id="toast"></div>
+<script src="/static/js/app.js"></script>
+<script src="/static/js/dashboard.js"></script>
+</body>
+</html>

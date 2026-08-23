@@ -235,6 +235,8 @@ RULES = [
     {"key": "Web 管理启用", "apply": make_rule(re.compile(r'"enabled": (True|False)(?=,\s*\n\s*"port": 18888)'), lambda f: f'"enabled": {_bool(f["webuiEnabled"])}')},
     {"key": "Web 管理端口", "apply": make_rule('"port": 18888', lambda f: f'"port": {_num(f["webuiPort"])}')},
     {"key": "Web 管理令牌", "apply": make_rule('"token": ""', lambda f: f'"token": {_json(f["webuiToken"])}')},
+    # GitHub API Token:匹配模板中的 githubToken 行
+    {"key": "GitHub Token", "apply": make_rule('githubToken = ""', lambda f: f'githubToken = {_json(f["githubToken"])}')},
     # 注意:config.py 不包含 isFirstRun 标记(判定仅存在于模板 config.example.py)
 ]
 
@@ -344,6 +346,7 @@ def load_defaults() -> dict:
         "webuiEnabled": _get(cfg, "webuiConfig", "enabled", default=True),
         "webuiPort": _get(cfg, "webuiConfig", "port", default=18888),
         "webuiToken": _get(cfg, "webuiConfig", "token", default=""),
+        "githubToken": cfg.get("githubToken", ""),
         "clientMods": client_mods,
         "serverMods": server_mods,
         "advancedMods": advanced_mods,
@@ -875,6 +878,9 @@ button[type=submit]:disabled { opacity: 0.7; cursor: wait; transform: none; }
             </div>
             <p class="hint">每次启动时监听该端口，可在浏览器中管理权限、功能开关与仪表盘。</p>
           </div>
+          <label for="githubToken">GitHub API Token（可选）</label>
+          <input id="githubToken" name="githubToken" type="password" autocomplete="off" placeholder="ghp_... 或留空">
+          <p class="hint">用于减少 GitHub API 速率限制。在 <a href="https://github.com/settings/tokens" target="_blank" style="color:#818cf8">github.com/settings/tokens</a> 创建，只需 public_repo 读取权限。⚠️ 请勿泄露此 Token。</p>
           <div class="grid">
             <div><label for="sapiGmsg">SAPI 群聊指令</label><input id="sapiGmsg" name="sapiGmsg" type="text"></div>
             <div><label for="sapiSmsg">SAPI 私聊指令</label><input id="sapiSmsg" name="sapiSmsg" type="text"></div>
@@ -1062,6 +1068,7 @@ function fill() {
   $("webuiEnabled").checked = DEFAULTS.webuiEnabled !== false;
   $("webuiPort").value = DEFAULTS.webuiPort;
   $("webuiToken").value = DEFAULTS.webuiToken;
+  $("githubToken").value = DEFAULTS.githubToken || "";
   $("owner").value = DEFAULTS.owner;
   $("op").value = (DEFAULTS.op || []).join(", ");
   $("user").value = (DEFAULTS.user || []).join(", ");
@@ -1114,6 +1121,7 @@ document.getElementById("cfg").addEventListener("submit", function (e) {
     webuiEnabled: $("webuiEnabled").checked,
     webuiPort: parseInt($("webuiPort").value, 10),
     webuiToken: $("webuiToken").value.trim(),
+    githubToken: $("githubToken").value.trim(),
     owner: $("owner").value.trim(),
     op: $("op").value,
     user: $("user").value,

@@ -17,13 +17,14 @@ body {
   background: radial-gradient(1200px 800px at 20% -10%, #1e1b4b 0%, #0f172a 55%, #0b1120 100%);
   color: var(--text);
   min-height: 100vh;
+  display: flex;
 }
 a { color: var(--accent); text-decoration: none; }
 button { font-family: inherit; }
 
 /* ===== 登录页 ===== */
 #loginView {
-  min-height: 100vh; display: none;
+  min-height: 100vh; width: 100%; display: none;
   align-items: center; justify-content: center; padding: 24px;
 }
 #loginView.show { display: flex; }
@@ -297,6 +298,46 @@ button { font-family: inherit; }
 }
 .release-link:hover { text-decoration: underline; }
 
+/* 更新页面 */
+.release-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 6px;
+  font-size: 11px; font-weight: 700; vertical-align: middle;
+}
+.badge-prerelease { background: rgba(234,179,8,0.2); color: #eab308; border: 1px solid rgba(234,179,8,0.3); }
+.badge-stable { background: rgba(16,185,129,0.2); color: #10b981; border: 1px solid rgba(16,185,129,0.3); }
+.badge-current { background: rgba(99,102,241,0.2); color: #818cf8; border: 1px solid rgba(99,102,241,0.3); }
+.update-msg {
+  padding: 8px 12px; border-radius: 8px; font-size: 13px; margin-top: 8px;
+}
+.update-msg.ok { background: rgba(16,185,129,0.12); color: #10b981; }
+.update-msg.warn { background: rgba(234,179,8,0.12); color: #eab308; }
+.update-msg.err { background: rgba(244,63,94,0.12); color: #f43f5e; }
+.update-msg.info { background: rgba(99,102,241,0.12); color: #818cf8; }
+.update-current-ver { font-size: 13px; color: var(--text-dim); margin-bottom: 8px; }
+.update-current-ver code { color: var(--accent); font-weight: 700; }
+.update-latest-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.update-latest-name { font-size: 14px; }
+.release-item {
+  background: var(--card); border: 1px solid var(--card-border); border-radius: 12px;
+  padding: 16px; margin-bottom: 12px;
+}
+.release-item-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.release-item-title { font-size: 14px; display: flex; align-items: center; gap: 6px; }
+.release-item-meta { font-size: 12px; }
+.release-item-body { font-size: 13px; color: var(--text-dim); line-height: 1.7; max-height: 120px; overflow-y: auto; }
+.release-item-foot { margin-top: 10px; display: flex; align-items: center; gap: 10px; }
+.release-install-btn { font-size: 12px; }
+/* ===== 多页面架构 ===== */
+.app-layout { display: flex; min-height: 100vh; }
+.login-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  display: none; align-items: center; justify-content: center;
+  padding: 24px; z-index: 999;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(6px);
+}
+.login-overlay.show { display: flex; }
+a.nav-item { text-decoration: none; }
 @media (max-width: 760px) {
   .sidebar { width: 64px; padding: 16px 8px; }
   .sidebar .brand .name, .sidebar .brand .ver, .sidebar .brand .try-modloader, .nav-item span, .sidebar .logout span { display: none; }

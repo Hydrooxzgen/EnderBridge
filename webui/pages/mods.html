@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EnderBridge - Mod 管理</title>
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<aside class="sidebar">
+  <div class="brand">
+    <span class="logo">⛏️</span>
+    <div>
+      <div class="name" id="srvName">EnderBridge</div>
+      <div class="ver">Web 管理</div>
+    </div>
+  </div>
+  <div class="nav-item" data-page="dashboard"><span>📊</span><span>仪表盘</span></div>
+  <div class="nav-item" data-page="permissions"><span>👥</span><span>权限管理</span></div>
+  <div class="nav-item" data-page="config"><span>⚙️</span><span>功能设置</span></div>
+  <div class="nav-item" data-page="mods"><span>🧩</span><span>Mod 管理</span></div>
+  <div class="nav-item" data-page="update"><span>🔄</span><span>检查更新</span></div>
+  <div class="spacer"></div>
+  <div class="guest-badge" id="guestBadge">👤 访客模式</div>
+  <div class="nav-item hidden" id="adminLoginBtn"><span>🔑</span><span>管理员登录</span></div>
+  <div class="logout" id="logoutBtn"><span>🚪</span><span>退出登录</span></div>
+</aside>
+<div class="main">
+  <h2>🧩 Mod 管理</h2>
+  <div class="card card-gap">
+    <div class="row" style="justify-content:space-between;align-items:center;">
+      <div style="font-weight:600">客户端 Mods</div>
+      <button class="btn btn-sm" id="modRefresh">🔄 刷新</button>
+    </div>
+    <table class="perm-table" style="margin-top:8px">
+      <thead><tr><th>Mod 名称</th><th>文件路径</th><th>状态</th></tr></thead>
+      <tbody id="modBodyClient"><tr><td colspan="3" class="td-faint">加载中...</td></tr></tbody>
+    </table>
+  </div>
+  <div class="card card-gap">
+    <div class="row" style="justify-content:space-between;align-items:center;">
+      <div style="font-weight:600">服务端 Mods</div>
+      <button class="btn btn-danger btn-sm" id="modReloadAll">♻️ 重载所有 Mod（含热更新）</button>
+    </div>
+    <div class="hint">重载所有服务端 Mod，执行服务端重载期间游戏内可能产生延迟。</div>
+    <table class="perm-table" style="margin-top:8px">
+      <thead><tr><th>Mod 名称</th><th>文件路径</th><th>状态</th></tr></thead>
+      <tbody id="modBodyServer"><tr><td colspan="3" class="td-faint">加载中...</td></tr></tbody>
+    </table>
+  </div>
+</div>
+<div id="toast"></div>
+<script src="/static/js/app.js"></script>
+<script src="/static/js/mods.js"></script>
+</body>
+</html>

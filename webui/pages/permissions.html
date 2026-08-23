@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EnderBridge - 权限管理</title>
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<aside class="sidebar">
+  <div class="brand">
+    <span class="logo">⛏️</span>
+    <div>
+      <div class="name" id="srvName">EnderBridge</div>
+      <div class="ver">Web 管理</div>
+    </div>
+  </div>
+  <div class="nav-item" data-page="dashboard"><span>📊</span><span>仪表盘</span></div>
+  <div class="nav-item" data-page="permissions"><span>👥</span><span>权限管理</span></div>
+  <div class="nav-item" data-page="config"><span>⚙️</span><span>功能设置</span></div>
+  <div class="nav-item" data-page="mods"><span>🧩</span><span>Mod 管理</span></div>
+  <div class="nav-item" data-page="update"><span>🔄</span><span>检查更新</span></div>
+  <div class="spacer"></div>
+  <div class="guest-badge" id="guestBadge">👤 访客模式</div>
+  <div class="nav-item hidden" id="adminLoginBtn"><span>🔑</span><span>管理员登录</span></div>
+  <div class="logout" id="logoutBtn"><span>🚪</span><span>退出登录</span></div>
+</aside>
+<div class="main">
+  <h2>👥 权限管理</h2>
+  <div class="card card-gap">
+    <div class="row" style="justify-content:space-between;align-items:center;">
+      <div style="font-weight:600">⚙️ 玩家权限列表</div>
+      <div class="row gap-10">
+        <button class="btn btn-sm" id="permReload">🔄 刷新</button>
+        <button class="btn btn-primary btn-sm" id="permSave">💾 保存修改到服务器</button>
+      </div>
+    </div>
+    <div class="muted" style="margin:6px 0 12px">
+      添加或移除玩家后请<b>保存修改</b>。owner 仅可在下方单独修改。
+    </div>
+    <div class="perm-group" style="margin-bottom:12px">
+      <label style="font-weight:600;margin-bottom:4px;display:block;">👑 Owner（唯一拥有者）</label>
+      <input id="perm-owner" class="input" placeholder="YourXboxName" />
+    </div>
+    <div class="perm-group" data-group="op">
+      <label>🛡️ OP 管理员</label>
+      <div class="row gap-10" style="margin:6px 0 10px">
+        <input id="input-op" class="input" placeholder="输入玩家名添加 OP" style="flex:1" />
+        <button class="btn btn-primary btn-sm" data-group="op">添加</button>
+        <span class="muted" id="count-op"></span>
+      </div>
+      <div class="chips" id="chips-op"></div>
+    </div>
+    <div class="perm-group" data-group="user">
+      <label>👤 User 普通用户</label>
+      <div class="row gap-10" style="margin:6px 0 10px">
+        <input id="input-user" class="input" placeholder="输入玩家名添加 User" style="flex:1" />
+        <button class="btn btn-primary btn-sm" data-group="user">添加</button>
+        <span class="muted" id="count-user"></span>
+      </div>
+      <div class="chips" id="chips-user"></div>
+    </div>
+    <div class="perm-group" data-group="blocker">
+      <label>🚫 Blocker 屏蔽名单</label>
+      <div class="row gap-10" style="margin:6px 0 10px">
+        <input id="input-blocker" class="input" placeholder="输入玩家名添加 Blocker" style="flex:1" />
+        <button class="btn btn-primary btn-sm" data-group="blocker">添加</button>
+        <span class="muted" id="count-blocker"></span>
+      </div>
+      <div class="chips" id="chips-blocker"></div>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+<script src="/static/js/app.js"></script>
+<script src="/static/js/permissions.js"></script>
+</body>
+</html>

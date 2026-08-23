@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EnderBridge - 功能设置</title>
+<link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+<aside class="sidebar">
+  <div class="brand">
+    <span class="logo">⛏️</span>
+    <div>
+      <div class="name" id="srvName">EnderBridge</div>
+      <div class="ver">Web 管理</div>
+    </div>
+  </div>
+  <div class="nav-item" data-page="dashboard"><span>📊</span><span>仪表盘</span></div>
+  <div class="nav-item" data-page="permissions"><span>👥</span><span>权限管理</span></div>
+  <div class="nav-item" data-page="config"><span>⚙️</span><span>功能设置</span></div>
+  <div class="nav-item" data-page="mods"><span>🧩</span><span>Mod 管理</span></div>
+  <div class="nav-item" data-page="update"><span>🔄</span><span>检查更新</span></div>
+  <div class="spacer"></div>
+  <div class="guest-badge" id="guestBadge">👤 访客模式</div>
+  <div class="nav-item hidden" id="adminLoginBtn"><span>🔑</span><span>管理员登录</span></div>
+  <div class="logout" id="logoutBtn"><span>🚪</span><span>退出登录</span></div>
+</aside>
+<div class="main">
+  <h2>⚙️ 功能设置</h2>
+
+  <div class="row" style="justify-content:flex-end;margin-bottom:8px">
+    <button class="btn btn-primary" id="configSave">💾 保存并覆盖 config.py</button>
+  </div>
+
+  <div class="card card-gap">
+    <h3>服务器基础</h3>
+    <div class="field">
+      <label>服务器显示名 (config['name'])</label>
+      <input id="cfg-name" class="input" />
+    </div>
+    <div class="row gap-10" style="flex-wrap:wrap">
+      <div class="field" style="min-width:160px">
+        <label>WebSocket 端口 (config['port'])</label>
+        <input id="cfg-port" class="input" type="number" />
+      </div>
+      <div class="field" style="min-width:120px">
+        <label>命令前缀 (config['commandPrefix'])</label>
+        <input id="cfg-prefix" class="input" />
+      </div>
+      <div class="field" style="min-width:140px">
+        <label>日志级别</label>
+        <select id="cfg-loglevel" class="input">
+          <option value="debug">debug</option>
+          <option value="info">info</option>
+          <option value="warning">warning</option>
+          <option value="error">error</option>
+          <option value="none">none</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="card card-gap" id="cfgCardMusic">
+    <h3>🎵 音乐 (Music)</h3>
+    <label class="switch-row">
+      <label class="switch"><input type="checkbox" id="cfg-percussion"><span class="track"></span></label>
+      <span class="switch-label">默认启用打击乐器 (features.music.playPercussion)</span>
+    </label>
+    <p class="hint">启用后新加入的玩家默认开启打击乐器收听。</p>
+  </div>
+
+  <div class="card card-gap" id="cfgCardTool">
+    <h3>🔧 Tool</h3>
+    <p class="muted" style="margin:0">Tool 模块默认启用,无额外配置项。</p>
+  </div>
+
+  <div class="card card-gap" id="cfgCardAi">
+    <h3>🤖 AI 对话 (chat) 配置</h3>
+    <div class="row gap-10" style="flex-wrap:wrap">
+      <div class="field" style="min-width:200px">
+        <label>API Base URL (ai.baseURL)</label>
+        <input id="cfg-aibase" class="input" placeholder="https://api.deepseek.com" />
+      </div>
+      <div class="field" style="min-width:180px">
+        <label>API Key (ai.apiKey)</label>
+        <input id="cfg-aikey" class="input" type="password" placeholder="sk-..." />
+      </div>
+    </div>
+    <div class="row gap-10" style="flex-wrap:wrap">
+      <div class="field" style="min-width:160px">
+        <label>chatModel</label>
+        <input id="cfg-aichatmodel" class="input" placeholder="deepseek-chat" />
+      </div>
+      <div class="field" style="min-width:140px">
+        <label>chatMaxTokens</label>
+        <input id="cfg-aichattokens" class="input" type="number" />
+      </div>
+      <div class="field" style="min-width:140px">
+        <label>chatCooldown (ms)</label>
+        <input id="cfg-aicooldown" class="input" type="number" />
+      </div>
+    </div>
+    <div class="field">
+      <label>chatPrompt（系统提示词,多行）</label>
+      <textarea id="cfg-aichatprompt" rows="4" style="width:100%"></textarea>
+    </div>
+    <div class="row gap-10" style="flex-wrap:wrap">
+      <div class="field" style="min-width:160px">
+        <label>cmdModel</label>
+        <input id="cfg-aicmdmodel" class="input" placeholder="deepseek-chat" />
+      </div>
+      <div class="field" style="min-width:140px">
+        <label>cmdMaxTokens</label>
+        <input id="cfg-aicmdtokens" class="input" type="number" />
+      </div>
+    </div>
+    <div class="field">
+      <label>cmdPrompt（命令提示词,多行）</label>
+      <textarea id="cfg-aicmdprompt" rows="4" style="width:100%"></textarea>
+    </div>
+  </div>
+
+  <div class="card card-gap">
+    <h3>🧩 Mod 开关</h3>
+    <p class="hint">勾选启用对应 Mod，取消勾选禁用。修改后需重启服务器生效。</p>
+    <div style="margin-bottom:8px;font-weight:600">客户端 Mods</div>
+    <div id="modClientBox"></div>
+    <div style="margin:12px 0 8px;font-weight:600">服务端 Mods</div>
+    <div id="modServerBox"></div>
+  </div>
+
+  <div class="card card-gap">
+    <h3>🔗 Utils / SAPI / Path</h3>
+    <label class="switch-row">
+      <label class="switch"><input type="checkbox" id="cfg-tellall"><span class="track"></span></label>
+      <span class="switch-label">tellAllToTell（启用时仅转发 Tell 相关）</span>
+    </label>
+    <label class="switch-row">
+      <label class="switch"><input type="checkbox" id="cfg-polling"><span class="track"></span></label>
+      <span class="switch-label">enablePolling（仅 Windows 默认开启）</span>
+    </label>
+    <div class="row gap-10" style="flex-wrap:wrap;margin-top:10px">
+      <div class="field" style="min-width:120px">
+        <label>SAPI gmsg</label>
+        <input id="cfg-gmsg" class="input" />
+      </div>
+      <div class="field" style="min-width:120px">
+        <label>SAPI smsg</label>
+        <input id="cfg-smsg" class="input" />
+      </div>
+    </div>
+    <div class="row gap-10" style="flex-wrap:wrap;margin-top:10px">
+      <div class="field" style="min-width:180px">
+        <label>🎵 music 路径 (basePath.music)</label>
+        <input id="cfg-path-music" class="input" placeholder="留空则使用默认 resources/midi" />
+      </div>
+      <div class="field" style="min-width:180px">
+        <label>⌨️ mcfunc 路径 (basePath.mcfunc)</label>
+        <input id="cfg-path-mcfunc" class="input" placeholder="留空则使用默认 resources/mcfunc" />
+      </div>
+    </div>
+    <div class="row gap-10" style="flex-wrap:wrap;margin-top:10px">
+      <div class="field" style="min-width:180px">
+        <label>🧱 ezmatic 路径 (basePath.ezmatic)</label>
+        <input id="cfg-path-ezmatic" class="input" placeholder="留空则使用默认 resources/ezmatic" />
+      </div>
+      <div class="field" style="min-width:180px">
+        <label>🖼️ image 路径 (basePath.image)</label>
+        <input id="cfg-path-image" class="input" placeholder="留空则使用默认 resources/pictures" />
+      </div>
+    </div>
+  </div>
+
+  <div class="card card-gap" id="cfgCardSpam">
+    <h3>📢 刷屏 (Spam)</h3>
+    <div class="field">
+      <label>攻击消息 (config['spam']['attack'])</label>
+      <input id="cfg-spamattack" class="input" placeholder='例如：§eThis server is bought you by mcfox.top' />
+      <p class="hint">若留空则禁用广告刷屏命令 (spam attack)。此命令绕过 SPAM 频率限制且无次数上限。</p>
+    </div>
+    <div class="field">
+      <label>广告内容 (config['spam']['ad'], 每行一条)</label>
+      <textarea id="cfg-spamad" rows="4" style="width:100%" placeholder="每行一条广告内容"></textarea>
+    </div>
+    <div class="field" style="max-width:220px">
+      <label>广告间隔 (spam.adInterval, 毫秒)</label>
+      <input id="cfg-spaminterval" class="input" type="number" placeholder="10000" />
+    </div>
+  </div>
+
+  <div class="card card-gap" id="cfgCardQq">
+    <h3>💬 QQ 桥接 (features.qq)</h3>
+    <label class="switch-row">
+      <label class="switch"><input type="checkbox" id="cfg-qq"><span class="track"></span></label>
+      <span class="switch-label">启用 QQ 桥接 (features.qq.enabled)</span>
+    </label>
+    <div class="sub-fields show" id="qqFields">
+      <div class="row gap-10" style="flex-wrap:wrap">
+        <div class="field" style="min-width:140px">
+          <label>QQ 群号 (groupId)</label>
+          <input id="cfg-qqgroup" class="input" type="number" />
+        </div>
+        <div class="field" style="min-width:120px">
+          <label>端口 (port)</label>
+          <input id="cfg-qqport" class="input" type="number" />
+        </div>
+      </div>
+      <div class="row gap-10" style="flex-wrap:wrap">
+        <div class="field" style="min-width:140px">
+          <label>Host</label>
+          <input id="cfg-qqhost" class="input" placeholder="127.0.0.1" />
+        </div>
+        <div class="field" style="min-width:180px">
+          <label>Access Token (accessToken)</label>
+          <input id="cfg-qqtoken" class="input" />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card card-gap" id="cfgCardRateLimit">
+    <h3>⏱️ 限流 (rateLimit.command)</h3>
+    <label class="switch-row">
+      <label class="switch"><input type="checkbox" id="cfg-ratelimit"><span class="track"></span></label>
+      <span class="switch-label">启用命令限流 (rateLimit.command.enabled)</span>
+    </label>
+    <div class="sub-fields show" id="rlFields">
+      <div class="row gap-10" style="flex-wrap:wrap">
+        <div class="field" style="min-width:140px">
+          <label>窗口时长 (windowMs, 毫秒)</label>
+          <input id="cfg-rlwindow" class="input" type="number" />
+        </div>
+        <div class="field" style="min-width:140px">
+          <label>单窗口最大次数 (maxPerWindow)</label>
+          <input id="cfg-rlmax" class="input" type="number" />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card card-gap" id="cfgCardWebui">
+    <h3>🌐 Web 管理端 (webui)</h3>
+    <label class="switch-row">
+      <label class="switch"><input type="checkbox" id="cfg-webui"><span class="track"></span></label>
+      <span class="switch-label">启用 Web 管理界面 (webui.enabled)</span>
+    </label>
+    <div class="sub-fields show" id="webuiFields">
+      <div class="row gap-10" style="flex-wrap:wrap">
+        <div class="field" style="min-width:120px">
+          <label>端口 (port)</label>
+          <input id="cfg-webport" class="input" type="number" />
+        </div>
+        <div class="field" style="min-width:180px">
+          <label>管理令牌 (token)</label>
+          <input id="cfg-webtoken" class="input" type="password" placeholder="修改并牢记,否则无法登录管理界面" />
+        </div>
+      </div>
+      <p class="hint">禁用后将不再启动管理界面 HTTP 服务。</p>
+    </div>
+  </div>
+
+  <div class="card card-gap">
+    <h3>🔗 GitHub API Token（可选）</h3>
+    <div class="field">
+      <label>GitHub Token (githubToken)</label>
+      <input id="cfg-github-token" class="input" type="password" placeholder="ghp_... 或留空" />
+    </div>
+    <p class="hint">用于减少 GitHub API 速率限制（未认证 60 次/小时，认证后 5000 次/小时）。在 <a href="https://github.com/settings/tokens" target="_blank" style="color:#818cf8">github.com/settings/tokens</a> 创建，只需 <code>public_repo</code> 读取权限。</p>
+    <p class="hint" style="color:#fda4af;margin-top:4px">⚠️ 请勿泄露此 Token，不要提交到公开仓库！export 导出时不会包含此 Token。</p>
+  </div>
+
+  <div class="row" style="justify-content:flex-end;margin-top:8px">
+    <button class="btn btn-primary" id="configSave2">💾 保存并覆盖 config.py</button>
+  </div>
+</div>
+<div id="toast"></div>
+<script src="/static/js/app.js"></script>
+<script src="/static/js/config.js"></script>
+</body>
+</html>

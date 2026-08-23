@@ -39,6 +39,7 @@
     <div class="nav-item" data-page="permissions"><span>👥</span><span>权限管理</span></div>
     <div class="nav-item" data-page="config"><span>⚙️</span><span>功能设置</span></div>
     <div class="nav-item" data-page="mods"><span>🧩</span><span>Mod 管理</span></div>
+    <div class="nav-item" data-page="update"><span>🔄</span><span>检查更新</span></div>
     <div class="spacer"></div>
     <div class="guest-badge" id="guestBadge">👤 访客模式</div>
     <div class="nav-item hidden" id="adminLoginBtn"><span>🔑</span><span>管理员登录</span></div>
@@ -300,6 +301,49 @@
         </table>
       </div>
     </div>
+
+    <!-- 检查更新 -->
+    <div class="page" id="page-update">
+      <h2>🔄 检查更新</h2>
+
+      <div class="card" id="updateCheckCard">
+        <h3>📡 检查最新版本</h3>
+        <p class="desc">从 GitHub 获取最新 Release 信息并与当前版本对比。</p>
+        <div class="row gap-10" style="margin-top:12px;">
+          <button class="btn" id="updateCheckBtn">🔍 检查更新</button>
+        </div>
+        <div id="updateCheckResult" style="margin-top:14px; display:none;">
+          <div class="update-current-ver">当前版本: <code id="updateCurVer"></code></div>
+          <div id="updateLatestInfo"></div>
+        </div>
+      </div>
+
+      <div class="card card-gap" id="updateLocalCard">
+        <h3>📦 本地压缩包更新</h3>
+        <p class="desc">选择本地 .zip 或 .tar.gz 压缩包进行离线更新。</p>
+        <div class="row gap-10" style="margin-top:12px;">
+          <input type="file" id="updateFileInput" accept=".zip,.tar.gz,.tgz" style="display:none;">
+          <button class="btn btn-ghost" id="updateChooseFileBtn">📁 选择文件</button>
+          <span id="updateFileName" class="td-dim"></span>
+          <button class="btn" id="updateLocalBtn" disabled>🚀 执行更新</button>
+        </div>
+        <p class="hint">更新将替换项目文件(保留 config.py 和 permission.json),服务器会自动重启。</p>
+      </div>
+
+      <div class="card card-gap">
+        <h3>📜 版本历史</h3>
+        <p class="desc">GitHub 上的所有 Release 记录。</p>
+        <div id="releasesList" style="margin-top:12px;">
+          <button class="btn btn-ghost" id="releasesLoadBtn">加载版本历史</button>
+        </div>
+        <div id="releasesPager" style="margin-top:10px; display:none;">
+          <button class="btn btn-ghost btn-sm" id="releasesPrevBtn" disabled>← 上一页</button>
+          <span id="releasesPageNum" class="td-dim" style="margin:0 8px;"></span>
+          <button class="btn btn-ghost btn-sm" id="releasesNextBtn">下一页 →</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>
 

@@ -52,6 +52,11 @@ logLevel = "info"
 
 commandPrefix = "!"
 
+# GitHub API Token（可选，用于减少 API 速率限制）
+# 在 https://github.com/settings/tokens 创建，只需 public_repo 读取权限
+# ⚠️ 请勿泄露此 Token，不要提交到公开仓库
+githubToken = ""
+
 sapiConfig = {
     "gmsg": "gmsg",
     "smsg": "smsg",

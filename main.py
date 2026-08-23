@@ -1,9 +1,6 @@
-"""程序入口
-
-包含:依赖自愈引导、--reset-all 重置、config 自动生成、
-首次运行向导、WebSocket 服务器、Web 管理界面、
-连接生命周期(1 秒延迟初始化)与正常关闭流程。
-"""
+# Author: Hydrooxzgen
+# This project is licensed under the GPL-v3.0 License.
+# version beta 0.1.1
 import asyncio
 import json
 import os
@@ -17,7 +14,7 @@ from uuid import uuid4
 ROOT = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PY = os.path.join(ROOT, "config.py")
 CONFIG_EXAMPLE = os.path.join(ROOT, "config.example.py")
-VERSION = "b0.1.0"
+VERSION = "b0.1.1"
 GITHUB_REPO = "Hydrooxzgen/EnderBridge"  # You can edit this to your own repository if you fork it :)
 WANT_RESET = "--reset-all" in sys.argv
 WANT_EXPORT = "export" in sys.argv
@@ -129,6 +126,25 @@ if WANT_UPDATE:
         "permission.json",
         "permission.json.bak",
     }
+
+    def _load_github_token() -> str:
+        """从 config.py 读取 GitHub API Token（用于减少速率限制）"""
+        try:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("_cfg_token", CONFIG_PY)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            return getattr(mod, "githubToken", "") or ""
+        except Exception:
+            return ""
+
+    def _github_headers() -> dict:
+        """返回 GitHub API 请求头,附带 Token 认证（若有）"""
+        headers = {"Accept": "application/vnd.github.v3+json"}
+        token = _load_github_token()
+        if token:
+            headers["Authorization"] = f"token {token}"
+        return headers
 
     def _update_err(msg):
         print("========================================")
@@ -299,7 +315,7 @@ if WANT_UPDATE:
 
         # 1. 查询 release 信息
         try:
-            req = urllib.request.Request(api_url, headers={"Accept": "application/vnd.github.v3+json"})
+            req = urllib.request.Request(api_url, headers=_github_headers())
             with urllib.request.urlopen(req, timeout=30) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as e:
@@ -335,7 +351,7 @@ if WANT_UPDATE:
         tmp_fd, tmp_path = tempfile.mkstemp(suffix=os.path.splitext(asset_name)[1], prefix="enderbridge_dl_")
         try:
             print(f"  正在下载 ...")
-            req = urllib.request.Request(download_url)
+            req = urllib.request.Request(download_url, headers=_github_headers())
             with urllib.request.urlopen(req, timeout=120) as resp:
                 total = int(resp.headers.get("Content-Length", 0))
                 downloaded = 0
@@ -388,7 +404,7 @@ if WANT_UPDATE:
         print(f"  API: {api_url}")
 
         try:
-            req = urllib.request.Request(api_url, headers={"Accept": "application/vnd.github.v3+json"})
+            req = urllib.request.Request(api_url, headers=_github_headers())
             with urllib.request.urlopen(req, timeout=30) as resp:
                 commit_data = json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as e:
@@ -407,7 +423,7 @@ if WANT_UPDATE:
         version = None
         try:
             tags_url = f"https://api.github.com/repos/{GITHUB_REPO}/tags"
-            req = urllib.request.Request(tags_url, headers={"Accept": "application/vnd.github.v3+json"})
+            req = urllib.request.Request(tags_url, headers=_github_headers())
             with urllib.request.urlopen(req, timeout=30) as resp:
                 tags = json.loads(resp.read().decode("utf-8"))
             for tag in tags:
@@ -430,7 +446,7 @@ if WANT_UPDATE:
         tmp_fd, tmp_path = tempfile.mkstemp(suffix=".zip", prefix="enderbridge_commit_")
         try:
             print(f"  正在下载 ...")
-            req = urllib.request.Request(download_url, headers={"Accept": "application/vnd.github.v3+json"})
+            req = urllib.request.Request(download_url, headers=_github_headers())
             with urllib.request.urlopen(req, timeout=120) as resp:
                 total = int(resp.headers.get("Content-Length", 0))
                 downloaded = 0
@@ -512,6 +528,101 @@ if WANT_UPDATE:
                 os.unlink(dl_path)
             except Exception:
                 pass
+
+# ===== WebUI 触发的更新:检测 .update_pending 标记文件 =====
+UPDATE_MARKER = os.path.join(ROOT, ".update_pending")
+if os.path.isfile(UPDATE_MARKER) and not WANT_UPDATE:
+    # WebUI 写入了待更新的压缩包路径,立即执行更新
+    try:
+        with open(UPDATE_MARKER, "r", encoding="utf-8") as f:
+            pending_path = f.read().strip()
+    except Exception:
+        pending_path = ""
+    finally:
+        try:
+            os.remove(UPDATE_MARKER)
+        except Exception:
+            pass
+    if pending_path and os.path.isfile(pending_path):
+        import shutil
+        import tempfile
+        import zipfile
+
+        # 复用 UPDATE_KEEP(如果 WANT_UPDATE 已定义)或使用默认值
+        _keep = locals().get("UPDATE_KEEP", {
+            ".git", "logs", "resources", "structures",
+            "config.py", "config.py.bak", "permission.json", "permission.json.bak",
+        })
+
+        print("========================================")
+        print(f"  WebUI 触发更新: {pending_path}")
+        print(f"  当前版本: {VERSION}")
+        print("========================================")
+
+        try:
+            tmp = tempfile.mkdtemp(prefix="enderbridge_webui_update_")
+            lower = pending_path.lower()
+            if lower.endswith(".zip"):
+                with zipfile.ZipFile(pending_path) as z:
+                    names = [i.filename for i in z.infolist() if not i.is_dir()]
+                    # 检测公共根目录
+                    roots = {n.split("/", 1)[0] for n in names if "/" in n}
+                    root = roots.pop() if len(roots) == 1 and all("/" in n for n in names) else ""
+                    for info in z.infolist():
+                        if info.is_dir():
+                            continue
+                        norm = os.path.normpath(info.filename.replace("\\", "/"))
+                        if norm.startswith("..") or os.path.isabs(norm):
+                            continue
+                        rel = norm.replace(os.sep, "/")
+                        if root and rel.startswith(root + "/"):
+                            rel = rel[len(root) + 1:]
+                        if not rel:
+                            continue
+                        top = rel.split("/", 1)[0]
+                        if top in _keep:
+                            continue
+                        target = os.path.join(tmp, *rel.split("/"))
+                        os.makedirs(os.path.dirname(target), exist_ok=True)
+                        with open(target, "wb") as out:
+                            with z.open(info) as src:
+                                shutil.copyfileobj(src, out)
+            else:
+                print("  不支持的格式,仅支持 .zip")
+                sys.exit(1)
+
+            if not os.path.exists(os.path.join(tmp, "main.py")):
+                print("  压缩包内未找到 main.py,不是 EnderBridge 压缩包")
+                sys.exit(1)
+
+            # 覆盖到项目目录
+            copied = 0
+            for dirpath, dirnames, filenames in os.walk(tmp):
+                rel_dir = os.path.relpath(dirpath, tmp)
+                for fname in filenames:
+                    src = os.path.join(dirpath, fname)
+                    dst = os.path.join(ROOT, rel_dir, fname)
+                    top = rel_dir.split(os.sep)[0]
+                    if top in _keep:
+                        continue
+                    os.makedirs(os.path.dirname(dst), exist_ok=True)
+                    shutil.copy2(src, dst)
+                    copied += 1
+            print(f"  已覆盖 {copied} 个文件")
+            print("  文件已覆盖,正在重启以加载新版本...")
+            # 覆盖完成后磁盘上已是新版本代码,但内存中仍是旧代码
+            # 需要再启动一次新进程,让新代码正确加载并显示版本号
+            # (.update_pending 已在上方删除,新进程不会重复执行更新)
+            try:
+                import subprocess
+                subprocess.Popen([sys.executable] + sys.argv, cwd=ROOT)
+            except Exception as e:
+                print(f"  重启失败: {e},请手动重启服务器")
+            sys.exit(0)
+        except Exception as e:
+            print(f"  更新失败: {e}")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
 
 # ===== 一键导出:python main.py export [输出路径] =====
 # 将项目代码打包为 zip(排除用户数据/设置,与 update 命令的保留规则对称),
@@ -637,7 +748,7 @@ is_first_run = _m is not None and _m.group(1) == "True"
 # 首次运行检查:is_first_run 为 True 时启动图形化配置向导(向导中可设置 Web 管理端口)
 # --load-without-config 模式跳过向导,直接使用默认配置运行
 if is_first_run and not WANT_LOAD_WITHOUT_CONFIG:
-    shared.logger.info("检测到首次运行或是被更新，启动图形化配置向导...")
+    shared.logger.info("检测到首次运行或是被更新/改动，启动图形化配置向导...")
     from lib.setup import start_setup_server
     try:
         asyncio.run(start_setup_server())
@@ -662,6 +773,8 @@ connections = set()
 server = None
 # 主事件循环引用(供 Web 管理界面线程提交关闭协程,实现一键重启)
 _main_loop = None
+# 阻塞 Future 引用(供 Ctrl+C / exit 触发优雅关闭)
+_main_future = None
 
 
 async def connection_handler(ws):
@@ -895,8 +1008,12 @@ async def _dispatch_console_command(text):
         return
 
     if text in ("exit", "quit"):
-        print("bye")
-        os._exit(0)
+        # 触发优雅关闭:取消阻塞的 Future,让 finally 块执行 destroy()
+        loop = _main_loop
+        fut = _main_future
+        if loop is not None and not loop.is_closed() and fut is not None and not fut.done():
+            loop.call_soon_threadsafe(fut.cancel)
+        return
 
     # 以 / 开头:转发为游戏命令
     if text.startswith("/"):
@@ -952,7 +1069,7 @@ async def _dispatch_console_command(text):
 
 
 async def main():
-    global server, _main_loop
+    global server, _main_loop, _main_future
     _main_loop = asyncio.get_running_loop()
     host = wsConfig.get("host") or None  # None = 监听所有接口
     port = wsConfig.get("port", 8800)
@@ -1000,21 +1117,18 @@ async def main():
     threading.Thread(target=stdin_loop, daemon=True).start()
 
     # Ctrl+C 处理:Windows 下 await Future() 可能无法可靠捕获 KeyboardInterrupt
-    # 用信号处理器触发优雅关闭,不打印 traceback
+    # 用信号处理器取消阻塞的 Future,让 finally 块执行 destroy()
     import signal
     def _sigint(sig, frame):
-        # 调度 destroy() 后退出,避免 traceback
         loop = _main_loop
-        if loop is not None and not loop.is_closed():
-            async def _shutdown():
-                await destroy()
-                os._exit(0)
-            asyncio.ensure_future(_shutdown())
+        fut = _main_future
+        if loop is not None and not loop.is_closed() and fut is not None and not fut.done():
+            loop.call_soon_threadsafe(fut.cancel)
     signal.signal(signal.SIGINT, _sigint)
 
+    _main_future = asyncio.Future()
     try:
-        # 运行直到收到信号
-        await asyncio.Future()
+        await _main_future
     except (KeyboardInterrupt, asyncio.CancelledError):
         pass
     finally:

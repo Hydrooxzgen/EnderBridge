@@ -100,10 +100,32 @@ def set_app_info(github_repo: str, version: str) -> None:
     _app_version = version
 
 
-# Release Notes 缓存:避免每次请求都调 GitHub API
-_release_cache = None    # {"tag": str, "name": str, "body": str, "html_url": str, "published_at": str}
-_release_cache_time = 0  # 上次拉取时间戳
-_RELEASE_CACHE_TTL = 300  # 缓存有效期(秒)
+def _github_headers() -> dict:
+    """返回 GitHub API 请求头,若配置了 Token 则附带认证以提升速率限制"""
+    headers = {
+        "Accept": "application/vnd.github.v3+json",
+        "User-Agent": f"EnderBridge/{_app_version}",
+    }
+    ns = _load_config_module()
+    token = ns.get("githubToken", "")
+    if token:
+        headers["Authorization"] = f"token {token}"
+    return headers
+
+
+def _parse_version(ver: str) -> list:
+    """解析版本号字符串为可比较的整数列表。支持 b0.1.0 / v0.1.0 / 0.1.0 等格式。"""
+    import re
+    nums = re.findall(r'\d+', ver)
+    return [int(n) for n in nums] if nums else [0]
+
+
+def _version_gt(a: str, b: str) -> bool:
+    """判断版本 a 是否严格大于版本 b"""
+    return _parse_version(a) > _parse_version(b)
+
+
+
 
 
 def _read_config_src() -> str:
@@ -270,6 +292,7 @@ def load_config() -> dict:
             "gmsg": sapi.get("gmsg", "gmsg"),
             "smsg": sapi.get("smsg", "smsg"),
         },
+        "githubToken": ns.get("githubToken", ""),
     }
 
 
@@ -359,6 +382,23 @@ def save_config(new: dict) -> None:
         "token": str(webui.get("token") or "").strip(),
     }
     apply_block_or_append("webuiConfig", webui_value, "# Web 管理界面配置（每次启动时监听该端口）")
+
+    # GitHub API Token:旧版 config.py 无该行时自动追加
+    github_token = str(new.get("githubToken") or "").strip()
+    src, ok = _replace_line(src, "githubToken", github_token)
+    if not ok:
+        # 旧版 config.py 没有 githubToken 行,追加到 webuiConfig 之后
+        marker = "# Web 管理界面配置"
+        idx = src.find(marker)
+        if idx >= 0:
+            # 找到 webuiConfig 块的结束位置(下一个空行或文件末尾)
+            end = src.find("\n\n", idx)
+            if end < 0:
+                end = len(src)
+            insert_pos = end + 1
+        else:
+            insert_pos = len(src)
+        src = src[:insert_pos] + f"\ngithubToken = {json.dumps(github_token, ensure_ascii=False)}\n" + src[insert_pos:]
 
     if src == orig:
         return
@@ -456,11 +496,14 @@ class WebUIHandler(BaseHTTPRequestHandler):
 
     def _respond(self, obj, status=200) -> None:
         data = json.dumps(obj, ensure_ascii=False).encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(data)))
-        self.end_headers()
-        self.wfile.write(data)
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+        except (ConnectionAbortedError, BrokenPipeError, OSError):
+            pass  # 客户端已断开,忽略写入失败
 
     def _respond_denied(self) -> None:
         self._respond({"ok": False, "message": "未授权:请先在登录页输入管理令牌"}, status=401)
@@ -479,8 +522,24 @@ class WebUIHandler(BaseHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
 
-        if path in ("/", "/index.html"):
-            self._serve_index()
+        # 页面路由
+        if path in ("/", "/index.html", "/login"):
+            self._serve_page("login.html")
+            return
+        if path == "/dashboard":
+            self._serve_page("dashboard.html")
+            return
+        if path == "/permissions":
+            self._serve_page("permissions.html")
+            return
+        if path == "/config":
+            self._serve_page("config.html")
+            return
+        if path == "/mods":
+            self._serve_page("mods.html")
+            return
+        if path == "/update":
+            self._serve_page("update.html")
             return
         if path.startswith("/static/"):
             self._serve_static(path)
@@ -490,6 +549,12 @@ class WebUIHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/release-notes":
             self._api_release_notes()
+            return
+        if path == "/api/update/check":
+            self._api_update_check()
+            return
+        if path == "/api/update/releases":
+            self._api_update_releases()
             return
         if path == "/api/config":
             self._api_get_config()
@@ -529,6 +594,12 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/restart":
             self._api_restart()
             return
+        if parsed.path == "/api/update/install":
+            self._api_update_install()
+            return
+        if parsed.path == "/api/update/upload":
+            self._api_update_upload()
+            return
         self.send_response(404)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.end_headers()
@@ -545,6 +616,24 @@ class WebUIHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "text/plain; charset=utf-8")
             self.end_headers()
             self.wfile.write("index.html 缺失".encode("utf-8"))
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _serve_page(self, page_name: str) -> None:
+        """提供 pages 目录下的单个 HTML 页面"""
+        page_path = os.path.join(WEBUI_DIR, "pages", page_name)
+        try:
+            with open(page_path, "r", encoding="utf-8") as f:
+                body = f.read().encode("utf-8")
+        except Exception:
+            self.send_response(500)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(f"{page_name} 缺失".encode("utf-8"))
             return
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -623,15 +712,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
         })
 
     def _api_release_notes(self) -> None:
-        """从 GitHub API 获取当前版本的 Release Notes(带缓存,无需鉴权)"""
-        global _release_cache, _release_cache_time
-        now = time.time()
-
-        # 检查缓存是否有效
-        if _release_cache and (now - _release_cache_time) < _RELEASE_CACHE_TTL:
-            self._respond({"ok": True, "release": _release_cache})
-            return
-
+        """从 GitHub API 获取当前版本的 Release Notes(无需鉴权)"""
         if not _github_repo or not _app_version:
             self._respond({"ok": False, "message": "未配置 GitHub 仓库信息"})
             return
@@ -640,42 +721,248 @@ class WebUIHandler(BaseHTTPRequestHandler):
             # 尝试按 tag 查找当前版本的 Release
             tag = _app_version
             api_url = f"https://api.github.com/repos/{_github_repo}/releases/tags/{tag}"
-            req = urllib.request.Request(api_url, headers={
-                "Accept": "application/vnd.github.v3+json",
-                "User-Agent": f"EnderBridge/{_app_version}",
-            })
+            req = urllib.request.Request(api_url, headers=_github_headers())
             try:
                 with urllib.request.urlopen(req, timeout=5) as resp:
                     data = json.loads(resp.read().decode("utf-8"))
             except urllib.error.HTTPError:
                 # tag 未找到,回退到 latest release
                 api_url = f"https://api.github.com/repos/{_github_repo}/releases/latest"
-                req = urllib.request.Request(api_url, headers={
-                    "Accept": "application/vnd.github.v3+json",
-                    "User-Agent": f"EnderBridge/{_app_version}",
-                })
+                req = urllib.request.Request(api_url, headers=_github_headers())
                 with urllib.request.urlopen(req, timeout=5) as resp:
                     data = json.loads(resp.read().decode("utf-8"))
 
-            _release_cache = {
-                "tag": data.get("tag_name", ""),
-                "name": data.get("name", ""),
-                "body": data.get("body", ""),
-                "html_url": data.get("html_url", ""),
-                "published_at": data.get("published_at", ""),
-            }
-            _release_cache_time = now
-            self._respond({"ok": True, "release": _release_cache})
+            self._respond({
+                "ok": True,
+                "release": {
+                    "tag": data.get("tag_name", ""),
+                    "name": data.get("name", ""),
+                    "body": data.get("body", ""),
+                    "html_url": data.get("html_url", ""),
+                    "published_at": data.get("published_at", ""),
+                }
+            })
         except urllib.error.HTTPError as e:
             if e.code == 404:
                 self._respond({"ok": True, "release": None, "message": "当前版本不是 Release 版"})
             else:
-                self._respond({"ok": False, "message": f"GitHub API 错误: {e.code}"})
+                msg = f"GitHub API 错误: {e.code}"
+                if e.code == 403:
+                    msg = "GitHub API 请求过于频繁(403),请稍后再试"
+                self._respond({"ok": False, "release": None, "current": _app_version, "message": msg})
         except Exception as e:
+            self._respond({"ok": False, "release": None, "current": _app_version, "message": f"获取 Release Notes 失败: {e}"})
+
+    def _api_update_check(self) -> None:
+        """检查是否有新版本:对比当前版本与 GitHub 最新 Release"""
+        if not _github_repo or not _app_version:
+            self._respond({"ok": False, "message": "未配置 GitHub 仓库信息"})
+            return
+        try:
+            # 获取最新 Release(含 prerelease)
+            api_url = f"https://api.github.com/repos/{_github_repo}/releases?per_page=1"
+            req = urllib.request.Request(api_url, headers=_github_headers())
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                releases = json.loads(resp.read().decode("utf-8"))
+
+            if not releases:
+                self._respond({"ok": True, "current": _app_version, "latest": None, "update_available": False})
+                return
+
+            latest = releases[0]
+            latest_tag = latest.get("tag_name", "")
+            is_prerelease = latest.get("prerelease", False)
+            has_asset = any(
+                a.get("name", "").endswith((".zip", ".tar.gz", ".tgz"))
+                for a in latest.get("assets", [])
+            )
+
+            self._respond({
+                "ok": True,
+                "current": _app_version,
+                "latest": latest_tag,
+                "latest_name": latest.get("name", ""),
+                "is_prerelease": is_prerelease,
+                "has_asset": has_asset,
+                "body": latest.get("body", ""),
+                "html_url": latest.get("html_url", ""),
+                "published_at": latest.get("published_at", ""),
+                "update_available": _version_gt(latest_tag, _app_version),
+            })
+        except urllib.error.HTTPError as e:
+            msg = f"GitHub API 错误: {e.code}"
+            if e.code == 403:
+                msg = "GitHub API 请求过于频繁(403),你可以前往配置区配置GitHub Token以增加请求额度(免费)"
+            self._respond({"ok": False, "current": _app_version, "message": msg})
+        except Exception as e:
+            self._respond({"ok": False, "current": _app_version, "message": f"检查更新失败: {e}"})
+
+    def _api_update_releases(self) -> None:
+        """获取所有 Release 列表(分页,含 prerelease)"""
+        if not _github_repo:
+            self._respond({"ok": False, "message": "未配置 GitHub 仓库信息"})
+            return
+        # 解析查询参数 page
+        parsed = urllib.parse.urlparse(self.path)
+        qs = urllib.parse.parse_qs(parsed.query)
+        page = int(qs.get("page", ["1"])[0])
+        try:
+            api_url = f"https://api.github.com/repos/{_github_repo}/releases?per_page=20&page={page}"
+            req = urllib.request.Request(api_url, headers=_github_headers())
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                releases = json.loads(resp.read().decode("utf-8"))
+
+            items = []
+            for r in releases:
+                items.append({
+                    "tag": r.get("tag_name", ""),
+                    "name": r.get("name", ""),
+                    "prerelease": r.get("prerelease", False),
+                    "body": r.get("body", ""),
+                    "html_url": r.get("html_url", ""),
+                    "published_at": r.get("published_at", ""),
+                    "current": r.get("tag_name", "") == _app_version,
+                    "has_asset": any(
+                        a.get("name", "").endswith((".zip", ".tar.gz", ".tgz"))
+                        for a in r.get("assets", [])
+                    ),
+                })
+            self._respond({"ok": True, "releases": items, "page": page})
+        except urllib.error.HTTPError as e:
+            msg = f"GitHub API 错误: {e.code}"
+            if e.code == 403:
+                msg = "GitHub API 请求过于频繁(403),请稍后再试"
+            self._respond({"ok": False, "message": msg})
+        except Exception as e:
+            self._respond({"ok": False, "message": f"获取 Release 列表失败: {e}"})
+
+    def _api_update_install(self) -> None:
+        """从本地 zip 或 GitHub Release 执行更新(仅 admin)"""
+        import tempfile
+        if not _require_admin(self):
+            return
+        body = self._read_body()
+        github_tag = body.get("github_tag", "").strip()
+        file_path = body.get("path", "").strip()
+
+        # GitHub tag 模式:下载 Release asset
+        if github_tag:
+            if not _github_repo:
+                self._respond({"ok": False, "message": "未配置 GitHub 仓库信息"})
+                return
             try:
-                self._respond({"ok": False, "message": f"获取 Release Notes 失败: {e}"})
-            except Exception:
-                pass  # 连接已断开,忽略写入失败
+                api_url = f"https://api.github.com/repos/{_github_repo}/releases/tags/{github_tag}"
+                req = urllib.request.Request(api_url, headers=_github_headers())
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    release = json.loads(resp.read().decode("utf-8"))
+                # 查找 zip/tar.gz asset
+                asset = None
+                for a in release.get("assets", []):
+                    name = a.get("name", "")
+                    if name.endswith(".zip") or name.endswith((".tar.gz", ".tgz")):
+                        asset = a
+                        break
+                if not asset:
+                    self._respond({"ok": False, "message": f"版本 {github_tag} 中未找到压缩包附件"})
+                    return
+                # 下载到临时文件
+                dl_url = asset["browser_download_url"]
+                suffix = ".zip" if asset["name"].endswith(".zip") else ".tar.gz"
+                tmp_fd, file_path = tempfile.mkstemp(suffix=suffix, prefix="enderbridge_update_")
+                os.close(tmp_fd)
+                dl_req = urllib.request.Request(dl_url, headers=_github_headers())
+                with urllib.request.urlopen(dl_req, timeout=60) as resp:
+                    with open(file_path, "wb") as f:
+                        while True:
+                            chunk = resp.read(8192)
+                            if not chunk:
+                                break
+                            f.write(chunk)
+            except Exception as e:
+                self._respond({"ok": False, "message": f"下载失败: {e}"})
+                return
+        elif not file_path:
+            self._respond({"ok": False, "message": "请提供压缩包路径或 GitHub 版本号"})
+            return
+
+        if not os.path.isfile(file_path):
+            self._respond({"ok": False, "message": f"文件不存在: {file_path}"})
+            return
+        lower = file_path.lower()
+        if not (lower.endswith(".zip") or lower.endswith((".tar.gz", ".tgz"))):
+            self._respond({"ok": False, "message": "仅支持 .zip / .tar.gz 压缩包"})
+            return
+        # 触发重启并执行更新
+        if _restart_handler is None:
+            self._respond({"ok": False, "message": "重启处理器未注册"})
+            return
+        try:
+            # 将更新路径写入临时文件供 main.py 读取
+            update_marker = os.path.join(ROOT, ".update_pending")
+            with open(update_marker, "w", encoding="utf-8") as f:
+                f.write(file_path)
+        except Exception as e:
+            self._respond({"ok": False, "message": f"更新触发失败: {e}"})
+            return
+        # 先发送成功响应,再触发重启(避免 destroy() 在响应发送前关闭连接)
+        self._respond({"ok": True, "message": "服务器正在更新并重启,请稍候..."})
+        try:
+            _restart_handler()
+        except Exception:
+            pass  # 响应已发送,重启失败时用户可手动重启
+
+    def _api_update_upload(self) -> None:
+        """接收前端上传的压缩包文件,保存到临时目录(仅 admin)"""
+        import tempfile
+        if not _require_admin(self):
+            return
+        try:
+            content_type = self.headers.get("Content-Type", "")
+            if "multipart/form-data" not in content_type:
+                self._respond({"ok": False, "message": "请使用 multipart/form-data 上传"})
+                return
+            # 解析 boundary
+            boundary = content_type.split("boundary=")[-1].strip()
+            if not boundary:
+                self._respond({"ok": False, "message": "无效的上传格式"})
+                return
+            content_length = int(self.headers.get("Content-Length", 0))
+            raw = self.rfile.read(content_length)
+            # 简易 multipart 解析:查找文件内容
+            boundary_bytes = ("--" + boundary).encode()
+            parts = raw.split(boundary_bytes)
+            for part in parts:
+                if b'filename="' not in part:
+                    continue
+                # 提取文件名
+                header_end = part.find(b"\r\n\r\n")
+                if header_end < 0:
+                    continue
+                header = part[:header_end].decode("utf-8", errors="replace")
+                body = part[header_end + 4:]
+                # 去除尾部 \r\n
+                if body.endswith(b"\r\n"):
+                    body = body[:-2]
+                if body.endswith(b"--"):
+                    body = body[:-2]
+                # 提取原始文件名
+                m = re.search(r'filename="([^"]+)"', header)
+                orig_name = m.group(1) if m else "upload.zip"
+                # 只接受 zip/tar.gz
+                ln = orig_name.lower()
+                if not (ln.endswith(".zip") or ln.endswith((".tar.gz", ".tgz"))):
+                    self._respond({"ok": False, "message": "仅支持 .zip / .tar.gz 文件"})
+                    return
+                suffix = os.path.splitext(orig_name)[1]
+                tmp_fd, tmp_path = tempfile.mkstemp(suffix=suffix, prefix="enderbridge_upload_")
+                os.close(tmp_fd)
+                with open(tmp_path, "wb") as f:
+                    f.write(body)
+                self._respond({"ok": True, "path": tmp_path, "filename": orig_name})
+                return
+            self._respond({"ok": False, "message": "未找到文件内容"})
+        except Exception as e:
+            self._respond({"ok": False, "message": f"上传处理失败: {e}"})
 
     def _api_get_config(self) -> None:
         if not _require_admin(self):

@@ -1,4 +1,4 @@
-// ===== 工具 =====
+// ===== 共享工具函数 =====
 function $(id) { return document.getElementById(id); }
 var TOKEN_KEY = "enderbridge_web_token";
 var ROLE_KEY = "enderbridge_web_role";
@@ -10,6 +10,7 @@ function clearAuth() {
 
 function toast(msg, type) {
   var t = $("toast");
+  if (!t) return;
   t.className = type || "ok";
   t.textContent = msg;
   t.style.display = "block";
@@ -30,550 +31,70 @@ function api(path, options) {
   }
   return fetch("/api" + path, options).then(function (res) {
     return res.json().then(function (data) {
-      if (res.status === 401) {
-        clearAuth();
-        showLogin();
-        return Promise.reject(data);
-      }
-      if (res.status === 403) {
-        toast(data.message || "无权限", "err");
-        return Promise.reject(data);
-      }
+      if (res.status === 401) { clearAuth(); location.href = "/login"; return Promise.reject(data); }
+      if (res.status === 403) { toast(data.message || "无权限", "err"); return Promise.reject(data); }
       return data;
     });
   });
 }
 
-// ===== 页面切换 =====
-var pages = ["dashboard", "permissions", "config", "mods"];
-function showPage(name) {
-  pages.forEach(function (p) {
-    $("page-" + p).classList.toggle("active", p === name);
-  });
-  document.querySelectorAll(".nav-item").forEach(function (el) {
-    el.classList.toggle("active", el.getAttribute("data-page") === name);
-  });
-  if (name === "dashboard") { refreshStatus(); loadReleaseNotes(); }
-  if (name === "permissions") loadPermissions();
-  if (name === "config") loadConfig();
-  if (name === "mods") loadMods();
-}
-document.querySelectorAll(".nav-item").forEach(function (el) {
-  el.addEventListener("click", function () { showPage(el.getAttribute("data-page")); });
-});
-
-// ===== 登录 =====
-function showLogin() {
-  $("appView").classList.remove("show");
-  $("loginView").classList.add("show");
-}
-function showApp() {
-  $("loginView").classList.remove("show");
-  $("appView").classList.add("show");
-}
-function enterApp(role) {
-  sessionStorage.setItem(ROLE_KEY, role);
-  applyRoleUI(role);
-  showApp();
-  refreshStatus();
-  loadReleaseNotes();
-}
-function applyRoleUI(role) {
-  var isGuest = role === "guest";
-  // 访客仅保留仪表盘与 Mod 列表(只读)
-  document.querySelectorAll('.nav-item[data-page="permissions"], .nav-item[data-page="config"]')
-    .forEach(function (el) { el.style.display = isGuest ? "none" : ""; });
-  $("guestBadge").style.display = isGuest ? "block" : "none";
-  $("adminLoginBtn").style.display = isGuest ? "flex" : "none";
-  $("permSave").style.display = isGuest ? "none" : "";
-  $("permReload").style.display = isGuest ? "none" : "";
-  $("configSave").style.display = isGuest ? "none" : "";
-  $("modReloadAll").style.display = isGuest ? "none" : "";
-  $("restartBtn").style.display = isGuest ? "none" : "";
-  if (isGuest) showPage("dashboard");
-}
-$("loginBtn").addEventListener("click", function () {
-  var token = $("tokenInput").value.trim();
-  sessionStorage.setItem(TOKEN_KEY, token);
-  api("/auth", { method: "POST", body: JSON.stringify({ token: token }) })
-    .then(function (data) {
-      if (data.ok && data.role === "admin") {
-        $("loginMsg").textContent = "";
-        enterApp("admin");
-      } else {
-        // 密码错误:停留登录页并提示,不自动进入访客模式
-        sessionStorage.removeItem(TOKEN_KEY);
-        $("loginMsg").textContent = data.message || "密码错误";
-      }
-    }).catch(function () {
-      $("loginMsg").textContent = "无法连接服务器";
-    });
-});
-$("guestBtn").addEventListener("click", function () {
-  sessionStorage.removeItem(TOKEN_KEY);
-  $("loginMsg").textContent = "";
-  enterApp("guest");
-});
-$("tokenInput").addEventListener("keydown", function (e) {
-  if (e.key === "Enter") $("loginBtn").click();
-});
-$("adminLoginBtn").addEventListener("click", function () {
-  clearAuth();
-  showLogin();
-});
-$("logoutBtn").addEventListener("click", function () {
-  clearAuth();
-  showLogin();
-});
-
-// ===== 仪表盘 =====
-function refreshStatus() {
-  api("/status").then(function (data) {
-    if (!data.ok) return;
-    $("srvName").textContent = data.name;
-    var uptime = data.uptime || 0;
-    var s = Math.floor(uptime % 60), m = Math.floor(uptime / 60) % 60, h = Math.floor(uptime / 3600);
-    var uptimeText = (h > 0 ? h + "时 " : "") + (m > 0 ? m + "分 " : "") + s + "秒";
-    $("statGrid").innerHTML =
-      statCard("📛", data.name, "服务器名称") +
-      statCard("🔌", data.port, "WebSocket 端口") +
-      statCard("🌐", data.webPort, "Web 管理端口") +
-      statCard("👥", data.clients, "在线客户端") +
-      statCard("⏱️", uptimeText, "运行时间") +
-      statCard("🔑", data.webTokenSet ? "已设置" : "未设置", "管理令牌");
-  }).catch(function () {});
-}
-function statCard(icon, val, label) {
-  return '<div class="stat"><div class="val">' + icon + " " + escapeHtml(String(val)) + '</div><div class="label">' + label + "</div></div>";
-}
 function escapeHtml(s) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-// ===== Release Notes =====
-function loadReleaseNotes() {
-  api("/release-notes").then(function (data) {
-    if (!data.ok) return;
-    var card = $("releaseNotesCard");
-    card.style.display = "";
-    if (!data.release) {
-      // 仓库暂无 Release
-      $("releaseTag").textContent = "";
-      $("releaseBody").innerHTML = '<span class="td-dim">' + escapeHtml(data.message || "暂无 Release Notes") + '</span>';
-      $("releaseLink").style.display = "none";
-      return;
-    }
-    var r = data.release;
-    $("releaseTag").textContent = r.tag ? ("(" + r.tag + ")") : "";
-    var body = r.body || "";
-    if (body.trim()) {
-      $("releaseBody").innerHTML = renderMarkdown(body);
-    } else {
-      $("releaseBody").innerHTML = '<span class="td-dim">无 Release Notes</span>';
-    }
-    if (r.html_url) {
-      $("releaseLink").href = r.html_url;
-      $("releaseLink").style.display = "";
-    }
-  }).catch(function () {});
-}
-// 轻量 Markdown 渲染器(支持常用语法)
 function renderMarkdown(md) {
   var html = escapeHtml(md);
-  // 代码块(```...```)
   html = html.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
-  // 行内代码
   html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-  // 标题 ### / ## / #
   html = html.replace(/^### (.+)$/gm, '<h4>$1</h4>');
   html = html.replace(/^## (.+)$/gm, '<h3>$1</h3>');
   html = html.replace(/^# (.+)$/gm, '<h2>$1</h2>');
-  // 粗体/斜体
   html = html.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
   html = html.replace(/\*(.+?)\*/g, '<i>$1</i>');
-  // 链接 [text](url)
   html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
-  // 无序列表
   html = html.replace(/^[*-] (.+)$/gm, '<li>$1</li>');
   html = html.replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>');
-  // 合并连续 ul
   html = html.replace(/<\/ul>\s*<ul>/g, '');
-  // 换行
   html = html.replace(/\n/g, '<br>');
   return html;
 }
 
-// ===== 权限管理 =====
-var permData = { owner: "YourXboxName", op: [], user: [], blocker: [] };
-function loadPermissions() {
-  api("/permissions").then(function (data) {
-    if (!data.ok) return;
-    permData = data.permissions;
-    $("perm-owner").value = permData.owner || "";
-    ["op", "user", "blocker"].forEach(function (g) {
-      var list = permData[g] || [];
-      $("count-" + g).textContent = list.length + " 人";
-      $("chips-" + g).innerHTML = list.map(function (name) {
-        return '<span class="chip">' + escapeHtml(name) + '<span class="x" data-group="' + g + '" data-name="' + escapeHtml(name) + '">✕</span></span>';
-      }).join("") || '<span class="hint">暂无成员</span>';
-    });
-  }).catch(function () {});
-}
-// 保存到服务器(添加/删除/保存按钮共用),成功后重载确认
-function savePerm(tip) {
-  permData.owner = $("perm-owner").value.trim() || "YourXboxName";
-  return api("/permissions", { method: "PUT", body: JSON.stringify({ permissions: permData }) })
-    .then(function (data) {
-      toast(data.message || tip, data.ok ? "ok" : "err");
-      if (data.ok) loadPermissions();
-    }).catch(function () {});
-}
-document.querySelectorAll('[data-group]').forEach(function (btn) {
-  if (btn.tagName === "BUTTON") {
-    btn.addEventListener("click", function () {
-      var g = btn.getAttribute("data-group");
-      var input = $("input-" + g);
-      var name = input.value.trim();
-      if (!name) return;
-      permData[g] = permData[g] || [];
-      if (permData[g].indexOf(name) < 0) {
-        permData[g].push(name);
-        savePerm("已添加 " + name + " → " + g);
-      } else {
-        toast(name + " 已在 " + g + " 列表中", "err");
-      }
-      input.value = "";
-    });
-  }
-});
-document.addEventListener("click", function (e) {
-  if (e.target.classList.contains("x")) {
-    var g = e.target.getAttribute("data-group");
-    var name = e.target.getAttribute("data-name");
-    permData[g] = (permData[g] || []).filter(function (n) { return n !== name; });
-    savePerm("已移除 " + name + " ← " + g);
-  }
-});
-$("permSave").addEventListener("click", function () {
-  savePerm("权限已保存");
-});
-$("permReload").addEventListener("click", function () {
-  loadPermissions();
-  toast("已重新加载", "ok");
-});
-
-// ===== 功能设置 =====
-var cfgData = null;
-// 已知 Mod 目录:名 -> 模块路径(与第一次运行向导一致)
-var MOD_CATALOG = {
-  client: [
-    ["AI", "mod.ai"],
-    ["PermissionCommands", "mod.permission"],
-    ["Tool", "mod.tool"],
-    ["Position", "mod.position"],
-    ["Music", "mod.music"],
-    ["MCFunc", "mod.mcfunc"],
-    ["MoreWS", "mod.morews"],
-    ["Ezmatic", "mod.ezmatic.main"],
-    ["ImageMod", "mod.image.main"],
-  ],
-  server: [
-    ["chat", "mod.read"],
-    ["spam", "mod.spam"],
-    ["AI", "mod.ai"],
-  ],
-};
-function renderModSwitches() {
-  var mods = cfgData.mods || {};
-  ["client", "server"].forEach(function (side) {
-    var enabled = mods[side] || {};
-    var box = $("mod" + (side === "client" ? "Client" : "Server") + "Box");
-    box.innerHTML = MOD_CATALOG[side].map(function (m) {
-      var key = m[0], path = m[1];
-      var checked = enabled[key] === path;
-      return '<label class="switch-row mod-check">' +
-        '<label class="switch"><input type="checkbox" id="mod-' + side + '-' + key + '"' + (checked ? " checked" : "") + "><span class=\"track\"></span></label>" +
-        '<span class="switch-label">' + escapeHtml(key) + " <span class=\"td-dim\">(" + escapeHtml(path) + ")</span></span></label>";
-    }).join("");
-    // Mod 开关变化时联动隐藏/显示对应功能卡片
-    box.querySelectorAll("input[type=checkbox]").forEach(function (cb) {
-      cb.addEventListener("change", syncConfigCards);
-    });
-  });
-}
-// 功能卡片与 Mod 开关联动:对应 Mod 未启用时隐藏配置卡片(与首次运行向导逻辑一致)
-function isModOn(side, key) {
-  var cb = $("mod-" + side + "-" + key);
-  if (cb) return cb.checked;
-  var enabled = (cfgData.mods || {})[side] || {};
-  return !!enabled[key];
-}
-function syncConfigCards() {
-  $("cfgCardMusic").classList.toggle("hidden", !isModOn("client", "Music"));
-  $("cfgCardAi").classList.toggle("hidden", !(isModOn("client", "AI") || isModOn("server", "AI")));
-  $("cfgCardSpam").classList.toggle("hidden", !isModOn("server", "spam"));
-  $("cfgCardTool").classList.toggle("hidden", !isModOn("client", "Tool"));
-}
-function loadConfig() {
-  api("/config").then(function (data) {
-    if (!data.ok) return;
-    cfgData = data.config;
-    var f = data.config.features || {};
-    var qq = f.qq || {};
-    var music = f.music || {};
-    var rl = data.config.rateLimit || {};
-    var rlCmd = rl.command || {};
-    var webui = data.config.webui || {};
-
-    $("cfg-name").value = data.config.name || "EnderBridge";
-    $("cfg-port").value = data.config.port || 8800;
-    $("cfg-prefix").value = data.config.commandPrefix || "!";
-    $("cfg-loglevel").value = data.config.logLevel || "info";
-
-    $("cfg-percussion").checked = !!music.playPercussion;
-
-    $("cfg-qq").checked = !!qq.enabled;
-    $("cfg-qqgroup").value = qq.groupId || "";
-    $("cfg-qqport").value = qq.port || "";
-    $("cfg-qqhost").value = qq.host || "";
-    $("cfg-qqtoken").value = qq.accessToken || "";
-    toggleSub("qqFields", $("cfg-qq").checked);
-
-    $("cfg-ratelimit").checked = !!rlCmd.enabled;
-    $("cfg-rlwindow").value = rlCmd.windowMs || "";
-    $("cfg-rlmax").value = rlCmd.maxPerWindow || "";
-    toggleSub("rlFields", $("cfg-ratelimit").checked);
-
-    $("cfg-webui").checked = webui.enabled !== false;
-    $("cfg-webport").value = webui.port || 18888;
-    $("cfg-webtoken").value = webui.token || "";
-    toggleSub("webuiFields", $("cfg-webui").checked);
-
-    var ai = data.config.ai || {};
-    $("cfg-aibase").value = ai.baseURL || "";
-    $("cfg-aikey").value = ai.apiKey || "";
-    $("cfg-aicooldown").value = ai.chatCooldown || 5000;
-    $("cfg-aichatmodel").value = ai.chatModel || "deepseek-chat";
-    $("cfg-aichattokens").value = ai.chatMaxTokens || 512;
-    $("cfg-aichatprompt").value = ai.chatPrompt || "";
-    $("cfg-aicmdmodel").value = ai.cmdModel || "deepseek-chat";
-    $("cfg-aicmdtokens").value = ai.cmdMaxTokens || 1024;
-    $("cfg-aicmdprompt").value = ai.cmdPrompt || "";
-
-    var utils = data.config.utils || {};
-    $("cfg-tellall").checked = !!utils.tellAllToTell;
-    $("cfg-polling").checked = utils.enablePolling !== false;
-
-    var sapi = data.config.sapi || {};
-    $("cfg-gmsg").value = sapi.gmsg || "gmsg";
-    $("cfg-smsg").value = sapi.smsg || "smsg";
-
-    var spam = data.config.spam || {};
-    $("cfg-spamattack").value = spam.attack || "";
-    $("cfg-spamad").value = (spam.ad || []).join("\n");
-    $("cfg-spaminterval").value = spam.adInterval || "";
-
-    var bp = data.config.basePath || {};
-    $("cfg-path-music").value = bp.music || "";
-    $("cfg-path-mcfunc").value = bp.mcfunc || "";
-    $("cfg-path-ezmatic").value = bp.ezmatic || "";
-    $("cfg-path-image").value = bp.image || "";
-
-    renderModSwitches();
-    syncConfigCards();
-  }).catch(function () {});
-}
-function toggleSub(id, show) {
-  $(id).classList.toggle("show", !!show);
-}
-$("cfg-qq").addEventListener("change", function () { toggleSub("qqFields", this.checked); });
-$("cfg-ratelimit").addEventListener("change", function () { toggleSub("rlFields", this.checked); });
-$("cfg-webui").addEventListener("change", function () { toggleSub("webuiFields", this.checked); });
-
-$("configSave").addEventListener("click", function () {
-  if (!cfgData) return;
-  var f = cfgData.features || {};
-  f.music = f.music || {};
-  f.qq = f.qq || {};
-  f.music.playPercussion = $("cfg-percussion").checked;
-  f.qq.enabled = $("cfg-qq").checked;
-  f.qq.groupId = parseInt($("cfg-qqgroup").value, 10) || 0;
-  f.qq.port = parseInt($("cfg-qqport").value, 10) || 0;
-  f.qq.host = $("cfg-qqhost").value.trim() || "127.0.0.1";
-  f.qq.accessToken = $("cfg-qqtoken").value.trim();
-
-  var rl = cfgData.rateLimit || {};
-  rl.command = rl.command || {};
-  rl.command.enabled = $("cfg-ratelimit").checked;
-  rl.command.windowMs = parseInt($("cfg-rlwindow").value, 10) || 1000;
-  rl.command.maxPerWindow = parseInt($("cfg-rlmax").value, 10) || 20;
-
-  var webui = cfgData.webui || {};
-  webui.enabled = $("cfg-webui").checked;
-  webui.port = parseInt($("cfg-webport").value, 10) || 18888;
-  webui.token = $("cfg-webtoken").value.trim();
-
-  var ai = {
-    baseURL: $("cfg-aibase").value.trim(),
-    apiKey: $("cfg-aikey").value.trim(),
-    chatModel: $("cfg-aichatmodel").value.trim() || "deepseek-chat",
-    chatMaxTokens: parseInt($("cfg-aichattokens").value, 10) || 512,
-    chatPrompt: $("cfg-aichatprompt").value,
-    cmdModel: $("cfg-aicmdmodel").value.trim() || "deepseek-chat",
-    cmdMaxTokens: parseInt($("cfg-aicmdtokens").value, 10) || 1024,
-    cmdPrompt: $("cfg-aicmdprompt").value,
-    chatCooldown: parseInt($("cfg-aicooldown").value, 10) || 5000,
-  };
-  var utils = {
-    tellAllToTell: $("cfg-tellall").checked,
-    enablePolling: $("cfg-polling").checked,
-  };
-  var sapi = {
-    gmsg: $("cfg-gmsg").value.trim() || "gmsg",
-    smsg: $("cfg-smsg").value.trim() || "smsg",
-  };
-
-  // Mod 开关:勾选添加映射,取消移除(自定义 Mod 不受影响)
-  var mods = cfgData.mods || {};
-  mods.client = mods.client || {};
-  mods.server = mods.server || {};
-  ["client", "server"].forEach(function (side) {
-    MOD_CATALOG[side].forEach(function (m) {
-      var cb = $("mod-" + side + "-" + m[0]);
-      if (cb && cb.checked) mods[side][m[0]] = m[1];
-      else if (mods[side][m[0]] === m[1]) delete mods[side][m[0]];
-    });
-  });
-
-  // 刷屏数据
-  var spam = cfgData.spam || {};
-  spam.attack = $("cfg-spamattack").value;
-  spam.ad = $("cfg-spamad").value.split(/\n+/).map(function (s) { return s.trim(); }).filter(Boolean);
-  spam.adInterval = parseInt($("cfg-spaminterval").value, 10) || 0;
-
-  // 资源路径
-  var basePath = cfgData.basePath || {};
-  basePath.music = $("cfg-path-music").value.trim();
-  basePath.mcfunc = $("cfg-path-mcfunc").value.trim();
-  basePath.ezmatic = $("cfg-path-ezmatic").value.trim();
-  basePath.image = $("cfg-path-image").value.trim();
-
-  var payload = {
-    config: {
-      name: $("cfg-name").value.trim() || "EnderBridge",
-      port: parseInt($("cfg-port").value, 10) || 8800,
-      commandPrefix: $("cfg-prefix").value.trim() || "!",
-      logLevel: $("cfg-loglevel").value,
-      features: f,
-      rateLimit: rl,
-      webui: webui,
-      ai: ai,
-      utils: utils,
-      sapi: sapi,
-      mods: mods,
-      spam: spam,
-      basePath: basePath,
-    }
-  };
-  api("/config", { method: "PUT", body: JSON.stringify(payload) })
-    .then(function (data) {
-      toast(data.message, data.ok ? "ok" : "err");
-      if (data.ok) loadConfig();
-    }).catch(function () {});
-});
-
-// ===== Mod 管理 =====
-function loadMods() {
-  api("/mods").then(function (data) {
-    if (!data.ok) return;
-    $("modBodyClient").innerHTML = renderModRows(data.mods.client);
-    $("modBodyServer").innerHTML = renderModRows(data.mods.server);
-  }).catch(function () {});
-}
-function renderModRows(mods) {
-  var keys = Object.keys(mods || {});
-  if (!keys.length) return '<tr><td colspan="3" class="td-faint">无</td></tr>';
-  return keys.map(function (name) {
-    var info = mods[name];
-    var ok = info.importable;
-    return '<tr>' +
-      "<td>" + escapeHtml(name) + "</td>" +
-      '<td class="td-dim">' + escapeHtml(info.path) + "</td>" +
-      '<td><span class="status-dot ' + (ok ? "ok" : "bad") + '"></span>' + (ok ? "可导入" : "导入失败") + "</td>" +
-      "</tr>";
-  }).join("");
-}
-$("modRefresh").addEventListener("click", loadMods);
-$("modReloadAll").addEventListener("click", function () {
-  var btn = this;
-  btn.disabled = true;
-  api("/mods/reload-all", { method: "POST" })
-    .then(function (data) {
-      toast(data.message || "重载完成", data.ok ? "ok" : "err");
-    }).catch(function () {})
-    .finally(function () { btn.disabled = false; });
-});
-
-// ===== 一键重启 =====
-$("restartBtn").addEventListener("click", function () {
-  if (!confirm("确定要重启服务器吗？\n当前所有连接将被断开,重启完成后页面将自动刷新。")) return;
-  var btn = this;
-  btn.disabled = true;
-  api("/restart", { method: "POST" })
-    .then(function (data) {
-      if (!data.ok) {
-        toast(data.message || "重启失败", "err");
-        btn.disabled = false;
-        return;
-      }
-      toast("服务器正在重启...", "ok");
-      // 轮询等待服务器恢复,恢复后自动刷新页面
-      var tries = 0;
-      var timer = setInterval(function () {
-        tries++;
-        fetch("/api/status")
-          .then(function (res) { return res.json(); })
-          .then(function (d) {
-            if (d.ok) {
-              clearInterval(timer);
-              location.reload();
-            }
-          })
-          .catch(function () { /* 服务器尚未就绪,继续等待 */ });
-        if (tries >= 60) {
-          clearInterval(timer);
-          btn.disabled = false;
-          toast("等待服务器恢复超时,请手动刷新页面", "err");
-        }
-      }, 2000);
-    })
-    .catch(function () {
-      btn.disabled = false;
-    });
-});
-
-// ===== 启动 =====
-api("/status").then(function (data) {
-  if (!data.ok) { showLogin(); return; }
+// ===== 页面认证守卫 =====
+function requireAuth(callback) {
   var role = sessionStorage.getItem(ROLE_KEY) || "";
-  if (!data.webTokenSet) {
-    // 未设置令牌:本机直接开放全部权限
-    sessionStorage.removeItem(TOKEN_KEY);
-    enterApp("admin");
-    return;
-  }
-  if (role === "guest") {
-    // 上次以访客进入
-    enterApp("guest");
-  } else if (role === "admin" && sessionStorage.getItem(TOKEN_KEY)) {
-    // 校验上次的令牌是否仍有效
-    api("/config").then(function (d) {
-      if (d.ok) enterApp("admin");
-      else { clearAuth(); showLogin(); }
-    }).catch(function () { clearAuth(); showLogin(); });
+  var token = sessionStorage.getItem(TOKEN_KEY) || "";
+  if (!role) { location.href = "/login"; return; }
+  if (role === "admin" && token) {
+    api("/status").then(function (d) {
+      if (d.ok) callback(role);
+      else { clearAuth(); location.href = "/login"; }
+    }).catch(function () { callback(role); });
   } else {
-    showLogin();
+    callback(role);
   }
-}).catch(function () {
-  showLogin();
-});
+}
+
+// ===== 侧边栏 =====
+function initSidebar(activePage, role) {
+  var nav = document.querySelector('.nav-item[data-page="' + activePage + '"]');
+  if (nav) nav.classList.add("active");
+  document.querySelectorAll(".nav-item[data-page]").forEach(function (el) {
+    el.addEventListener("click", function () { location.href = "/" + el.getAttribute("data-page"); });
+  });
+  var isGuest = role === "guest";
+  document.querySelectorAll('.nav-item[data-page="permissions"], .nav-item[data-page="config"]')
+    .forEach(function (el) { el.style.display = isGuest ? "none" : ""; });
+  var gb = $("guestBadge"); if (gb) gb.style.display = isGuest ? "block" : "none";
+  var alb = $("adminLoginBtn");
+  if (alb) {
+    alb.style.display = isGuest ? "flex" : "none";
+    alb.addEventListener("click", function () { clearAuth(); location.href = "/login"; });
+  }
+  var lb = $("logoutBtn");
+  if (lb) lb.addEventListener("click", function () { clearAuth(); location.href = "/login"; });
+  if (isGuest) {
+    ["restartBtn", "permSave", "permReload", "configSave", "modReloadAll", "updateLocalCard"].forEach(function (id) {
+      var el = $(id); if (el) el.style.display = "none";
+    });
+  }
+}
