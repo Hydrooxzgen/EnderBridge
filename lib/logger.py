@@ -44,6 +44,17 @@ os.makedirs(LOG_DIR, exist_ok=True)
 # 日志文件句柄缓存(避免每次写入重新打开)
 _log_streams: dict[str, object] = {}
 
+# 控制台输出钩子:main.py 注入,日志写入 stdout 前后调用,用于协调终端提示符显示
+_before_console_output = None
+_after_console_output = None
+
+
+def set_console_hooks(before=None, after=None):
+    """注册控制台输出钩子(before/after),日志写入 stdout 前后自动调用"""
+    global _before_console_output, _after_console_output
+    _before_console_output = before
+    _after_console_output = after
+
 
 def get_log_stream(name: str):
     """获取或创建日志文件句柄"""
@@ -100,8 +111,12 @@ class Logger:
                 "reset": "\x1b[0m",
             }
             color = colors.get(type_, "")
+            if _before_console_output:
+                _before_console_output()
             sys.stdout.write(f"{color}{log_message}{colors['reset']}\n")
             sys.stdout.flush()
+            if _after_console_output:
+                _after_console_output()
 
         # 写入日志文件
         if self.file:

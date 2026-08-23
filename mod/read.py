@@ -162,21 +162,12 @@ class Mod:
         ],
     }
 
-    # 启动终端交互监听(由 ServerModManager 在 onStart/start 阶段调用)
+    # 终端交互监听已移至 main.py 的交互式提示符统一处理
+    # 本 Mod 仅保留命令定义,供 ServerModManager.execute_terminal 转发调用
     def start(self):
-        self._read_task = asyncio.get_running_loop().create_task(self._read_loop())
+        pass
 
-    async def _read_loop(self):
-        while True:
-            try:
-                line = await asyncio.to_thread(sys.stdin.readline)
-            except Exception:
-                break
-            if not line:
-                break
-            await self.read(line.rstrip("\n"))
-
-    # 处理终端输入
+    # 处理终端输入(由 main.py 交互式提示符调用)
     async def read(self, input_text):
         is_command = input_text.startswith(Command.command_prefix)
 

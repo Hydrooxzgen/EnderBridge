@@ -576,11 +576,9 @@ CONSOLE_PREFIX = "$"  # 命令前缀
 
 
 def console_out(msg):
-    """终端输出消息后恢复提示符"""
+    """终端输出消息"""
     sys.stdout.write("\r\x1b[K")
     print(msg)
-    sys.stdout.write(CONSOLE_PROMPT)
-    sys.stdout.flush()
 
 
 def _console_help():
@@ -591,7 +589,10 @@ def _console_help():
     print(f"  {CONSOLE_PREFIX}list       - 列出所有客户端连接")
     print(f"  {CONSOLE_PREFIX}say <msg>  - 向主客户端发送消息")
     print(f"  {CONSOLE_PREFIX}cmd <cmd>  - 向主客户端发送命令")
+    print(f"  /<cmd>     - 直接发送游戏命令(如 /list)")
+    print(f"  <text>     - 作为聊天消息发送")
     print(f"  exit/quit  - 退出程序")
+    print(f"  {CONSOLE_PREFIX}chat ...   - Mod 命令(如 {CONSOLE_PREFIX}chat help)")
 
 
 def _console_status():
@@ -615,49 +616,84 @@ def _console_list():
         print(f"  {i}. {ip} ({role})")
 
 
+def _show_prompt():
+    """显示终端提示符"""
+    sys.stdout.write(CONSOLE_PROMPT)
+    sys.stdout.flush()
+
+
+def _clear_prompt():
+    """日志输出前清除当前行的提示符"""
+    sys.stdout.write("\r\x1b[K")
+    sys.stdout.flush()
+
+
+# 注册控制台钩子:日志写 stdout 前清除提示符,写完后补回来
+from lib.logger import set_console_hooks
+set_console_hooks(before=_clear_prompt, after=_show_prompt)
+
+
 async def _dispatch_console_command(text):
     """分发终端命令"""
     text = text.strip()
     if not text:
-        sys.stdout.write(CONSOLE_PROMPT)
-        sys.stdout.flush()
         return
 
     if text in ("exit", "quit"):
         print("bye")
         os._exit(0)
 
-    if not text.startswith(CONSOLE_PREFIX):
-        console_out(f"§7命令需以 {CONSOLE_PREFIX} 开头，输入 {CONSOLE_PREFIX}help 查看帮助")
+    # 以 / 开头:转发为游戏命令
+    if text.startswith("/"):
+        if Current.client:
+            try:
+                data = await Current.client.runCommand(text)
+                body = data.get("body", {})
+                console_out(f"CMD {body.get('statusCode')} -> {body.get('statusMessage') or 'Null'}")
+            except Exception as e:
+                console_out(f"§cCMD 执行失败: {e}")
+        else:
+            console_out("§c无客户端连接")
         return
 
-    cmd = text[len(CONSOLE_PREFIX):].strip()
+    # 以 $ 开头:本地控制台命令
+    if text.startswith(CONSOLE_PREFIX):
+        cmd = text[len(CONSOLE_PREFIX):].strip()
 
-    if cmd in ("help", "h", "?"):
-        _console_help()
-    elif cmd in ("status", "info"):
-        _console_status()
-    elif cmd == "list":
-        _console_list()
-    elif cmd.startswith("say "):
-        msg = cmd[4:]
-        if Current.client:
-            Current.client.tell(msg)
-            console_out(f"§a已发送: §f{msg}")
+        if cmd in ("help", "h", "?"):
+            _console_help()
+        elif cmd in ("status", "info"):
+            _console_status()
+        elif cmd == "list":
+            _console_list()
+        elif cmd.startswith("say "):
+            msg = cmd[4:]
+            if Current.client:
+                Current.client.tell(msg)
+                console_out(f"§a已发送: §f{msg}")
+            else:
+                console_out("§c无客户端连接")
+        elif cmd.startswith("cmd "):
+            c = cmd[4:]
+            if Current.client:
+                await Current.client.runCommand(c)
+                console_out(f"§a已执行: §f{c}")
+            else:
+                console_out("§c无客户端连接")
         else:
-            console_out("§c无客户端连接")
-    elif cmd.startswith("cmd "):
-        c = cmd[4:]
-        if Current.client:
-            await Current.client.runCommand(c)
-            console_out(f"§a已执行: §f{c}")
-        else:
-            console_out("§c无客户端连接")
+            # 转发给服务端 Mod 执行(如 $chat、$spam 等)
+            from lib.command import Command
+            mod_cmd = f"{Command.command_prefix}{cmd}"
+            handled = await ServerModManager.execute_terminal(mod_cmd)
+            if not handled:
+                console_out(f"§c未知命令: §f{cmd}，输入 {CONSOLE_PREFIX}help 查看帮助")
+        return
+
+    # 非命令文本:作为聊天消息发送给主客户端
+    if Current.client:
+        Current.client.tellAll(text)
     else:
-        console_out(f"§c未知命令: §f{cmd}，输入 {CONSOLE_PREFIX}help 查看帮助")
-
-    sys.stdout.write(CONSOLE_PROMPT)
-    sys.stdout.flush()
+        console_out("§c无客户端连接")
 
 
 async def main():
@@ -692,6 +728,8 @@ async def main():
                 fut.result()
             except Exception as e:
                 console_out(f"§c错误: §f{e}")
+            finally:
+                _show_prompt()
         task.add_done_callback(_done)
 
     def stdin_loop():
@@ -705,8 +743,19 @@ async def main():
             _main_loop.call_soon_threadsafe(on_line, line.rstrip("\n"))
 
     threading.Thread(target=stdin_loop, daemon=True).start()
-    sys.stdout.write(CONSOLE_PROMPT)
-    sys.stdout.flush()
+
+    # Ctrl+C 处理:Windows 下 await Future() 可能无法可靠捕获 KeyboardInterrupt
+    # 用信号处理器触发优雅关闭,不打印 traceback
+    import signal
+    def _sigint(sig, frame):
+        # 调度 destroy() 后退出,避免 traceback
+        loop = _main_loop
+        if loop is not None and not loop.is_closed():
+            async def _shutdown():
+                await destroy()
+                os._exit(0)
+            asyncio.ensure_future(_shutdown())
+    signal.signal(signal.SIGINT, _sigint)
 
     try:
         # 运行直到收到信号
@@ -742,18 +791,24 @@ async def destroy():
 
     shared.logger.info("正在通知客户端断开连接...")
     for client in list(connections):
-        client.tell(f"§c{wsConfig.get('name', 'starws')} | §fSystem > §i已关闭连接")
         try:
-            await client.runCommand("/closewebsocket")
+            client.tell(f"§c{wsConfig.get('name', 'starws')} | §fSystem > §i已关闭连接")
         except Exception:
             pass
-        await client.close()
+        try:
+            await asyncio.wait_for(client.runCommand("/closewebsocket"), timeout=2)
+        except Exception:
+            pass
+        try:
+            await asyncio.wait_for(client.close(), timeout=2)
+        except Exception:
+            pass
     shared.logger.info("客户端通知已完成")
 
     shared.logger.info("正在关闭服务器...")
     try:
         server.close()
-        await asyncio.wait_for(server.wait_closed(), timeout=10)
+        await asyncio.wait_for(server.wait_closed(), timeout=5)
         shared.logger.info("服务器已关闭")
     except Exception:
         shared.logger.warning("服务器关闭异常，正在强制退出")
