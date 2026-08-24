@@ -1,6 +1,7 @@
 // ===== 检查更新页面逻辑 =====
 var _releasesPage = 1;
 var _selectedUpdateFile = null;
+var _userRole = "guest";
 
 function checkUpdate() {
   var btn = $("updateCheckBtn");
@@ -38,10 +39,16 @@ function checkUpdate() {
 }
 
 requireAuth(function (role) {
+  _userRole = role;
   initSidebar("update", role);
   initTheme();
   checkUpdate();
   loadReleases(1);
+  // 访客:隐藏本地更新卡片
+  if (role === "guest") {
+    var localCard = $("updateLocalCard");
+    if (localCard) localCard.style.display = "none";
+  }
 });
 
 // 检查更新按钮
@@ -165,7 +172,7 @@ function loadReleases(page) {
       var assetTag = r.has_asset ? "" : '<span class="td-dim" style="margin-left:6px;font-size:12px;">(无附件)</span>';
       var date = r.published_at ? new Date(r.published_at).toLocaleDateString("zh-CN") : "";
       var bodyHtml = r.body ? renderMarkdown(r.body) : '<span class="td-dim">无描述</span>';
-      var actionBtn = (!r.current && r.has_asset)
+      var actionBtn = (!r.current && r.has_asset && _userRole !== "guest")
         ? '<button class="btn btn-sm release-install-btn" data-tag="' + escapeHtml(r.tag) + '">安装此版本</button>'
         : "";
       return '<div class="release-item">' +

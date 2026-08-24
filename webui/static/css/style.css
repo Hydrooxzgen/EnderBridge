@@ -170,7 +170,7 @@ button { font-family: inherit; }
   padding: 20px;
   margin-bottom: 16px;
   backdrop-filter: blur(8px);
-  transition: all 0.25s ease;
+  transition: all 0.3s ease;
   animation: slideUp 0.35s ease both;
 }
 .card:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
@@ -203,7 +203,7 @@ button { font-family: inherit; }
   border-radius: 12px;
   padding: 16px;
   text-align: center;
-  transition: all 0.25s ease;
+  transition: all 0.3s ease;
   animation: scaleIn 0.3s ease both;
 }
 .stat:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }

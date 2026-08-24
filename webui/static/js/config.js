@@ -7,7 +7,7 @@ var MOD_CATALOG = {
     ["MoreWS", "mod.morews"], ["Ezmatic", "mod.ezmatic.main"], ["ImageMod", "mod.image.main"],
   ],
   server: [
-    ["chat", "mod.read"], ["spam", "mod.spam"], ["AI", "mod.ai"],
+    ["chat", "mod.read"], ["spam", "mod.spam"],
   ],
 };
 
@@ -65,7 +65,7 @@ function isModOn(side, key) {
 
 function syncConfigCards() {
   var mc = $("cfgCardMusic"); if (mc) mc.classList.toggle("hidden", !isModOn("client", "Music"));
-  var aiOn = isModOn("client", "AI") || isModOn("server", "AI");
+  var aiOn = isModOn("client", "AI");
   var ac = $("cfgCardAi"); if (ac) ac.classList.toggle("hidden", !aiOn);
   var sc = $("cfgCardSpam"); if (sc) sc.classList.toggle("hidden", !isModOn("server", "spam"));
   var tc = $("cfgCardTool"); if (tc) tc.classList.toggle("hidden", !isModOn("client", "Tool"));

@@ -92,7 +92,6 @@ mods = {
     "server": {
         "chat": "mod.read",
         "spam": "mod.spam",
-        "AI": "mod.ai",
     },
 }
 
