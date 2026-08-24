@@ -14,7 +14,7 @@ from uuid import uuid4
 ROOT = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PY = os.path.join(ROOT, "config.py")
 CONFIG_EXAMPLE = os.path.join(ROOT, "config.example.py")
-VERSION = "b0.2.1"
+VERSION = "b0.2.2 dev2"
 GITHUB_REPO = "Hydrooxzgen/EnderBridge"  # You can edit this to your own repository if you fork it :)
 WANT_RESET = "--reset-all" in sys.argv
 WANT_EXPORT = "export" in sys.argv
@@ -943,6 +943,11 @@ def _request_restart() -> None:
     loop = _main_loop
 
     def _do_restart():
+        global _restarting
+        _restarting = True  # 抑制提示符输出
+        # 清除当前行提示符,避免残留
+        sys.stdout.write("\r\x1b[K")
+        sys.stdout.flush()
         # 1. 在事件循环中执行完整关闭流程(此时 Web 请求线程已返回响应,不会死锁)
         if loop is not None and not loop.is_closed():
             try:
@@ -952,10 +957,9 @@ def _request_restart() -> None:
                 shared.logger.warning(f"重启前关闭流程异常: {error}")
         # 2. 端口已释放,以相同参数启动新进程(保持工作目录不变)
         try:
-            shared.logger.info("正在以相同参数重新启动服务器...")
             subprocess.Popen([sys.executable] + sys.argv, cwd=ROOT)
         except Exception as error:
-            shared.logger.error(f"重启进程启动失败: {error}")
+            pass
         # 3. 立即终止旧进程,端口与句柄由操作系统回收
         os._exit(0)
 
@@ -965,6 +969,7 @@ def _request_restart() -> None:
 # ===== 交互式终端提示符 =====
 CONSOLE_PROMPT = "EnderBridge> "
 CONSOLE_PREFIX = "$"  # 命令前缀
+_restarting = False  # 重启/更新中,抑制提示符输出
 
 
 def console_out(msg):
@@ -1010,6 +1015,8 @@ def _console_list():
 
 def _show_prompt():
     """显示终端提示符"""
+    if _restarting:
+        return
     sys.stdout.write(CONSOLE_PROMPT)
     sys.stdout.flush()
 

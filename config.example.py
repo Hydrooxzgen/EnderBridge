@@ -40,10 +40,12 @@ wsConfig = {
 # enabled: 是否启用 Web 管理界面
 # port: Web 管理端口（首次运行向导中也可设置）
 # token: 管理令牌，非空时访问需在登录页输入；留空则仅限本机访问
+# localOnly: 是否仅允许本机访问（True=绑定127.0.0.1，False=绑定0.0.0.0允许远程访问）
 webuiConfig = {
     "enabled": True,
     "port": 18888,
     "token": "",
+    "localOnly": False,
 }
 
 # 日志等级配置：只显示该等级及更高等级的错误

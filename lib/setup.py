@@ -235,6 +235,7 @@ RULES = [
     {"key": "Web 管理启用", "apply": make_rule(re.compile(r'"enabled": (True|False)(?=,\s*\n\s*"port": 18888)'), lambda f: f'"enabled": {_bool(f["webuiEnabled"])}')},
     {"key": "Web 管理端口", "apply": make_rule('"port": 18888', lambda f: f'"port": {_num(f["webuiPort"])}')},
     {"key": "Web 管理令牌", "apply": make_rule('"token": ""', lambda f: f'"token": {_json(f["webuiToken"])}')},
+    {"key": "Web 仅本机", "apply": make_rule(re.compile(r'"localOnly": (True|False)'), lambda f: f'"localOnly": {_bool(f["webuiLocalOnly"])}')},
     # GitHub API Token:匹配模板中的 githubToken 行
     {"key": "GitHub Token", "apply": make_rule('githubToken = ""', lambda f: f'githubToken = {_json(f["githubToken"])}')},
     # 注意:config.py 不包含 isFirstRun 标记(判定仅存在于模板 config.example.py)
@@ -346,6 +347,7 @@ def load_defaults() -> dict:
         "webuiEnabled": _get(cfg, "webuiConfig", "enabled", default=True),
         "webuiPort": _get(cfg, "webuiConfig", "port", default=18888),
         "webuiToken": _get(cfg, "webuiConfig", "token", default=""),
+        "webuiLocalOnly": _get(cfg, "webuiConfig", "localOnly", default=False),
         "githubToken": cfg.get("githubToken", ""),
         "clientMods": client_mods,
         "serverMods": server_mods,
@@ -876,6 +878,14 @@ button[type=submit]:disabled { opacity: 0.7; cursor: wait; transform: none; }
               <div><label for="webuiPort">Web 管理端口</label><input id="webuiPort" name="webuiPort" type="number" min="1" max="65535"></div>
               <div><label for="webuiToken">管理令牌（留空 = 仅本机访问）</label><input id="webuiToken" name="webuiToken" type="password" autocomplete="off"></div>
             </div>
+            <div class="switch-row">
+              <label class="switch">
+                <input id="webuiLocalOnly" name="webuiLocalOnly" type="checkbox">
+                <span class="track"></span>
+                <span class="switch-label">仅允许本机访问 (localOnly)</span>
+              </label>
+            </div>
+            <p class="hint">关闭后绑定 0.0.0.0，允许局域网/远程设备访问。建议配合管理令牌使用。</p>
             <p class="hint">每次启动时监听该端口，可在浏览器中管理权限、功能开关与仪表盘。</p>
           </div>
           <label for="githubToken">GitHub API Token（可选）</label>
@@ -1068,6 +1078,7 @@ function fill() {
   $("webuiEnabled").checked = DEFAULTS.webuiEnabled !== false;
   $("webuiPort").value = DEFAULTS.webuiPort;
   $("webuiToken").value = DEFAULTS.webuiToken;
+  $("webuiLocalOnly").checked = DEFAULTS.webuiLocalOnly !== false;
   $("githubToken").value = DEFAULTS.githubToken || "";
   $("owner").value = DEFAULTS.owner;
   $("op").value = (DEFAULTS.op || []).join(", ");
@@ -1121,6 +1132,7 @@ document.getElementById("cfg").addEventListener("submit", function (e) {
     webuiEnabled: $("webuiEnabled").checked,
     webuiPort: parseInt($("webuiPort").value, 10),
     webuiToken: $("webuiToken").value.trim(),
+    webuiLocalOnly: $("webuiLocalOnly").checked,
     githubToken: $("githubToken").value.trim(),
     owner: $("owner").value.trim(),
     op: $("op").value,

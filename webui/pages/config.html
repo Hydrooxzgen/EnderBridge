@@ -282,7 +282,12 @@
                 <input id="cfg-webtoken" class="cfg-input" type="password" placeholder="修改并牢记，否则无法登录管理界面" />
               </div>
             </div>
-            <p class="hint">禁用后将不再启动管理界面 HTTP 服务。</p>
+            <div class="cfg-switch" style="margin-top:8px;">
+              <label class="switch"><input type="checkbox" id="cfg-weblockal"><span class="track"></span></label>
+              <span class="switch-label">仅允许本机访问 (localOnly)</span>
+            </div>
+            <p class="hint">关闭后将绑定 0.0.0.0，允许局域网/远程设备访问管理界面。建议配合管理令牌使用。</p>
+            <p class="hint">禁用 Web 管理界面后将不再启动 HTTP 服务。</p>
           </div>
         </div>
 

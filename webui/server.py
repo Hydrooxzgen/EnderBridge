@@ -1126,12 +1126,13 @@ class WebUIServer:
         self._server = None
         self._thread = None
 
-    def start(self) -> bool:
+    def start(self, local_only: bool = True) -> bool:
         """启动 HTTP 服务器(独立线程);端口占用时自动尝试下一个可用端口"""
+        bind_host = "127.0.0.1" if local_only else "0.0.0.0"
         max_tries = 10
         for offset in range(max_tries):
             try:
-                self._server = ThreadingHTTPServer(("127.0.0.1", self.port + offset), WebUIHandler)
+                self._server = ThreadingHTTPServer((bind_host, self.port + offset), WebUIHandler)
                 self.port = self.port + offset
                 break
             except OSError:
@@ -1153,7 +1154,8 @@ class WebUIServer:
 
     @property
     def address(self) -> str:
-        return f"http://127.0.0.1:{self.port}"
+        host = "127.0.0.1" if getattr(self._server, "_local_only", True) else "0.0.0.0"
+        return f"http://{host}:{self.port}"
 
 
 # 全局实例(由 main.py 启动/停止)
@@ -1170,14 +1172,16 @@ def start_webui() -> WebUIServer:
     if not webui.get("enabled", True):
         return None
     port = int(webui.get("port") or 18888)
+    local_only = webui.get("localOnly", False)
     _instance = WebUIServer(port)
-    if not _instance.start():
+    if not _instance.start(local_only=local_only):
         from lib import shared
         shared.logger.warning(f"Web 管理端口 {port} 不可用,已跳过启动")
         _instance = None
         return None
     from lib import shared
-    shared.logger.info(f"Web 管理界面已启动: http://127.0.0.1:{_instance.port}")
+    bind_desc = "仅本机" if local_only else "所有接口"
+    shared.logger.info(f"Web 管理界面已启动: http://127.0.0.1:{_instance.port} ({bind_desc})")
     return _instance
 
 
