@@ -23,6 +23,7 @@ EnderBridge is a Python-based mod loader for Minecraft Bedrock Edition. It runs 
 - 🚦 **命令限流 / Command rate limit**：按玩家分桶的窗口限流，防刷屏
 - 🔧 **图形化配置向导 / Web setup wizard**：首次运行自动打开浏览器向导（`http://127.0.0.1:18888`），无需手改配置
 - 🩹 **依赖自愈 / Dependency self-healing**：缺少依赖自动安装；`config.py` / `permission.json` 缺失自动从模板生成
+- 🔄 **更新后自动跳转 / Auto-redirect after update**：WebUI 更新完成后自动探测服务器恢复并跳转到仪表盘，支持端口偏移检测与超时重试
 - 🗺️ **跨平台路径兼容 / Cross-platform paths**：Windows / Android / Linux 统一相对路径写法
 
 ---
@@ -79,7 +80,7 @@ After saving, `config.py` and `permission.json` are generated (old files backed 
 
 **On every server start**, the Web management console listens on the configured port (default `18888`). Open `http://127.0.0.1:18888` in your browser:
 
-- 📊 **仪表盘 / Dashboard**：服务器名称、端口、客户端连接数、运行时间，一键重启服务器（优雅关闭后自动以相同参数重启进程）/ Server name, port, connected clients, uptime, one-click server restart
+- 📊 **仪表盘 / Dashboard**：服务器名称、端口、客户端连接数、运行时间，一键重启服务器（优雅关闭后自动以相同参数重启进程）；根路径 `/` 直接进入仪表盘 / Server name, port, connected clients, uptime, one-click server restart; root path `/` goes directly to dashboard
 - 👥 **权限管理 / Permissions**：在线查看与编辑 `owner` / `op` / `user` / `blocker`，保存后即时生效 / View & edit permission groups, applied immediately
 - ⚙️ **功能设置 / Settings**：修改名称、端口、命令前缀、日志等级、音乐 / QQ 开关、命令限流与 Web 管理本身（端口 / 令牌）/ Edit server settings, feature toggles, rate limit and Web console port / token
 - 🧩 **Mod 管理 / Mods**：查看已加载的客户端 / 服务端 Mod 及其可导入状态，一键重载服务端 Mod / View loaded mods and reload server mods

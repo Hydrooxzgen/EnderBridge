@@ -79,7 +79,10 @@ function initSidebar(activePage, role) {
   var nav = document.querySelector('.nav-item[data-page="' + activePage + '"]');
   if (nav) nav.classList.add("active");
   document.querySelectorAll(".nav-item[data-page]").forEach(function (el) {
-    el.addEventListener("click", function () { location.href = "/" + el.getAttribute("data-page"); });
+    el.addEventListener("click", function () {
+      var page = el.getAttribute("data-page");
+      location.href = page === "dashboard" ? "/" : "/" + page;
+    });
   });
   var isGuest = role === "guest";
   document.querySelectorAll('.nav-item[data-page="permissions"], .nav-item[data-page="config"]')

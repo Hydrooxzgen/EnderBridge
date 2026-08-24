@@ -28,13 +28,13 @@
 (function() {
   var role = sessionStorage.getItem(ROLE_KEY) || "";
   if (role === "guest" || (role === "admin" && sessionStorage.getItem(TOKEN_KEY))) {
-    location.href = "/dashboard"; return;
+    location.href = "/"; return;
   }
   $("loginBtn").addEventListener("click", doLogin);
   $("guestBtn").addEventListener("click", function() {
     sessionStorage.removeItem(TOKEN_KEY);
     sessionStorage.setItem(ROLE_KEY, "guest");
-    location.href = "/dashboard";
+    location.href = "/";
   });
   $("tokenInput").addEventListener("keydown", function(e) { if (e.key === "Enter") doLogin(); });
   initTheme();
@@ -45,7 +45,7 @@
       .then(function(data) {
         if (data.ok && data.role === "admin") {
           sessionStorage.setItem(ROLE_KEY, "admin");
-          location.href = "/dashboard";
+          location.href = "/";
         } else {
           sessionStorage.removeItem(TOKEN_KEY);
           $("loginMsg").textContent = data.message || "密码错误";

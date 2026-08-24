@@ -45,7 +45,7 @@ STATIC_DIR = os.path.join(WEBUI_DIR, "static")
 CONFIG_PY = os.path.join(ROOT, "config.py")
 CONFIG_PY_BAK = os.path.join(ROOT, "config.py.bak")
 PERMISSION_JSON = os.path.join(ROOT, "permission.json")
-APP_VERSION = "b0.1.0"
+APP_VERSION = "b0.2.1"
 
 # 静态资源 MIME 类型(前端可自由使用 css/js/图片/字体等,甚至接入 Vue 等框架)
 _MIME_TYPES = {
@@ -533,10 +533,10 @@ class WebUIHandler(BaseHTTPRequestHandler):
         path = parsed.path.rstrip("/") or "/"
 
         # 页面路由
-        if path in ("/", "/index.html", "/login"):
+        if path == "/login":
             self._serve_page("login.html")
             return
-        if path == "/dashboard":
+        if path in ("/", "/index.html", "/dashboard"):
             self._serve_page("dashboard.html")
             return
         if path == "/permissions":
@@ -953,7 +953,10 @@ class WebUIHandler(BaseHTTPRequestHandler):
             self._respond({"ok": False, "message": f"更新触发失败: {e}"})
             return
         # 先发送成功响应,再触发重启(避免 destroy() 在响应发送前关闭连接)
-        self._respond({"ok": True, "message": "服务器正在更新并重启,请稍候..."})
+        self._respond({"ok": True, "message": "服务器正在更新，更新完成后请点击仪表盘"})
+        # 等待响应数据发送到浏览器后再触发重启
+        import time
+        time.sleep(0.5)
         try:
             _restart_handler()
         except Exception:

@@ -14,7 +14,7 @@ from uuid import uuid4
 ROOT = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PY = os.path.join(ROOT, "config.py")
 CONFIG_EXAMPLE = os.path.join(ROOT, "config.example.py")
-VERSION = "b0.2.0"
+VERSION = "b0.2.1"
 GITHUB_REPO = "Hydrooxzgen/EnderBridge"  # You can edit this to your own repository if you fork it :)
 WANT_RESET = "--reset-all" in sys.argv
 WANT_EXPORT = "export" in sys.argv
@@ -614,12 +614,17 @@ if os.path.isfile(UPDATE_MARKER) and not WANT_UPDATE:
             # 覆盖完成后磁盘上已是新版本代码,但内存中仍是旧代码
             # 需要再启动一次新进程,让新代码正确加载并显示版本号
             # (.update_pending 已在上方删除,新进程不会重复执行更新)
+            # 等待端口释放:旧进程的 destroy() 已关闭服务器,但 Windows 上
+            # TCP 端口可能仍在 TIME_WAIT 状态,需等待 OS 回收后新进程才能绑端口
+            print("  等待端口释放...")
+            time.sleep(3)
             try:
                 import subprocess
                 subprocess.Popen([sys.executable] + sys.argv, cwd=ROOT)
             except Exception as e:
                 print(f"  重启失败: {e},请手动重启服务器")
-            sys.exit(0)
+            # os._exit 跳过 atexit/finalizer,避免终端残留状态导致新进程无法输入
+            os._exit(0)
         except Exception as e:
             print(f"  更新失败: {e}")
         finally:
