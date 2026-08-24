@@ -14,7 +14,7 @@ from uuid import uuid4
 ROOT = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PY = os.path.join(ROOT, "config.py")
 CONFIG_EXAMPLE = os.path.join(ROOT, "config.example.py")
-VERSION = "b0.1.1"
+VERSION = "b0.1.2 dev1"
 GITHUB_REPO = "Hydrooxzgen/EnderBridge"  # You can edit this to your own repository if you fork it :)
 WANT_RESET = "--reset-all" in sys.argv
 WANT_EXPORT = "export" in sys.argv
@@ -901,9 +901,10 @@ def _webui_status() -> dict:
 def _start_webui() -> None:
     """启动 Web 管理界面(每次启动都监听配置的 Web 端口)"""
     try:
-        from webui.server import set_app_info, set_restart_handler, set_status_provider, start_webui
+        from webui.server import set_app_info, set_event_loop, set_restart_handler, set_status_provider, start_webui
         set_status_provider(_webui_status)
         set_restart_handler(_request_restart)
+        set_event_loop(asyncio.get_running_loop())
         set_app_info(GITHUB_REPO, VERSION)
         start_webui()
     except Exception as error:

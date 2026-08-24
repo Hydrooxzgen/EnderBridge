@@ -88,6 +88,16 @@ def set_restart_handler(fn):
     _restart_handler = fn
 
 
+# asyncio 事件循环引用(main.py 注入):用于从 WebUI 线程调度异步任务(如发送 MCBE 命令)
+_event_loop = None
+
+
+def set_event_loop(loop):
+    """注入主 asyncio 事件循环,WebUI 线程可通过它调度协程"""
+    global _event_loop
+    _event_loop = loop
+
+
 # 应用信息(main.py 注入):用于 Release Notes 获取
 _github_repo = ""    # e.g. "UserXYY123/EnderBridge"
 _app_version = APP_VERSION    # e.g. "b0.1.0"
@@ -541,6 +551,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if path == "/update":
             self._serve_page("update.html")
             return
+        if path == "/console":
+            self._serve_page("console.html")
+            return
         if path.startswith("/static/"):
             self._serve_static(path)
             return
@@ -599,6 +612,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/update/upload":
             self._api_update_upload()
+            return
+        if parsed.path == "/api/console":
+            self._api_console()
             return
         self.send_response(404)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
@@ -677,6 +693,38 @@ class WebUIHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     # ---- API ----
+    def _api_console(self) -> None:
+        """向 MCBE 客户端发送命令并返回结果(仅 admin)"""
+        if not _require_admin(self):
+            return
+        body = self._read_body()
+        command = body.get("command", "").strip()
+        if not command:
+            self._respond({"ok": False, "message": "缺少 command 参数"})
+            return
+        if _event_loop is None or _event_loop.is_closed():
+            self._respond({"ok": False, "message": "事件循环未就绪,请稍后重试"})
+            return
+        try:
+            from lib.current import Current
+            client = Current.client
+            if client is None:
+                self._respond({"ok": False, "message": "无客户端连接"})
+                return
+            import asyncio
+            fut = asyncio.run_coroutine_threadsafe(
+                client.runCommand(command), _event_loop
+            )
+            result = fut.result(timeout=15)
+            body_data = result.get("body", {}) if isinstance(result, dict) else {}
+            self._respond({
+                "ok": True,
+                "statusCode": body_data.get("statusCode"),
+                "statusMessage": body_data.get("statusMessage"),
+            })
+        except Exception as e:
+            self._respond({"ok": False, "message": f"命令执行失败: {e}"})
+
     def _api_auth(self) -> None:
         """登录校验:令牌正确返回 admin;错误返回失败(不自动进入访客模式)"""
         body = self._read_body()

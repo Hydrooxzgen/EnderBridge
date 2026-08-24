@@ -14,7 +14,25 @@ var MOD_CATALOG = {
 requireAuth(function (role) {
   initSidebar("config", role);
   loadConfig();
+  initCategoryNav();
 });
+
+// ===== 分类导航 =====
+function initCategoryNav() {
+  var items = document.querySelectorAll(".cfg-sidebar-item[data-cfg-cat]");
+  items.forEach(function (item) {
+    item.addEventListener("click", function () {
+      var cat = this.getAttribute("data-cfg-cat");
+      // 更新侧边栏高亮
+      items.forEach(function (i) { i.classList.remove("active"); });
+      this.classList.add("active");
+      // 切换内容区
+      document.querySelectorAll(".cfg-category[data-cfg-cat]").forEach(function (sec) {
+        sec.classList.toggle("active", sec.getAttribute("data-cfg-cat") === cat);
+      });
+    });
+  });
+}
 
 function renderModSwitches() {
   var mods = cfgData.mods || {};
@@ -25,9 +43,9 @@ function renderModSwitches() {
     box.innerHTML = MOD_CATALOG[side].map(function (m) {
       var key = m[0], path = m[1];
       var checked = enabled[key] === path;
-      return '<label class="switch-row mod-check">' +
+      return '<div class="cfg-switch mod-check">' +
         '<label class="switch"><input type="checkbox" id="mod-' + side + '-' + key + '"' + (checked ? " checked" : "") + '><span class="track"></span></label>' +
-        '<span class="switch-label">' + escapeHtml(key) + ' <span class="td-dim">(' + escapeHtml(path) + ')</span></span></label>';
+        '<span class="switch-label">' + escapeHtml(key) + ' <span class="td-dim">(' + escapeHtml(path) + ')</span></span></div>';
     }).join("");
     box.querySelectorAll("input[type=checkbox]").forEach(function (cb) {
       cb.addEventListener("change", syncConfigCards);

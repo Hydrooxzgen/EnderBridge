@@ -327,7 +327,124 @@ button { font-family: inherit; }
 .release-item-body { font-size: 13px; color: var(--text-dim); line-height: 1.7; max-height: 120px; overflow-y: auto; }
 .release-item-foot { margin-top: 10px; display: flex; align-items: center; gap: 10px; }
 .release-install-btn { font-size: 12px; }
-/* ===== 多页面架构 ===== */
+/* ===== 配置页面布局(OpenList 风格) ===== */
+.cfg-layout {
+  display: flex; gap: 20px;
+  margin-top: 16px; min-height: calc(100vh - 80px);
+}
+.cfg-sidebar {
+  width: 200px; flex-shrink: 0;
+  background: var(--card); border: 1px solid var(--card-border);
+  border-radius: 12px; padding: 6px;
+  position: sticky; top: 20px; height: fit-content;
+  align-self: flex-start;
+}
+.cfg-sidebar-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; border-radius: 8px; cursor: pointer;
+  font-size: 13px; color: var(--text-dim);
+  transition: all 0.15s;
+}
+.cfg-sidebar-item:hover {
+  background: rgba(148, 163, 184, 0.08); color: var(--text);
+}
+.cfg-sidebar-item.active {
+  background: linear-gradient(90deg, rgba(99, 102, 241, 0.22), rgba(139, 92, 246, 0.12));
+  color: var(--accent); font-weight: 600;
+}
+.cfg-sidebar-item .icon { font-size: 15px; width: 20px; text-align: center; flex-shrink: 0; }
+.cfg-content {
+  flex: 1; min-width: 0;
+}
+.cfg-action-bar {
+  display: flex; align-items: center; justify-content: flex-end;
+  gap: 8px; margin-bottom: 16px;
+  position: sticky; top: 16px; z-index: 10;
+  padding: 10px 0;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.95) 0%, rgba(15, 23, 42, 0.8) 70%, transparent 100%);
+}
+.cfg-category { display: none; }
+.cfg-category.active { display: block; }
+.cfg-section {
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 14px; padding: 22px;
+  margin-bottom: 16px;
+}
+.cfg-section h3 {
+  font-size: 15px; font-weight: 600; margin-bottom: 18px;
+  display: flex; align-items: center; gap: 8px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+.cfg-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+.cfg-grid-full {
+  grid-column: 1 / -1;
+}
+.cfg-field {
+  display: flex; flex-direction: column;
+}
+.cfg-field label {
+  font-size: 13px; font-weight: 500;
+  color: var(--text-dim); margin-bottom: 6px;
+}
+.cfg-field .hint {
+  font-size: 11px; color: var(--text-faint);
+  margin-top: 4px; line-height: 1.5;
+}
+.cfg-input {
+  width: 100%; padding: 10px 12px;
+  background: var(--input-bg); color: var(--text);
+  border: 1px solid var(--input-border);
+  border-radius: 8px; outline: none;
+  font-size: 13px; transition: border-color 0.2s;
+}
+.cfg-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.12);
+}
+.cfg-input::placeholder {
+  color: var(--text-faint);
+}
+select.cfg-input {
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2394a3b8' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 30px;
+}
+textarea.cfg-input {
+  min-height: 60px; resize: vertical;
+  font-family: inherit;
+}
+.cfg-switch {
+  display: flex; align-items: center; gap: 12px;
+  padding: 6px 0;
+}
+.cfg-switch .switch { width: 40px; height: 22px; }
+.cfg-switch .track::after { width: 16px; height: 16px; top: 2px; left: 2px; }
+.cfg-switch input:checked + .track::after { transform: translateX(18px); }
+.cfg-switch .switch-label { font-size: 13px; }
+.cfg-inline-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+.cfg-sub-box {
+  margin-top: 12px; padding: 14px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.35);
+  border: 1px dashed rgba(148, 163, 184, 0.15);
+  display: none;
+}
+.cfg-sub-box.show { display: block; }
+
+/* ===== 多页面架构(OpenList 风格) ===== */
 .app-layout { display: flex; min-height: 100vh; }
 .login-overlay {
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
@@ -343,4 +460,13 @@ a.nav-item { text-decoration: none; }
   .sidebar .brand .name, .sidebar .brand .ver, .sidebar .brand .try-modloader, .nav-item span, .sidebar .logout span { display: none; }
   .main { padding: 16px; }
   .form-grid { grid-template-columns: 1fr; }
+  .cfg-layout { flex-direction: column; gap: 12px; }
+  .cfg-sidebar {
+    width: 100%; position: static;
+    display: flex; gap: 4px; padding: 4px;
+    overflow-x: auto; white-space: nowrap;
+  }
+  .cfg-sidebar-item { padding: 8px 12px; font-size: 12px; flex-shrink: 0; }
+  .cfg-sidebar-item .label-text { display: none; }
+  .cfg-grid { grid-template-columns: 1fr; }
 }

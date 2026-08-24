@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>EnderBridge - Mod 管理</title>
+<title>EnderBridge - 控制台</title>
 <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
@@ -27,31 +27,27 @@
   <div class="logout" id="logoutBtn"><span>🚪</span><span>退出登录</span></div>
 </aside>
 <div class="main">
-  <h2>🧩 Mod 管理</h2>
-  <div class="card card-gap">
-    <div class="row" style="justify-content:space-between;align-items:center;">
-      <div style="font-weight:600">客户端 Mods</div>
-      <button class="btn btn-sm" id="modRefresh">🔄 刷新</button>
+  <h2>💻 控制台</h2>
+
+  <div class="card">
+    <div style="font-weight:600;margin-bottom:8px;">发送命令</div>
+    <p class="desc" style="margin-bottom:8px;">直接向 MCBE 服务器发送命令。以 <code>/</code> 开头为游戏命令(如 <code>/list</code>)，否则作为聊天消息发送。</p>
+    <div class="row gap-10" style="align-items:stretch">
+      <input type="text" id="consoleInput" placeholder="输入命令，如 /list 或 say hello" style="flex:1;padding:8px 12px;border:1px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-family:monospace;font-size:14px;" autocomplete="off" />
+      <button class="btn btn-primary btn-sm" id="consoleExecBtn">▶ 执行</button>
     </div>
-    <table class="perm-table" style="margin-top:8px">
-      <thead><tr><th>Mod 名称</th><th>文件路径</th><th>状态</th></tr></thead>
-      <tbody id="modBodyClient"><tr><td colspan="3" class="td-faint">加载中...</td></tr></tbody>
-    </table>
   </div>
-  <div class="card card-gap">
-    <div class="row" style="justify-content:space-between;align-items:center;">
-      <div style="font-weight:600">服务端 Mods</div>
-      <button class="btn btn-danger btn-sm" id="modReloadAll">♻️ 重载所有 Mod（含热更新）</button>
+
+  <div class="card" style="margin-top:12px;">
+    <div style="font-weight:600;margin-bottom:8px;">命令输出</div>
+    <div id="consoleOutput" style="background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:12px;min-height:200px;max-height:500px;overflow-y:auto;font-family:monospace;font-size:13px;color:#94a3b8;white-space:pre-wrap;word-break:break-all;"></div>
+    <div style="margin-top:8px;">
+      <button class="btn btn-sm" id="consoleClearBtn">🗑️ 清空</button>
     </div>
-    <div class="hint">重载所有服务端 Mod，执行服务端重载期间游戏内可能产生延迟。</div>
-    <table class="perm-table" style="margin-top:8px">
-      <thead><tr><th>Mod 名称</th><th>文件路径</th><th>状态</th></tr></thead>
-      <tbody id="modBodyServer"><tr><td colspan="3" class="td-faint">加载中...</td></tr></tbody>
-    </table>
   </div>
 </div>
 <div id="toast"></div>
 <script src="/static/js/app.js"></script>
-<script src="/static/js/mods.js"></script>
+<script src="/static/js/console.js"></script>
 </body>
 </html>
