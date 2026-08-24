@@ -1,6 +1,6 @@
 # Author: Hydrooxzgen
 # This project is licensed under the GPL-v3.0 License.
-# version beta 0.1.1
+# version beta 0.2.0
 import asyncio
 import json
 import os
@@ -14,10 +14,11 @@ from uuid import uuid4
 ROOT = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PY = os.path.join(ROOT, "config.py")
 CONFIG_EXAMPLE = os.path.join(ROOT, "config.example.py")
-VERSION = "b0.1.2 dev1"
+VERSION = "b0.2.0 RC3"
 GITHUB_REPO = "Hydrooxzgen/EnderBridge"  # You can edit this to your own repository if you fork it :)
 WANT_RESET = "--reset-all" in sys.argv
 WANT_EXPORT = "export" in sys.argv
+WANT_EXPORT_CLEAR = WANT_EXPORT and "-clear" in sys.argv
 WANT_LOAD_WITHOUT_CONFIG = "--load-without-config" in sys.argv
 
 # ===== 依赖检测(必须早于任何第三方模块使用) =====
@@ -32,7 +33,7 @@ def _dependencies_ok() -> bool:
 
 def _run_setup() -> None:
     print("========================================")
-    print("  检测到缺少依赖，正在运行 setup.py 安装依赖...")
+    print("  检测到缺少依赖，正在安装依赖...")
     print("========================================")
     res = subprocess.run([sys.executable, "setup.py"], cwd=ROOT)
     if res.returncode != 0:
@@ -704,6 +705,23 @@ if WANT_EXPORT:
     print(f"  导出完成: {out} ({size_kb:.1f} KB)")
     print(f"  使用方法: python main.py update {out}")
     print("======================================")
+    # export -clear:导出后自动执行 reset-all
+    if WANT_EXPORT_CLEAR:
+        print("  正在执行 --reset-all ...")
+        for name in ["config.py", "config.py.bak", "permission.json", "permission.json.bak"]:
+            p = os.path.join(ROOT, name)
+            if os.path.exists(p):
+                os.remove(p)
+        try:
+            with open(CONFIG_EXAMPLE, "r", encoding="utf-8") as f:
+                src = f.read()
+            next_ = re.sub(r"is_first_run = (True|False)", "is_first_run = True", src)
+            if next_ != src:
+                with open(CONFIG_EXAMPLE, "w", encoding="utf-8") as f:
+                    f.write(next_)
+        except Exception:
+            pass
+        print("  配置已重置")
     sys.exit(0)
 
 # 确保项目根目录可导入

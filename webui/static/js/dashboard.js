@@ -1,6 +1,7 @@
 // ===== 仪表盘页面逻辑 =====
 requireAuth(function (role) {
   initSidebar("dashboard", role);
+  initTheme();
   refreshStatus();
   loadReleaseNotes();
 });

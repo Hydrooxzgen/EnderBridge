@@ -98,3 +98,48 @@ function initSidebar(activePage, role) {
     });
   }
 }
+
+// ===== 主题切换 =====
+var THEME_KEY = "enderbridge_theme";
+
+function getPreferredTheme() {
+  var saved = localStorage.getItem(THEME_KEY);
+  if (saved) return saved;
+  return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+}
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem(THEME_KEY, theme);
+  updateThemeIcon(theme);
+}
+
+function updateThemeIcon(theme) {
+  var btn = $("themeToggle");
+  if (!btn) return;
+  var icon = btn.querySelector(".theme-icon");
+  var label = btn.querySelector(".theme-label");
+  if (theme === "light") {
+    icon.textContent = "☀️";
+    label.textContent = "浅色模式";
+  } else {
+    icon.textContent = "🌙";
+    label.textContent = "深色模式";
+  }
+}
+
+function toggleTheme() {
+  var current = document.documentElement.getAttribute("data-theme") || "dark";
+  applyTheme(current === "dark" ? "light" : "dark");
+}
+
+function initTheme() {
+  applyTheme(getPreferredTheme());
+  var btn = $("themeToggle");
+  if (btn) btn.addEventListener("click", toggleTheme);
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener("change", function (e) {
+    if (!localStorage.getItem(THEME_KEY)) {
+      applyTheme(e.matches ? "dark" : "light");
+    }
+  });
+}

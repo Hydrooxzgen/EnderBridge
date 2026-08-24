@@ -1,6 +1,7 @@
 // ===== Mod 管理页面逻辑 =====
 requireAuth(function (role) {
   initSidebar("mods", role);
+  initTheme();
   loadMods();
 });
 

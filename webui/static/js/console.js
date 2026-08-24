@@ -48,13 +48,12 @@ function sendCommand() {
 
 requireAuth(function (role) {
   initSidebar("console", role);
+  initTheme();
   appendOutput("控制台已就绪。输入命令后按回车或点击执行。", "info");
-  // 如果是访客,隐藏输入区域
+  // 如果是访客,隐藏发送命令区域
   if (role === "guest") {
-    var input = $("consoleInput");
-    if (input) { input.disabled = true; input.placeholder = "访客模式:无权发送命令"; }
-    var btn = $("consoleExecBtn");
-    if (btn) btn.disabled = true;
+    var cmdCard = $("consoleCmdCard");
+    if (cmdCard) cmdCard.style.display = "none";
   }
 });
 

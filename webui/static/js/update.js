@@ -39,6 +39,7 @@ function checkUpdate() {
 
 requireAuth(function (role) {
   initSidebar("update", role);
+  initTheme();
   checkUpdate();
   loadReleases(1);
 });

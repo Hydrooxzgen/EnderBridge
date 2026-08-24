@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>EnderBridge - 功能设置</title>
 <link rel="stylesheet" href="/static/css/style.css">
+<script>document.documentElement.setAttribute('data-theme',localStorage.getItem('enderbridge_theme')||(window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark'));</script>
 </head>
 <body>
 <aside class="sidebar">
@@ -22,6 +23,7 @@
   <div class="nav-item" data-page="console"><span>💻</span><span>控制台</span></div>
   <div class="nav-item" data-page="update"><span>🔄</span><span>检查更新</span></div>
   <div class="spacer"></div>
+  <button class="theme-toggle" id="themeToggle"><span class="theme-icon">🌙</span><span class="theme-label">深色模式</span></button>
   <div class="guest-badge" id="guestBadge">👤 访客模式</div>
   <div class="nav-item hidden" id="adminLoginBtn"><span>🔑</span><span>管理员登录</span></div>
   <div class="logout" id="logoutBtn"><span>🚪</span><span>退出登录</span></div>

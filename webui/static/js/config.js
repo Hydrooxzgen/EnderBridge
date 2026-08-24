@@ -13,6 +13,7 @@ var MOD_CATALOG = {
 
 requireAuth(function (role) {
   initSidebar("config", role);
+  initTheme();
   loadConfig();
   initCategoryNav();
 });
@@ -23,6 +24,8 @@ function initCategoryNav() {
   items.forEach(function (item) {
     item.addEventListener("click", function () {
       var cat = this.getAttribute("data-cfg-cat");
+      // 跳过被隐藏的 tab
+      if (this.style.display === "none") return;
       // 更新侧边栏高亮
       items.forEach(function (i) { i.classList.remove("active"); });
       this.classList.add("active");
@@ -62,9 +65,19 @@ function isModOn(side, key) {
 
 function syncConfigCards() {
   var mc = $("cfgCardMusic"); if (mc) mc.classList.toggle("hidden", !isModOn("client", "Music"));
-  var ac = $("cfgCardAi"); if (ac) ac.classList.toggle("hidden", !(isModOn("client", "AI") || isModOn("server", "AI")));
+  var aiOn = isModOn("client", "AI") || isModOn("server", "AI");
+  var ac = $("cfgCardAi"); if (ac) ac.classList.toggle("hidden", !aiOn);
   var sc = $("cfgCardSpam"); if (sc) sc.classList.toggle("hidden", !isModOn("server", "spam"));
   var tc = $("cfgCardTool"); if (tc) tc.classList.toggle("hidden", !isModOn("client", "Tool"));
+  // 隐藏禁用功能对应的侧边栏 tab
+  var aiTab = document.querySelector('.cfg-sidebar-item[data-cfg-cat="ai"]');
+  if (aiTab) aiTab.style.display = aiOn ? "" : "none";
+  // 如果当前选中的是被隐藏的 tab,自动跳到 features
+  var activeTab = document.querySelector('.cfg-sidebar-item.active[data-cfg-cat]');
+  if (activeTab && activeTab.style.display === "none") {
+    var featTab = document.querySelector('.cfg-sidebar-item[data-cfg-cat="features"]');
+    if (featTab) featTab.click();
+  }
 }
 
 function toggleSub(id, show) { $(id).classList.toggle("show", !!show); }

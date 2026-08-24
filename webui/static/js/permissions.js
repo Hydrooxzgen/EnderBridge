@@ -3,6 +3,7 @@ var permData = { owner: "YourXboxName", op: [], user: [], blocker: [] };
 
 requireAuth(function (role) {
   initSidebar("permissions", role);
+  initTheme();
   loadPermissions();
 });
 

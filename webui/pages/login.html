@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>EnderBridge Web 管理 - 登录</title>
 <link rel="stylesheet" href="/static/css/style.css">
+<script>document.documentElement.setAttribute('data-theme',localStorage.getItem('enderbridge_theme')||(window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark'));</script>
 </head>
 <body>
 <div id="loginView" class="show">
@@ -18,6 +19,7 @@
     <button id="guestBtn" type="button" class="guest-btn">以访客身份浏览 (Guest)</button>
     <div class="login-msg" id="loginMsg"></div>
     <div class="login-hint">令牌在 config.py 的 webuiConfig.token 中设置。<br>令牌正确:开放全部管理权限;令牌错误:提示密码错误;或点击下方按钮以访客身份浏览(仅仪表盘 / Mod 列表)。</div>
+    <button class="theme-toggle" id="themeToggle" style="margin-top:12px;justify-content:center;"><span class="theme-icon">🌙</span><span class="theme-label">深色模式</span></button>
   </div>
 </div>
 <div id="toast"></div>
@@ -35,6 +37,7 @@
     location.href = "/dashboard";
   });
   $("tokenInput").addEventListener("keydown", function(e) { if (e.key === "Enter") doLogin(); });
+  initTheme();
   function doLogin() {
     var token = $("tokenInput").value.trim();
     sessionStorage.setItem(TOKEN_KEY, token);
