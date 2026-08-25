@@ -881,7 +881,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
         qs = urllib.parse.parse_qs(parsed.query)
         page = int(qs.get("page", ["1"])[0])
         try:
-            api_url = f"https://api.github.com/repos/{_github_repo}/releases?per_page=20&page={page}"
+            api_url = f"https://api.github.com/repos/{_github_repo}/releases?per_page=3&page={page}"
             req = urllib.request.Request(api_url, headers=_github_headers())
             with urllib.request.urlopen(req, timeout=8) as resp:
                 releases = json.loads(resp.read().decode("utf-8"))

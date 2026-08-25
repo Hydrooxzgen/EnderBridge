@@ -287,7 +287,7 @@ function loadReleases(page) {
       $("releasesNextBtn").disabled = true;
       return;
     }
-    $("releasesNextBtn").disabled = list.length < 20;
+    $("releasesNextBtn").disabled = list.length < 3;
     $("releasesList").innerHTML = list.map(function (r) {
       var badge = r.prerelease
         ? '<span class="release-badge badge-prerelease">预览版</span>'
