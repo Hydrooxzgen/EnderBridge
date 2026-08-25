@@ -64,6 +64,19 @@ sapiConfig = {
     "smsg": "smsg",
 }
 
+# 假人 Bot 配置(需要 Node.js 运行时)
+# host/port: MCBE 服务器地址(假人将连接到此服务器)
+# username: 假人显示名称
+# offline: 离线模式(不需要 Xbox Live 账号)
+# version: MCBE 协议版本(留空自动检测)
+botConfig = {
+    "host": "127.0.0.1",
+    "port": 19132,
+    "username": "FakeBot",
+    "offline": True,
+    "version": None,
+}
+
 # 功能开关
 features = {
     "music": {
@@ -90,6 +103,7 @@ mods = {
         "MoreWS": "mod.morews",
         "Ezmatic": "mod.ezmatic.main",
         "ImageMod": "mod.image.main",
+        "Bot": "mod.bot",
     },
     "server": {
         "chat": "mod.read",

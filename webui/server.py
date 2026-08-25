@@ -309,6 +309,13 @@ def load_config() -> dict:
             "gmsg": sapi.get("gmsg", "gmsg"),
             "smsg": sapi.get("smsg", "smsg"),
         },
+        "bot": {
+            "host": ns.get("botConfig", {}).get("host", "127.0.0.1"),
+            "port": ns.get("botConfig", {}).get("port", 19132),
+            "username": ns.get("botConfig", {}).get("username", "FakeBot"),
+            "offline": ns.get("botConfig", {}).get("offline", True),
+            "version": ns.get("botConfig", {}).get("version", None),
+        },
         "githubToken": ns.get("githubToken", ""),
     }
 
@@ -390,6 +397,16 @@ def save_config(new: dict) -> None:
         "gmsg": str(sapi_form.get("gmsg") or "gmsg").strip(),
         "smsg": str(sapi_form.get("smsg") or "smsg").strip(),
     }, "# 消息通道配置")
+
+    # 假人 Bot 配置
+    bot_form = new.get("bot") or {}
+    apply_block_or_append("botConfig", {
+        "host": str(bot_form.get("host") or "127.0.0.1").strip(),
+        "port": int(bot_form.get("port") or 19132),
+        "username": str(bot_form.get("username") or "FakeBot").strip(),
+        "offline": bool(bot_form.get("offline", True)),
+        "version": bot_form.get("version") or None,
+    }, "# 假人 Bot 配置")
 
     # webuiConfig:整体块替换;旧版 config.py 无该块时自动追加到文件末尾
     webui = new.get("webui") or {}

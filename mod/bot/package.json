@@ -1,0 +1,11 @@
+{
+  "name": "enderbridge-bot",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "EnderBridge 假人 Bot (Bedrock Protocol)",
+  "main": "bot.js",
+  "dependencies": {
+    "bedrock-protocol": "^3.72.0"
+  }
+}

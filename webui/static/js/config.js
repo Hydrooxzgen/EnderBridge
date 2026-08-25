@@ -1,10 +1,14 @@
-// ===== 功能设置页面逻辑 =====
+// Author: Hydrooxzgen (Hydrooxygen)
+// Github: https://github.com/Hydrooxzgen
+// This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
+// 功能设置页面逻辑
 var cfgData = null;
 var MOD_CATALOG = {
   client: [
     ["AI", "mod.ai"], ["PermissionCommands", "mod.permission"], ["Tool", "mod.tool"],
     ["Position", "mod.position"], ["Music", "mod.music"], ["MCFunc", "mod.mcfunc"],
     ["MoreWS", "mod.morews"], ["Ezmatic", "mod.ezmatic.main"], ["ImageMod", "mod.image.main"],
+    ["Bot", "mod.bot"],
   ],
   server: [
     ["chat", "mod.read"], ["spam", "mod.spam"],
@@ -69,6 +73,8 @@ function syncConfigCards() {
   var ac = $("cfgCardAi"); if (ac) ac.classList.toggle("hidden", !aiOn);
   var sc = $("cfgCardSpam"); if (sc) sc.classList.toggle("hidden", !isModOn("server", "spam"));
   var tc = $("cfgCardTool"); if (tc) tc.classList.toggle("hidden", !isModOn("client", "Tool"));
+  var botOn = isModOn("client", "Bot");
+  var bc = $("cfgCardBot"); if (bc) bc.classList.toggle("hidden", !botOn);
   // 隐藏禁用功能对应的侧边栏 tab
   var aiTab = document.querySelector('.cfg-sidebar-item[data-cfg-cat="ai"]');
   if (aiTab) aiTab.style.display = aiOn ? "" : "none";
@@ -135,8 +141,16 @@ function loadConfig() {
     $("cfg-polling").checked = utils.enablePolling !== false;
 
     var sapi = data.config.sapi || {};
+    var bot = data.config.bot || {};
+
     $("cfg-gmsg").value = sapi.gmsg || "gmsg";
     $("cfg-smsg").value = sapi.smsg || "smsg";
+
+    $("cfg-bot-host").value = bot.host || "127.0.0.1";
+    $("cfg-bot-port").value = bot.port || 19132;
+    $("cfg-bot-username").value = bot.username || "FakeBot";
+    $("cfg-bot-version").value = bot.version || "";
+    $("cfg-bot-offline").checked = bot.offline !== false;
 
     var spam = data.config.spam || {};
     $("cfg-spamattack").value = spam.attack || "";
@@ -225,7 +239,7 @@ function saveConfig() {
       logLevel: $("cfg-loglevel").value,
       githubToken: $("cfg-github-token").value.trim(),
       features: f, rateLimit: rl, webui: webui, ai: ai,
-      utils: utils, sapi: sapi, mods: mods, spam: spam, basePath: basePath,
+      utils: utils, sapi: sapi, bot: bot, mods: mods, spam: spam, basePath: basePath,
     }
   };
   api("/config", { method: "PUT", body: JSON.stringify(payload) })

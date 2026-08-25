@@ -138,6 +138,7 @@ MOD_REGISTRY = {
 ADVANCED_MODS = {
     "AI": {"label": "AI 对话（客户端 + 服务端）", "clientPath": "mod.ai", "serverPath": "mod.ai", "config": "ai"},
     "QQ": {"label": "QQ 群互通", "config": "qq"},
+    "Bot": {"label": "假人 Bot（Tab 列表玩家）", "clientPath": "mod.bot", "config": "bot"},
 }
 
 
@@ -238,6 +239,14 @@ RULES = [
     {"key": "Web 仅本机", "apply": make_rule(re.compile(r'"localOnly": (True|False)'), lambda f: f'"localOnly": {_bool(f["webuiLocalOnly"])}')},
     # GitHub API Token:匹配模板中的 githubToken 行
     {"key": "GitHub Token", "apply": make_rule('githubToken = ""', lambda f: f'githubToken = {_json(f["githubToken"])}')},
+    # botConfig 块
+    {"key": "Bot 配置", "apply": make_block_rule("botConfig", lambda f: _py_dump({
+        "host": f.get("botHost", "127.0.0.1"),
+        "port": int(f.get("botPort") or 19132),
+        "username": f.get("botUsername", "FakeBot"),
+        "offline": bool(f.get("botOffline", True)),
+        "version": f.get("botVersion") or None,
+    }))},
     # 注意:config.py 不包含 isFirstRun 标记(判定仅存在于模板 config.example.py)
 ]
 
@@ -349,6 +358,11 @@ def load_defaults() -> dict:
         "webuiToken": _get(cfg, "webuiConfig", "token", default=""),
         "webuiLocalOnly": _get(cfg, "webuiConfig", "localOnly", default=False),
         "githubToken": cfg.get("githubToken", ""),
+        "botHost": _get(cfg, "botConfig", "host", default="127.0.0.1"),
+        "botPort": _get(cfg, "botConfig", "port", default=19132),
+        "botUsername": _get(cfg, "botConfig", "username", default="FakeBot"),
+        "botOffline": _get(cfg, "botConfig", "offline", default=True),
+        "botVersion": _get(cfg, "botConfig", "version", default=""),
         "clientMods": client_mods,
         "serverMods": server_mods,
         "advancedMods": advanced_mods,
@@ -810,6 +824,30 @@ button[type=submit]:disabled { opacity: 0.7; cursor: wait; transform: none; }
       </div>
     </section>
 
+    <section class="card" id="botFields">
+      <h2><span class="icon">🤖</span>假人 Bot 设置</h2>
+      <p class="hint">假人以独立玩家身份连接 MCBE 服务器，出现在 Tab 列表和游戏世界中。需要 Node.js 运行时。</p>
+      <div class="grid">
+        <div><label for="botHost">服务器地址</label><input id="botHost" name="botHost" type="text" placeholder="127.0.0.1"></div>
+        <div><label for="botPort">服务器端口</label><input id="botPort" name="botPort" type="number" min="1" max="65535" placeholder="19132"></div>
+      </div>
+      <div class="grid">
+        <div><label for="botUsername">假人名称</label><input id="botUsername" name="botUsername" type="text" placeholder="FakeBot"></div>
+        <div>
+          <label>离线模式（无需 Xbox Live）</label>
+          <div class="switch-row">
+            <label class="switch">
+              <input id="botOffline" name="botOffline" type="checkbox" checked>
+              <span class="track"></span>
+              <span class="switch-label">offline</span>
+            </label>
+          </div>
+        </div>
+      </div>
+      <label for="botVersion">协议版本（留空自动检测）</label>
+      <input id="botVersion" name="botVersion" type="text" placeholder="留空则自动检测">
+    </section>
+
     <section class="card" id="spamFields">
       <h2><span class="icon">📢</span>刷屏设置</h2>
       <label for="spamAttack">攻击文本</label>
@@ -1004,10 +1042,12 @@ function buildAdvancedList() {
 function syncConfig() {
   var aiOn = $("advancedMods").querySelector('input[value="AI"]').checked;
   var qqOn = $("advancedMods").querySelector('input[value="QQ"]').checked;
+  var botOn = $("advancedMods").querySelector('input[value="Bot"]').checked;
   var musicOn = $("clientMods").querySelector('input[value="Music"]').checked;
   var spamOn = $("serverMods").querySelector('input[value="spam"]').checked;
   $("aiFields").classList.toggle("hidden", !aiOn);
   $("qqFields").classList.toggle("hidden", !qqOn);
+  $("botFields").classList.toggle("hidden", !botOn);
   $("musicFields").classList.toggle("hidden", !musicOn);
   $("spamFields").classList.toggle("hidden", !spamOn);
   // 资源路径:仅显示勾选模组对应的行
@@ -1080,6 +1120,11 @@ function fill() {
   $("webuiToken").value = DEFAULTS.webuiToken;
   $("webuiLocalOnly").checked = DEFAULTS.webuiLocalOnly !== false;
   $("githubToken").value = DEFAULTS.githubToken || "";
+  $("botHost").value = DEFAULTS.botHost || "127.0.0.1";
+  $("botPort").value = DEFAULTS.botPort || 19132;
+  $("botUsername").value = DEFAULTS.botUsername || "FakeBot";
+  $("botOffline").checked = DEFAULTS.botOffline !== false;
+  $("botVersion").value = DEFAULTS.botVersion || "";
   $("owner").value = DEFAULTS.owner;
   $("op").value = (DEFAULTS.op || []).join(", ");
   $("user").value = (DEFAULTS.user || []).join(", ");
@@ -1134,6 +1179,11 @@ document.getElementById("cfg").addEventListener("submit", function (e) {
     webuiToken: $("webuiToken").value.trim(),
     webuiLocalOnly: $("webuiLocalOnly").checked,
     githubToken: $("githubToken").value.trim(),
+    botHost: $("botHost").value.trim(),
+    botPort: parseInt($("botPort").value, 10),
+    botUsername: $("botUsername").value.trim(),
+    botOffline: $("botOffline").checked,
+    botVersion: $("botVersion").value.trim(),
     owner: $("owner").value.trim(),
     op: $("op").value,
     user: $("user").value,

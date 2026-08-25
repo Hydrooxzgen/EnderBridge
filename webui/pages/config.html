@@ -188,6 +188,35 @@
 
       <!-- ===== 集成 / 服务 ===== -->
       <div class="cfg-category" data-cfg-cat="integration">
+        <div class="cfg-section" id="cfgCardBot">
+          <h3>🤖 假人 Bot</h3>
+          <p class="hint" style="margin:0 0 8px 0">假人以独立玩家身份连接 MCBE 服务器，出现在 Tab 列表和游戏世界中。需要 Node.js 运行时。</p>
+          <div class="cfg-grid">
+            <div class="cfg-field">
+              <label>服务器地址 (host)</label>
+              <input id="cfg-bot-host" class="cfg-input" placeholder="127.0.0.1" />
+            </div>
+            <div class="cfg-field">
+              <label>服务器端口 (port)</label>
+              <input id="cfg-bot-port" class="cfg-input" type="number" placeholder="19132" />
+            </div>
+            <div class="cfg-field">
+              <label>假人名称 (username)</label>
+              <input id="cfg-bot-username" class="cfg-input" placeholder="FakeBot" />
+            </div>
+            <div class="cfg-field">
+              <label>协议版本 (version)</label>
+              <input id="cfg-bot-version" class="cfg-input" placeholder="留空自动检测" />
+            </div>
+            <div class="cfg-field cfg-grid-full">
+              <div class="cfg-switch">
+                <label class="switch"><input type="checkbox" id="cfg-bot-offline"><span class="track"></span></label>
+                <span class="switch-label">离线模式 (offline) — 不需要 Xbox Live 账号</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="cfg-section" id="cfgCardQq">
           <h3>💬 QQ 桥接</h3>
           <div class="cfg-switch">

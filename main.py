@@ -1,6 +1,6 @@
 # Author: Hydrooxzgen
-# This project is licensed under the GPL-v3.0 License.
-# version beta 0.2.0
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 import asyncio
 import json
 import os
@@ -14,8 +14,8 @@ from uuid import uuid4
 ROOT = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PY = os.path.join(ROOT, "config.py")
 CONFIG_EXAMPLE = os.path.join(ROOT, "config.example.py")
-VERSION = "b0.2.3 dev1"
-DESCRIPTION = "现在所有版本变成每3版本分一页" # 仅当不为None时从Github拉取更新日志，反之则直接显示该变量内容。
+VERSION = "b0.3.0 dev2"
+DESCRIPTION = "新增假人功能(dev1)、新增在setup/管理页面中可以配置假人（待测试" # 仅当不为None时从Github拉取更新日志，反之则直接显示该变量内容。
 GITHUB_REPO = "Hydrooxzgen/EnderBridge"  # You can edit this to your own repository if you fork it :)
 WANT_RESET = "--reset-all" in sys.argv
 WANT_EXPORT = "export" in sys.argv
