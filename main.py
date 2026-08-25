@@ -14,7 +14,8 @@ from uuid import uuid4
 ROOT = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PY = os.path.join(ROOT, "config.py")
 CONFIG_EXAMPLE = os.path.join(ROOT, "config.example.py")
-VERSION = "b0.2.2 dev2"
+VERSION = "b0.2.2 dev4"
+DESCRIPTION = None
 GITHUB_REPO = "Hydrooxzgen/EnderBridge"  # You can edit this to your own repository if you fork it :)
 WANT_RESET = "--reset-all" in sys.argv
 WANT_EXPORT = "export" in sys.argv
@@ -970,10 +971,13 @@ def _request_restart() -> None:
 CONSOLE_PROMPT = "EnderBridge> "
 CONSOLE_PREFIX = "$"  # 命令前缀
 _restarting = False  # 重启/更新中,抑制提示符输出
+_prompt_visible = False  # 提示符是否已在终端显示(防重复)
 
 
 def console_out(msg):
     """终端输出消息"""
+    global _prompt_visible
+    _prompt_visible = False  # console_out 清除了当前行,提示符不再可见
     sys.stdout.write("\r\x1b[K")
     print(msg)
 
@@ -1014,15 +1018,19 @@ def _console_list():
 
 
 def _show_prompt():
-    """显示终端提示符"""
-    if _restarting:
+    """显示终端提示符(防重复:提示符已在行首时不重复输出)"""
+    global _prompt_visible
+    if _restarting or _prompt_visible:
         return
+    _prompt_visible = True
     sys.stdout.write(CONSOLE_PROMPT)
     sys.stdout.flush()
 
 
 def _clear_prompt():
     """日志输出前清除当前行的提示符"""
+    global _prompt_visible
+    _prompt_visible = False
     sys.stdout.write("\r\x1b[K")
     sys.stdout.flush()
 
@@ -1124,6 +1132,8 @@ async def main():
 
     # 启动终端交互式输入循环(独立线程,Windows 不支持 asyncio add_reader)
     def on_line(text):
+        if _restarting:          # 重启中不处理任何输入
+            return
         text = text.strip()
         task = asyncio.ensure_future(_dispatch_console_command(text))
         def _done(fut):
@@ -1136,7 +1146,7 @@ async def main():
         task.add_done_callback(_done)
 
     def stdin_loop():
-        while True:
+        while not _restarting:
             try:
                 line = sys.stdin.readline()
             except (EOFError, KeyboardInterrupt):
@@ -1144,6 +1154,14 @@ async def main():
             if not line:
                 break
             _main_loop.call_soon_threadsafe(on_line, line.rstrip("\n"))
+
+    # 排空 stdin 残留缓冲,避免旧进程遗留输入污染新进程终端
+    try:
+        import msvcrt as _mc
+        while _mc.kbhit():
+            _mc.getch()
+    except Exception:
+        pass
 
     threading.Thread(target=stdin_loop, daemon=True).start()
 
