@@ -14,8 +14,8 @@ from uuid import uuid4
 ROOT = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PY = os.path.join(ROOT, "config.py")
 CONFIG_EXAMPLE = os.path.join(ROOT, "config.example.py")
-VERSION = "b0.2.2 dev6"
-DESCRIPTION = "Add 'description' feature & 启动过慢问题解决"
+VERSION = "b0.2.2 dev7(unstable)"
+DESCRIPTION = "终端堵塞问题解决1/2"
 GITHUB_REPO = "Hydrooxzgen/EnderBridge"  # You can edit this to your own repository if you fork it :)
 WANT_RESET = "--reset-all" in sys.argv
 WANT_EXPORT = "export" in sys.argv
@@ -960,21 +960,29 @@ def _request_restart() -> None:
         try:
             subprocess.Popen([sys.executable] + sys.argv, cwd=ROOT)
         except Exception as error:
+            shared.logger.warning(f"重启启动新进程失败: {error}")
+        # 3. 关键:立即关闭旧进程的 stdin。
+        #    新进程在 Popen 时已复制 stdin 句柄,关闭旧进程的副本不影响新进程;
+        #    若不关闭,旧进程 stdin_loop 线程仍阻塞在 readline 上,
+        #    会与新进程竞争读取终端输入——用户输入/Ctrl+C 可能被旧进程抢走丢弃,
+        #    表现为"重启后终端无法输入、Ctrl+C 无效"。
+        #    注意:必须在 Popen 之后关闭(v1 教训:提前关闭会使新进程继承到无效句柄)。
+        try:
+            sys.stdin.close()
+        except Exception:
             pass
-        # 3. 触发主协程退出:main() 的 finally 会再次调用 destroy()(防重入直接返回),
+        # 4. 触发主协程退出:main() 的 finally 会再次调用 destroy()(防重入直接返回),
         #    asyncio.run 正常收尾后 Python 以正常方式退出(刷新缓冲区、恢复终端)。
-        #    注意:绝不能关闭 sys.stdin——新进程需要继承有效的终端输入句柄,
-        #    且 stdin_loop 是 daemon 线程,主进程退出时会随进程一起结束。
         if loop is not None and not loop.is_closed() and _main_future is not None and not _main_future.done():
             loop.call_soon_threadsafe(_main_future.cancel)
-        # 4. 等待主线程完成退出(loop 关闭 = asyncio.run 已收尾,进程即将正常退出)。
+        # 5. 等待主线程完成退出(loop 关闭 = asyncio.run 已收尾,进程即将正常退出)。
         #    干净退出时直接返回,绝不调用 os._exit,避免打断终端恢复。
         deadline = time.time() + 5
         while time.time() < deadline:
             if loop.is_closed():
                 return
             time.sleep(0.1)
-        # 5. 仅当主线程卡死时兜底强制退出(此情况下终端可能受损,但进程至少能退出)
+        # 6. 仅当主线程卡死时兜底强制退出(此情况下终端可能受损,但进程至少能退出)
         os._exit(0)
 
     threading.Thread(target=_do_restart, daemon=True).start()
@@ -1162,7 +1170,7 @@ async def main():
         while not _restarting:
             try:
                 line = sys.stdin.readline()
-            except (EOFError, KeyboardInterrupt, ValueError):
+            except (EOFError, KeyboardInterrupt, ValueError, OSError):
                 break
             if not line:
                 break
