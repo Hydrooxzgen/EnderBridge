@@ -786,19 +786,25 @@ class WebUIHandler(BaseHTTPRequestHandler):
             return
 
         try:
-            # 尝试按 tag 查找当前版本的 Release
-            tag = _app_version
+            # 尝试按 tag 查找当前版本的 Release(版本号可能含空格如 b0.2.2 RC2,需 URL 编码)
+            tag = urllib.parse.quote(_app_version)
             api_url = f"https://api.github.com/repos/{_github_repo}/releases/tags/{tag}"
             req = urllib.request.Request(api_url, headers=_github_headers())
             try:
                 with urllib.request.urlopen(req, timeout=5) as resp:
                     data = json.loads(resp.read().decode("utf-8"))
             except urllib.error.HTTPError:
-                # tag 未找到,回退到 latest release
-                api_url = f"https://api.github.com/repos/{_github_repo}/releases/latest"
+                # tag 未找到,回退到最新 release。releases/latest 对仅含预览版的仓库
+                # 返回 404,改用列表接口取最新一条(含预览版)。
+                api_url = f"https://api.github.com/repos/{_github_repo}/releases?per_page=1"
                 req = urllib.request.Request(api_url, headers=_github_headers())
                 with urllib.request.urlopen(req, timeout=5) as resp:
                     data = json.loads(resp.read().decode("utf-8"))
+                    if isinstance(data, list):
+                        if not data:
+                            self._respond({"ok": True, "release": None, "message": "当前版本不是 Release 版"})
+                            return
+                        data = data[0]
 
             self._respond({
                 "ok": True,
@@ -919,7 +925,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
                 self._respond({"ok": False, "message": "未配置 GitHub 仓库信息"})
                 return
             try:
-                api_url = f"https://api.github.com/repos/{_github_repo}/releases/tags/{github_tag}"
+                api_url = f"https://api.github.com/repos/{_github_repo}/releases/tags/{urllib.parse.quote(github_tag)}"
                 req = urllib.request.Request(api_url, headers=_github_headers())
                 with urllib.request.urlopen(req, timeout=10) as resp:
                     release = json.loads(resp.read().decode("utf-8"))

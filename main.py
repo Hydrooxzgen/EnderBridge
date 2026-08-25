@@ -304,13 +304,16 @@ if WANT_UPDATE:
         Args:
             tag: 版本标签(如 "b0.1.0"),None 表示最新版本
         """
+        import urllib.parse
         import urllib.request
         import urllib.error
 
         if tag:
-            api_url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/tags/{tag}"
+            api_url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/tags/{urllib.parse.quote(tag)}"
         else:
-            api_url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+            # releases/latest 只返回正式版;仓库最新版本为预览版(prerelease)时会返回 404,
+            # 改用列表接口取最新一条(含预览版),与 WebUI 检查更新保持一致。
+            api_url = f"https://api.github.com/repos/{GITHUB_REPO}/releases?per_page=1"
 
         print(f"  正在查询 GitHub Releases ...")
         print(f"  API: {api_url}")
@@ -320,6 +323,11 @@ if WANT_UPDATE:
             req = urllib.request.Request(api_url, headers=_github_headers())
             with urllib.request.urlopen(req, timeout=30) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
+            if isinstance(data, list):
+                # 列表接口返回数组,取最新一条
+                if not data:
+                    _update_err(f"GitHub 上未找到版本 latest\n  仓库: {GITHUB_REPO}")
+                data = data[0]
         except urllib.error.HTTPError as e:
             if e.code == 404:
                 ver = tag or "latest"
@@ -390,6 +398,7 @@ if WANT_UPDATE:
         Returns:
             (本地临时文件路径, 版本号字符串)
         """
+        import urllib.parse
         import urllib.request
         import urllib.error
 
@@ -400,7 +409,7 @@ if WANT_UPDATE:
             # 获取默认分支最新 commit
             api_url = f"https://api.github.com/repos/{GITHUB_REPO}/commits/HEAD"
         else:
-            api_url = f"https://api.github.com/repos/{GITHUB_REPO}/commits/{ref}"
+            api_url = f"https://api.github.com/repos/{GITHUB_REPO}/commits/{urllib.parse.quote(ref)}"
 
         print(f"  正在查询 GitHub Commits ...")
         print(f"  API: {api_url}")
@@ -547,6 +556,7 @@ if os.path.isfile(UPDATE_MARKER) and not WANT_UPDATE:
             pass
     if pending_path and os.path.isfile(pending_path):
         import shutil
+        import tarfile
         import tempfile
         import zipfile
 
@@ -564,6 +574,16 @@ if os.path.isfile(UPDATE_MARKER) and not WANT_UPDATE:
         try:
             tmp = tempfile.mkdtemp(prefix="enderbridge_webui_update_")
             lower = pending_path.lower()
+
+            def _safe_rel(name: str) -> str:
+                """规范化成员路径,过滤路径穿越,返回相对路径或空字符串"""
+                norm = os.path.normpath(name.replace("\\", "/"))
+                if not norm or norm == ".":
+                    return ""
+                if norm.startswith("..") or os.path.isabs(norm):
+                    return ""
+                return norm.replace(os.sep, "/")
+
             if lower.endswith(".zip"):
                 with zipfile.ZipFile(pending_path) as z:
                     names = [i.filename for i in z.infolist() if not i.is_dir()]
@@ -573,10 +593,9 @@ if os.path.isfile(UPDATE_MARKER) and not WANT_UPDATE:
                     for info in z.infolist():
                         if info.is_dir():
                             continue
-                        norm = os.path.normpath(info.filename.replace("\\", "/"))
-                        if norm.startswith("..") or os.path.isabs(norm):
+                        rel = _safe_rel(info.filename)
+                        if not rel:
                             continue
-                        rel = norm.replace(os.sep, "/")
                         if root and rel.startswith(root + "/"):
                             rel = rel[len(root) + 1:]
                         if not rel:
@@ -589,8 +608,32 @@ if os.path.isfile(UPDATE_MARKER) and not WANT_UPDATE:
                         with open(target, "wb") as out:
                             with z.open(info) as src:
                                 shutil.copyfileobj(src, out)
+            elif lower.endswith((".tar.gz", ".tgz", ".tar")):
+                with tarfile.open(pending_path, "r:*") as t:
+                    names = [m.name for m in t.getmembers() if m.isfile()]
+                    roots = {n.split("/", 1)[0] for n in names if "/" in n}
+                    root = roots.pop() if len(roots) == 1 and all("/" in n for n in names) else ""
+                    for m in t.getmembers():
+                        if not m.isfile():
+                            continue
+                        rel = _safe_rel(m.name)
+                        if not rel:
+                            continue
+                        if root and rel.startswith(root + "/"):
+                            rel = rel[len(root) + 1:]
+                        if not rel:
+                            continue
+                        top = rel.split("/", 1)[0]
+                        if top in _keep:
+                            continue
+                        target = os.path.join(tmp, *rel.split("/"))
+                        os.makedirs(os.path.dirname(target), exist_ok=True)
+                        with open(target, "wb") as out:
+                            src = t.extractfile(m)
+                            if src is not None:
+                                shutil.copyfileobj(src, out)
             else:
-                print("  不支持的格式,仅支持 .zip")
+                print("  不支持的格式,仅支持 .zip / .tar.gz")
                 sys.exit(1)
 
             if not os.path.exists(os.path.join(tmp, "main.py")):
@@ -943,11 +986,29 @@ def _request_restart() -> None:
     不退出进程、不启动新进程——Windows 控制台下旧进程退出后,
     py.exe/PowerShell 只等待直接子进程,新进程会变成孤儿继续抢占 stdin,
     导致终端无法输入、Ctrl+C 无法结束进程,因此这里采用热重启。
+
+    特殊分支:存在 .update_pending 标记(WebUI 一键更新)时,热重启无法
+    重新加载 main.py 自身的新代码,必须关闭全部组件释放端口后启动新进程,
+    由新进程读取 .update_pending 执行文件覆盖,再二次启动加载新代码。
     """
     loop = _main_loop
 
     def _do_restart():
         global _restarting
+        update_marker = os.path.join(ROOT, ".update_pending")
+        if os.path.isfile(update_marker):
+            # ===== WebUI 更新模式 =====
+            if loop is not None and not loop.is_closed():
+                try:
+                    fut = asyncio.run_coroutine_threadsafe(_shutdown_for_update(), loop)
+                    fut.result(timeout=30)
+                except Exception as error:
+                    shared.logger.warning(f"更新前关闭组件异常: {error}")
+            try:
+                subprocess.Popen([sys.executable] + sys.argv, cwd=ROOT)
+            except Exception as error:
+                shared.logger.warning(f"更新进程启动失败: {error},请手动重启服务器")
+            os._exit(0)
         _restarting = True  # 抑制提示符输出、阻止输入分发
         # 清除当前行提示符,避免残留
         sys.stdout.write("\r\x1b[K")
@@ -960,6 +1021,16 @@ def _request_restart() -> None:
                 shared.logger.warning(f"重启流程异常: {error}")
 
     threading.Thread(target=_do_restart, daemon=True).start()
+
+
+async def _shutdown_for_update() -> None:
+    """WebUI 更新模式专用:只关闭全部组件并释放端口,不重启
+
+    之后由 _request_restart 启动新进程,新进程读取 .update_pending 执行更新。
+    """
+    global destroying
+    destroying = False  # 复位防重入标志,允许执行关闭流程
+    await destroy()
 
 
 async def _hot_restart() -> None:
