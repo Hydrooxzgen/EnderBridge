@@ -14,8 +14,8 @@ from uuid import uuid4
 ROOT = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PY = os.path.join(ROOT, "config.py")
 CONFIG_EXAMPLE = os.path.join(ROOT, "config.example.py")
-VERSION = "b0.2.2 dev7(unstable)"
-DESCRIPTION = "终端堵塞问题解决1/2"
+VERSION = "b0.2.2 dev10 RC"
+DESCRIPTION = "现在EnderBridge内部命令可以被非op的玩家使用了"
 GITHUB_REPO = "Hydrooxzgen/EnderBridge"  # You can edit this to your own repository if you fork it :)
 WANT_RESET = "--reset-all" in sys.argv
 WANT_EXPORT = "export" in sys.argv
@@ -936,56 +936,73 @@ def _start_webui() -> None:
 
 
 def _request_restart() -> None:
-    """由 Web 管理界面触发:后台线程优雅关闭服务器后,以相同参数重启进程
+    """由 Web 管理界面触发:后台线程执行进程内热重启
 
-    顺序:先经事件循环执行 destroy()(停 Web 界面 / 关 Mod / 断开客户端 /
-    关闭 WS 服务端,确保端口释放),再启动新进程,最后退出旧进程。
+    顺序:经事件循环执行 destroy()(停 Web 界面 / 关 Mod / 断开客户端 /
+    关闭 WS 服务端,确保端口释放),再重新启动全部组件。
+    不退出进程、不启动新进程——Windows 控制台下旧进程退出后,
+    py.exe/PowerShell 只等待直接子进程,新进程会变成孤儿继续抢占 stdin,
+    导致终端无法输入、Ctrl+C 无法结束进程,因此这里采用热重启。
     """
     loop = _main_loop
 
     def _do_restart():
         global _restarting
-        _restarting = True  # 抑制提示符输出、阻止 stdin_loop 分发
+        _restarting = True  # 抑制提示符输出、阻止输入分发
         # 清除当前行提示符,避免残留
         sys.stdout.write("\r\x1b[K")
         sys.stdout.flush()
-        # 1. 在事件循环中执行完整关闭流程(此时 Web 请求线程已返回响应,不会死锁)
         if loop is not None and not loop.is_closed():
             try:
-                fut = asyncio.run_coroutine_threadsafe(destroy(), loop)
+                fut = asyncio.run_coroutine_threadsafe(_hot_restart(), loop)
                 fut.result(timeout=30)
             except Exception as error:
-                shared.logger.warning(f"重启前关闭流程异常: {error}")
-        # 2. 端口已释放,以相同参数启动新进程(保持工作目录不变,继承终端句柄)
-        try:
-            subprocess.Popen([sys.executable] + sys.argv, cwd=ROOT)
-        except Exception as error:
-            shared.logger.warning(f"重启启动新进程失败: {error}")
-        # 3. 关键:立即关闭旧进程的 stdin。
-        #    新进程在 Popen 时已复制 stdin 句柄,关闭旧进程的副本不影响新进程;
-        #    若不关闭,旧进程 stdin_loop 线程仍阻塞在 readline 上,
-        #    会与新进程竞争读取终端输入——用户输入/Ctrl+C 可能被旧进程抢走丢弃,
-        #    表现为"重启后终端无法输入、Ctrl+C 无效"。
-        #    注意:必须在 Popen 之后关闭(v1 教训:提前关闭会使新进程继承到无效句柄)。
-        try:
-            sys.stdin.close()
-        except Exception:
-            pass
-        # 4. 触发主协程退出:main() 的 finally 会再次调用 destroy()(防重入直接返回),
-        #    asyncio.run 正常收尾后 Python 以正常方式退出(刷新缓冲区、恢复终端)。
-        if loop is not None and not loop.is_closed() and _main_future is not None and not _main_future.done():
-            loop.call_soon_threadsafe(_main_future.cancel)
-        # 5. 等待主线程完成退出(loop 关闭 = asyncio.run 已收尾,进程即将正常退出)。
-        #    干净退出时直接返回,绝不调用 os._exit,避免打断终端恢复。
-        deadline = time.time() + 5
-        while time.time() < deadline:
-            if loop.is_closed():
-                return
-            time.sleep(0.1)
-        # 6. 仅当主线程卡死时兜底强制退出(此情况下终端可能受损,但进程至少能退出)
-        os._exit(0)
+                shared.logger.warning(f"重启流程异常: {error}")
 
     threading.Thread(target=_do_restart, daemon=True).start()
+
+
+async def _hot_restart() -> None:
+    """进程内热重启:在同一进程内关闭并重新启动所有服务器组件
+
+    不退出进程、不启动新进程,终端输入循环不受影响。
+    """
+    global destroying, server, _restarting
+    _restarting = True  # 短暂抑制输入分发(重启过程仅几百毫秒)
+    try:
+        # 复位防重入标志,允许执行关闭流程
+        destroying = False
+        await destroy()
+
+        # 重新绑定 WebSocket 服务端(端口已释放)
+        host = wsConfig.get("host") or None  # None = 监听所有接口
+        port = wsConfig.get("port", 8800)
+        server = await websockets.serve(
+            connection_handler, host, port,
+            compression=None,
+            ping_interval=None,
+            ping_timeout=None,
+        )
+
+        # 重新启动 Web 管理界面
+        _start_webui()
+
+        # 重新加载 Mod 定义
+        await ServerModManager.load()
+        await ClientModManager.load()
+
+        shared.logger.info("服务器已重启")
+    except Exception as error:
+        shared.logger.error(f"热重启失败: {error}")
+    finally:
+        # 复位标志:允许最终退出时再次执行 destroy()
+        destroying = False
+        _restarting = False
+        # 复位提示符状态:热重启期间日志钩子把 _prompt_visible 置 False 后
+        # 因 _restarting 抑制了 _show_prompt,这里补一次确保提示符可见
+        global _prompt_visible
+        _prompt_visible = False
+        _show_prompt()
 
 
 # ===== 交互式终端提示符 =====
@@ -1005,37 +1022,37 @@ def console_out(msg):
 
 def _console_help():
     """显示帮助信息"""
-    print("可用命令:")
-    print(f"  {CONSOLE_PREFIX}help       - 显示此帮助")
-    print(f"  {CONSOLE_PREFIX}status     - 显示服务器状态")
-    print(f"  {CONSOLE_PREFIX}list       - 列出所有客户端连接")
-    print(f"  {CONSOLE_PREFIX}say <msg>  - 向主客户端发送消息")
-    print(f"  {CONSOLE_PREFIX}cmd <cmd>  - 向主客户端发送命令")
-    print(f"  /<cmd>     - 直接发送游戏命令(如 /list)")
-    print(f"  <text>     - 作为聊天消息发送")
-    print(f"  exit/quit  - 退出程序")
-    print(f"  {CONSOLE_PREFIX}chat ...   - Mod 命令(如 {CONSOLE_PREFIX}chat help)")
+    console_out("可用命令:")
+    console_out(f"  {CONSOLE_PREFIX}help       - 显示此帮助")
+    console_out(f"  {CONSOLE_PREFIX}status     - 显示服务器状态")
+    console_out(f"  {CONSOLE_PREFIX}list       - 列出所有客户端连接")
+    console_out(f"  {CONSOLE_PREFIX}say <msg>  - 向主客户端发送消息")
+    console_out(f"  {CONSOLE_PREFIX}cmd <cmd>  - 向主客户端发送命令")
+    console_out(f"  /<cmd>     - 直接发送游戏命令(如 /list)")
+    console_out(f"  <text>     - 作为聊天消息发送")
+    console_out(f"  exit/quit  - 退出程序")
+    console_out(f"  {CONSOLE_PREFIX}chat ...   - Mod 命令(如 {CONSOLE_PREFIX}chat help)")
 
 
 def _console_status():
     """显示服务器状态"""
     uptime = int(time.time() - _start_time)
     h, m, s = uptime // 3600, (uptime % 3600) // 60, uptime % 60
-    print(f"客户端连接数: {len(connections)}")
-    print(f"运行时间: {h}h {m}m {s}s")
-    print(f"WebSocket 端口: {wsConfig.get('port', 8800)}")
-    print(f"Web 管理端口: {wsConfig.get('web_port', 18888)}")
+    console_out(f"客户端连接数: {len(connections)}")
+    console_out(f"运行时间: {h}h {m}m {s}s")
+    console_out(f"WebSocket 端口: {wsConfig.get('port', 8800)}")
+    console_out(f"Web 管理端口: {wsConfig.get('web_port', 18888)}")
 
 
 def _console_list():
     """列出所有连接"""
     if not connections:
-        print("当前无客户端连接")
+        console_out("当前无客户端连接")
         return
     for i, conn in enumerate(connections, 1):
         ip = conn.ws.remote_address[0] if conn.ws.remote_address else "unknown"
         role = "主客户端" if conn is Current.client else "副客户端"
-        print(f"  {i}. {ip} ({role})")
+        console_out(f"  {i}. {ip} ({role})")
 
 
 def _show_prompt():
@@ -1151,6 +1168,10 @@ async def main():
     await ClientModManager.load()
     shared.logger.info("服务器已启动")
 
+    # 注入状态引用供游戏内命令(如 $help/$status/$list)使用
+    shared.start_time = _start_time
+    shared.connections_ref = connections
+
     # 启动终端交互式输入循环(独立线程,Windows 不支持 asyncio add_reader)
     def on_line(text):
         if _restarting:          # 重启中不处理任何输入
@@ -1167,7 +1188,9 @@ async def main():
         task.add_done_callback(_done)
 
     def stdin_loop():
-        while not _restarting:
+        # 注意:不使用 _restarting 退出循环——热重启期间只短暂抑制输入分发,
+        # 若在此退出则重启后终端将失去输入能力
+        while True:
             try:
                 line = sys.stdin.readline()
             except (EOFError, KeyboardInterrupt, ValueError, OSError):

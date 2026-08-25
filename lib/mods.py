@@ -5,6 +5,7 @@
 import asyncio
 import importlib
 import json
+import time
 
 from lib import shared
 from lib.current import Current
@@ -494,6 +495,39 @@ class ClientModManager:
 
             # 服务端 Mod 专属命令(如 $chat)由服务端处理,客户端不拦截、不报"未知的命令"
             if ServerModManager.has_command(msg.split(" ")[0]):
+                return
+
+            # 内置命令:终端侧的本地命令,任何人可用,无需权限分级
+            token = msg.split(" ")[0]  # e.g. "$help"
+            token_suffix = token[len(Command.command_prefix):].strip()  # e.g. "help"
+            if token_suffix in ("help", "h", "?"):
+                cp = Command.command_prefix
+                self.client.tell(sender, f"§e可用命令:")
+                self.client.tell(sender, f"§7{cp}help       - 显示帮助")
+                self.client.tell(sender, f"§7{cp}status     - 显示服务器状态")
+                self.client.tell(sender, f"§7{cp}list       - 列出在线客户端")
+                self.client.tell(sender, f"§7{cp}perm ...   - 权限管理")
+                self.client.tell(sender, f"§7{cp}say <msg>  - 向主客户端发送消息")
+                self.client.tell(sender, f"§7{cp}cmd <cmd>  - 向主客户端发送命令")
+                return
+            if token_suffix in ("status", "info"):
+                st = shared.start_time
+                conns = shared.connections_ref
+                uptime = int(time.time() - st) if st else 0
+                h, m, s = uptime // 3600, (uptime % 3600) // 60, uptime % 60
+                self.client.tell(sender, f"§e客户端连接数: §f{len(conns) if conns else 0}")
+                self.client.tell(sender, f"§e运行时间: §f{h}h {m}m {s}s")
+                return
+            if token_suffix == "list":
+                conns = shared.connections_ref
+                if not conns:
+                    self.client.tell(sender, "§e当前无客户端连接")
+                else:
+                    self.client.tell(sender, "§e在线客户端:")
+                    for i, conn in enumerate(conns, 1):
+                        ip = conn.ws.remote_address[0] if conn.ws.remote_address else "unknown"
+                        role = "主客户端" if conn is Current.client else "副客户端"
+                        self.client.tell(sender, f"§7  {i}. {ip} ({role})")
                 return
 
             # 查询发送者权限

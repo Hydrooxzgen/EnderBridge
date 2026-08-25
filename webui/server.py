@@ -1221,8 +1221,9 @@ def start_webui() -> WebUIServer:
 
 
 def stop_webui() -> None:
-    """停止 Web 管理服务器"""
+    """停止 Web 管理服务器(置空实例,支持热重启后再次启动) """
     global _instance
     if _instance:
         _instance.stop()
+        _instance = None
         _instance = None
