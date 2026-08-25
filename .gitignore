@@ -16,3 +16,4 @@ resources/pictures/*
 structures/*
 !.gitkeep
 wiki/
+importtime.log

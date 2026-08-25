@@ -32,6 +32,8 @@ API 一览:
 import json
 import os
 import re
+import socket
+import socketserver
 import sys
 import threading
 import time
@@ -101,13 +103,18 @@ def set_event_loop(loop):
 # 应用信息(main.py 注入):用于 Release Notes 获取
 _github_repo = ""    # e.g. "UserXYY123/EnderBridge"
 _app_version = APP_VERSION    # e.g. "b0.1.0"
+_description = None  # 非 None 时直接用作 Release Notes,跳过 GitHub API
 
 
-def set_app_info(github_repo: str, version: str) -> None:
-    """注入应用信息:main.py 启动后调用,提供 GitHub 仓库名与当前版本"""
-    global _github_repo, _app_version
+def set_app_info(github_repo: str, version: str, description=None) -> None:
+    """注入应用信息:main.py 启动后调用,提供 GitHub 仓库名与当前版本
+
+    description: 若提供(非 None),则 /api/release-notes 直接返回该内容,
+    不再从 GitHub 拉取 Release 数据。"""
+    global _github_repo, _app_version, _description
     _github_repo = github_repo
     _app_version = version
+    _description = description
 
 
 def _github_headers() -> dict:
@@ -760,7 +767,20 @@ class WebUIHandler(BaseHTTPRequestHandler):
         })
 
     def _api_release_notes(self) -> None:
-        """从 GitHub API 获取当前版本的 Release Notes(无需鉴权)"""
+        """获取 Release Notes:优先使用 main.py 注入的 DESCRIPTION,否则从 GitHub API 拉取"""
+        # DESCRIPTION 已设置时直接返回,无需请求 GitHub
+        if _description is not None:
+            self._respond({
+                "ok": True,
+                "release": {
+                    "tag": _app_version or "",
+                    "name": "",
+                    "body": str(_description),
+                    "html_url": "",
+                }
+            })
+            return
+
         if not _github_repo or not _app_version:
             self._respond({"ok": False, "message": "未配置 GitHub 仓库信息"})
             return
@@ -1118,6 +1138,21 @@ def _check_importable(mod_path: str) -> bool:
 
 # ===== 服务器生命周期 =====
 
+class _FastHTTPServer(ThreadingHTTPServer):
+    """跳过 HTTPServer.server_bind 中的 socket.getfqdn() 反向 DNS 查询
+
+    原版 HTTPServer 绑定时会对 host 执行 gethostbyaddr 反向解析,
+    当绑定 0.0.0.0 时 Windows 的 DNS 解析器可能阻塞数秒(启动慢的根因)。
+    server_name 仅用于日志/SNI(仅 HTTPS 场景需要),HTTP 场景下无影响。
+    """
+
+    def server_bind(self):
+        socketserver.TCPServer.server_bind(self)
+        host, port = self.server_address[:2]
+        self.server_name = socket.gethostname()
+        self.server_port = port
+
+
 class WebUIServer:
     """Web 管理服务器(后台线程运行,不阻塞主程序)"""
 
@@ -1132,7 +1167,7 @@ class WebUIServer:
         max_tries = 10
         for offset in range(max_tries):
             try:
-                self._server = ThreadingHTTPServer((bind_host, self.port + offset), WebUIHandler)
+                self._server = _FastHTTPServer((bind_host, self.port + offset), WebUIHandler)
                 self.port = self.port + offset
                 break
             except OSError:

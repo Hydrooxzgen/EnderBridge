@@ -14,8 +14,8 @@ from uuid import uuid4
 ROOT = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PY = os.path.join(ROOT, "config.py")
 CONFIG_EXAMPLE = os.path.join(ROOT, "config.example.py")
-VERSION = "b0.2.2 dev4"
-DESCRIPTION = None
+VERSION = "b0.2.2 dev6"
+DESCRIPTION = "Add 'description' feature & 启动过慢问题解决"
 GITHUB_REPO = "Hydrooxzgen/EnderBridge"  # You can edit this to your own repository if you fork it :)
 WANT_RESET = "--reset-all" in sys.argv
 WANT_EXPORT = "export" in sys.argv
@@ -929,7 +929,7 @@ def _start_webui() -> None:
         set_status_provider(_webui_status)
         set_restart_handler(_request_restart)
         set_event_loop(asyncio.get_running_loop())
-        set_app_info(GITHUB_REPO, VERSION)
+        set_app_info(GITHUB_REPO, VERSION, DESCRIPTION)
         start_webui()
     except Exception as error:
         shared.logger.warning(f"Web 管理界面启动失败: {error}")
@@ -945,7 +945,7 @@ def _request_restart() -> None:
 
     def _do_restart():
         global _restarting
-        _restarting = True  # 抑制提示符输出
+        _restarting = True  # 抑制提示符输出、阻止 stdin_loop 分发
         # 清除当前行提示符,避免残留
         sys.stdout.write("\r\x1b[K")
         sys.stdout.flush()
@@ -956,12 +956,25 @@ def _request_restart() -> None:
                 fut.result(timeout=30)
             except Exception as error:
                 shared.logger.warning(f"重启前关闭流程异常: {error}")
-        # 2. 端口已释放,以相同参数启动新进程(保持工作目录不变)
+        # 2. 端口已释放,以相同参数启动新进程(保持工作目录不变,继承终端句柄)
         try:
             subprocess.Popen([sys.executable] + sys.argv, cwd=ROOT)
         except Exception as error:
             pass
-        # 3. 立即终止旧进程,端口与句柄由操作系统回收
+        # 3. 触发主协程退出:main() 的 finally 会再次调用 destroy()(防重入直接返回),
+        #    asyncio.run 正常收尾后 Python 以正常方式退出(刷新缓冲区、恢复终端)。
+        #    注意:绝不能关闭 sys.stdin——新进程需要继承有效的终端输入句柄,
+        #    且 stdin_loop 是 daemon 线程,主进程退出时会随进程一起结束。
+        if loop is not None and not loop.is_closed() and _main_future is not None and not _main_future.done():
+            loop.call_soon_threadsafe(_main_future.cancel)
+        # 4. 等待主线程完成退出(loop 关闭 = asyncio.run 已收尾,进程即将正常退出)。
+        #    干净退出时直接返回,绝不调用 os._exit,避免打断终端恢复。
+        deadline = time.time() + 5
+        while time.time() < deadline:
+            if loop.is_closed():
+                return
+            time.sleep(0.1)
+        # 5. 仅当主线程卡死时兜底强制退出(此情况下终端可能受损,但进程至少能退出)
         os._exit(0)
 
     threading.Thread(target=_do_restart, daemon=True).start()
@@ -1149,19 +1162,11 @@ async def main():
         while not _restarting:
             try:
                 line = sys.stdin.readline()
-            except (EOFError, KeyboardInterrupt):
+            except (EOFError, KeyboardInterrupt, ValueError):
                 break
             if not line:
                 break
             _main_loop.call_soon_threadsafe(on_line, line.rstrip("\n"))
-
-    # 排空 stdin 残留缓冲,避免旧进程遗留输入污染新进程终端
-    try:
-        import msvcrt as _mc
-        while _mc.kbhit():
-            _mc.getch()
-    except Exception:
-        pass
 
     threading.Thread(target=stdin_loop, daemon=True).start()
 
