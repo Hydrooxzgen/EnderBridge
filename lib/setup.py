@@ -323,6 +323,8 @@ def load_defaults() -> dict:
         advanced_mods.append("AI")
     if _get(cfg, "features", "qq", "enabled", default=False):
         advanced_mods.append("QQ")
+    if "Bot" in (mods.get("client") or {}):
+        advanced_mods.append("Bot")
 
     return {
         "name": _get(cfg, "wsConfig", "name", default="EnderBridge"),
@@ -359,6 +361,7 @@ def load_defaults() -> dict:
         "webuiToken": _get(cfg, "webuiConfig", "token", default=""),
         "webuiLocalOnly": _get(cfg, "webuiConfig", "localOnly", default=False),
         "githubToken": cfg.get("githubToken", ""),
+        "botEnabled": _get(cfg, "botConfig", "enabled", default=True),
         "botHost": _get(cfg, "botConfig", "host", default="127.0.0.1"),
         "botPort": _get(cfg, "botConfig", "port", default=19132),
         "botUsername": _get(cfg, "botConfig", "username", default="FakeBot"),
@@ -1128,6 +1131,7 @@ function fill() {
   $("webuiToken").value = DEFAULTS.webuiToken;
   $("webuiLocalOnly").checked = DEFAULTS.webuiLocalOnly !== false;
   $("githubToken").value = DEFAULTS.githubToken || "";
+  $("botEnabled").checked = DEFAULTS.botEnabled !== false;
   $("botHost").value = DEFAULTS.botHost || "127.0.0.1";
   $("botPort").value = DEFAULTS.botPort || 19132;
   $("botUsername").value = DEFAULTS.botUsername || "FakeBot";
@@ -1187,6 +1191,7 @@ document.getElementById("cfg").addEventListener("submit", function (e) {
     webuiToken: $("webuiToken").value.trim(),
     webuiLocalOnly: $("webuiLocalOnly").checked,
     githubToken: $("githubToken").value.trim(),
+    botEnabled: $("botEnabled").checked,
     botHost: $("botHost").value.trim(),
     botPort: parseInt($("botPort").value, 10),
     botUsername: $("botUsername").value.trim(),

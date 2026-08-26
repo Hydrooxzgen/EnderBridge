@@ -17,6 +17,7 @@ const { createClient } = require('bedrock-protocol');
 // ========== 全局状态 ==========
 let client = null;
 let botReady = false;
+let username = 'FakeBot';
 const players = {};   // name → { uuid, xuid, x, y, z }
 const LOG_PREFIX = '[Bot]';
 
@@ -44,10 +45,10 @@ async function main() {
   const {
     host = '127.0.0.1',
     port = 19132,
-    username = 'FakeBot',
     offline = true,
     version = null,
   } = config;
+  username = config.username || 'FakeBot';
 
   log(`正在连接 ${host}:${port} (用户: ${username}, 离线: ${offline})`);
 
@@ -80,9 +81,29 @@ async function main() {
     send({ type: 'error', message: err.message });
   });
 
-  client.on('close', (reason) => {
-    log('连接断开:', reason || '未知原因');
-    send({ type: 'disconnect', reason: reason || '未知原因' });
+  let disconnectReported = false;
+
+  client.on('disconnect', (packet) => {
+    // 服务器主动踢出:收到 disconnect 包(含具体原因)
+    const reason = packet?.message || '服务器主动断开';
+    log('被服务器踢出:', reason);
+    disconnectReported = true;
+    send({ type: 'disconnect', reason: `服务器踢出: ${reason}` });
+  });
+
+  client.on('kick', (packet) => {
+    // 服务器踢出(另一种事件)
+    const reason = packet?.message || '被服务器踢出';
+    log('被服务器踢出:', reason);
+    disconnectReported = true;
+    send({ type: 'disconnect', reason: `服务器踢出: ${reason}` });
+  });
+
+  client.on('close', (hadError) => {
+    if (!disconnectReported) {
+      log('连接已关闭 (hadError:', hadError, ')');
+      send({ type: 'disconnect', reason: `连接已关闭 (error: ${hadError || false})` });
+    }
     botReady = false;
     process.exit(0);
   });
@@ -291,38 +312,58 @@ function handleGameCommand(cmd) {
     return;
   }
 
-  const proto = client.options?.protocolVersion || 0;
+  // 必须用 command_request 包发送命令
+  // text 包的 /command 只是聊天文字,服务器不会当命令执行
+  // 1.21.130+(proto>=898): player_entity_id 是必填 li64,version 必须是字符串 'latest'
+  // 之前断连就是因为缺 player_entity_id 或 version 格式错误(数字而非字符串),
+  // 导致 packet_violation_warning
+  const crypto = require('crypto');
+  const uuid = crypto.randomUUID();
+  const cmdText = command.startsWith('/') ? command : `/${command}`;
+  const entityId = client.entityId || 0n;
+
+  let resolved = false;
+
+  // 监听命令输出
+  const handler = (packet) => {
+    if (resolved) return;
+    if (packet.origin && packet.origin.uuid === uuid) {
+      resolved = true;
+      client.removeListener('command_output', handler);
+      clearTimeout(timer);
+      const output = (packet.output || []).map(o => o.message || String(o)).join('\n');
+      send({ ok: packet.success !== false, action: 'command', command, output: output || undefined });
+    }
+  };
+  client.on('command_output', handler);
+
+  // 超时:某些命令(如 /say)不产生 command_output
+  const timer = setTimeout(() => {
+    if (!resolved) {
+      resolved = true;
+      client.removeListener('command_output', handler);
+      send({ ok: true, action: 'command', command });
+    }
+  }, 3000);
 
   try {
-    if (proto >= 898) {
-      // 1.21.130+: origin.type 改为 string,version 改为 string,player_entity_id 必填
-      client.queue('command_request', {
-        command,
-        origin: {
-          type: 'player',
-          uuid: generateUUID(),
-          request_id: '',
-          player_entity_id: BigInt(0),
-        },
-        internal: false,
-        version: '',
-      });
-    } else {
-      // 1.21.120 及更早版本: origin.type 为 varint,version 为 varint
-      client.queue('command_request', {
-        command,
-        origin: {
-          type: 0,
-          uuid: generateUUID(),
-          request_id: '',
-        },
-        internal: false,
-        version: proto || 554,
-      });
-    }
-    send({ ok: true, action: 'command', command });
+    client.queue('command_request', {
+      command: cmdText,
+      origin: {
+        type: 'player',
+        uuid,
+        request_id: '',
+        player_entity_id: entityId,
+      },
+      internal: false,
+      version: 'latest',
+    });
+    log(`发送命令: ${cmdText} (entityId: ${entityId})`);
   } catch (e) {
-    log('command_request 发送失败:', e.message);
+    resolved = true;
+    client.removeListener('command_output', handler);
+    clearTimeout(timer);
+    log('命令发送失败:', e.message);
     send({ type: 'error', message: `命令发送失败: ${e.message}` });
   }
 }
