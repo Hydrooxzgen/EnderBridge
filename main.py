@@ -14,8 +14,8 @@ from uuid import uuid4
 ROOT = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PY = os.path.join(ROOT, "config.py")
 CONFIG_EXAMPLE = os.path.join(ROOT, "config.example.py")
-VERSION = "b0.3.0 dev11"
-DESCRIPTION = "config保存问题修复中，bot功能待测试，现在终端可用bot命令(修复中)" # 仅当不为None时从Github拉取更新日志，反之则直接显示该变量内容。
+VERSION = "b0.3.0 dev13"
+DESCRIPTION = "服务器bot测试通过，chat测试失败，shell测试1/2成功 dev13修复中" # 仅当不为None时从Github拉取更新日志，反之则直接显示该变量内容。
 GITHUB_REPO = "Hydrooxzgen/EnderBridge"  # You can edit this to your own repository if you fork it :)
 WANT_RESET = "--reset-all" in sys.argv
 WANT_EXPORT = "export" in sys.argv
@@ -1159,6 +1159,11 @@ async def _dispatch_console_command(text):
     """分发终端命令"""
     text = text.strip()
     if not text:
+        return
+
+    # Bot Shell 模式:所有输入转发给 bot
+    if getattr(shared, "bot_shell_mode", False) and getattr(shared, "bot_shell_queue", None):
+        shared.bot_shell_queue.put_nowait(text)
         return
 
     if text in ("exit", "quit"):

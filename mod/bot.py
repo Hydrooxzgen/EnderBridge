@@ -57,6 +57,7 @@ class BotProcess:
         self.players = {}         # name → {x, y, z}
         self._read_task = None    # stdout 读取任务
         self._line_buf = ""       # 行缓冲
+        self._resp_queue = None   # asyncio.Queue — 命令响应队列
 
     @classmethod
     def get(cls) -> "BotProcess":
@@ -133,6 +134,7 @@ class BotProcess:
 
         self.ready = False
         self.players = {}
+        self._resp_queue = asyncio.Queue()
 
         # 启动 stdout 读取
         self._read_task = asyncio.get_running_loop().create_task(self._read_stdout())
@@ -159,12 +161,15 @@ class BotProcess:
 
         self.ready = False
         self.players = {}
+        self._resp_queue = None
         return {"ok": True, "message": "Bot 已停止"}
 
     async def send_command(self, cmd: dict) -> dict:
         """向 bot 发送命令并等待响应"""
         if not self.proc or self.proc.returncode is not None:
             return {"ok": False, "message": "Bot 未运行,请先 $bot start"}
+        if not self._resp_queue:
+            return {"ok": False, "message": "Bot 响应队列未初始化"}
 
         try:
             self.proc.stdin.write((json.dumps(cmd, ensure_ascii=False) + "\n").encode("utf-8"))
@@ -172,23 +177,19 @@ class BotProcess:
         except Exception as e:
             return {"ok": False, "message": f"发送命令失败: {e}"}
 
-        # 等待响应(最多 5 秒)
+        # 从队列等待响应(最多 5 秒),丢弃非命令响应(如 join/disconnect 通知)
         try:
-            resp = await asyncio.wait_for(self._wait_response(), timeout=5)
-            return resp
+            deadline = asyncio.get_running_loop().time() + 5
+            while True:
+                remaining = deadline - asyncio.get_running_loop().time()
+                if remaining <= 0:
+                    return {"ok": False, "message": "Bot 响应超时"}
+                resp = await asyncio.wait_for(self._resp_queue.get(), timeout=remaining)
+                # 命令响应:有 action 字段的是命令响应;join/disconnect 是事件通知,跳过
+                if resp.get("action") or resp.get("type") == "error":
+                    return resp
         except asyncio.TimeoutError:
             return {"ok": False, "message": "Bot 响应超时"}
-
-    async def _wait_response(self) -> dict:
-        """等待下一个 stdout 响应"""
-        # 简单实现:轮询 self._last_resp
-        # 实际用 Future 更优雅,这里用事件替代
-        fut = asyncio.get_running_loop().create_future()
-        self._resp_fut = fut
-        try:
-            return await asyncio.wait_for(fut, timeout=5)
-        except asyncio.TimeoutError:
-            return {"ok": False, "message": "响应超时"}
 
     def _on_response(self, resp: dict):
         """收到 bot 响应时调用"""
@@ -222,10 +223,9 @@ class BotProcess:
                 for p in resp.get("players", [])
             }
 
-        # 解除 Future 等待
-        fut = getattr(self, "_resp_fut", None)
-        if fut and not fut.done():
-            fut.set_result(resp)
+        # 放入响应队列,供 send_command 消费
+        if self._resp_queue is not None:
+            self._resp_queue.put_nowait(resp)
 
     async def _read_stdout(self):
         """持续读取 bot stdout"""
@@ -289,13 +289,14 @@ class Mod:
         ("move", "<名称>", "将假人传送到当前位置", 2),
         ("chat", "<消息>", "以假人身份发送聊天消息", 2),
         ("list", "", "列出所有假人", 2),
+        ("shell", "", "进入 Bot Shell 交互模式(直接执行 MCBE 命令)", 2),
     ]
 
     async def _cmd_bot(self, sender, method, p1=None, p2=None):
         """$bot 方法分发器"""
         if method is None:
             self.client.tell(
-                "§cBot | §fError > §i未指定方法（输入 $bot help 查看全部方法）",
+                "Bot | Error > 未指定方法（输入 $bot help 查看全部方法）",
                 sender,
             )
             return
@@ -303,11 +304,11 @@ class Mod:
         # help
         if method == "help":
             lines = "\n".join(
-                f"§a$bot {mname}{' ' + margs if margs else ''} §7- §f{mdesc}"
+                f"  $bot {mname}{' ' + margs if margs else ''}  -  {mdesc}"
                 for mname, margs, mdesc, _ in self.BOT_METHODS
             )
             self.client.tell(
-                f"§eBot | §fHelp > §7可用方法\n{lines}",
+                f"Bot | Help > 可用方法:\n{lines}",
                 sender,
             )
             return
@@ -320,7 +321,7 @@ class Mod:
                 break
         if required is None:
             self.client.tell(
-                f"§cBot | §fError > §i未知方法: {method}（输入 $bot help 查看全部方法）",
+                f"Bot | Error > 未知方法: {method}（输入 $bot help 查看全部方法）",
                 sender,
             )
             return
@@ -328,10 +329,10 @@ class Mod:
         from lib.permission import PermissionManager
         perm = await PermissionManager.query(sender)
         if isinstance(perm, Exception):
-            self.client.tell("§cBot | §fError > §i权限查询失败", sender)
+            self.client.tell("Bot | Error > 权限查询失败", sender)
             return
         if perm < required:
-            self.client.tell("§cBot | §fError > §i权限不足", sender)
+            self.client.tell("Bot | Error > 权限不足", sender)
             return
 
         # 分发
@@ -341,28 +342,30 @@ class Mod:
             await self._cmd_stop(sender)
         elif method == "spawn":
             if p1 is None:
-                self.client.tell("§cBot | §fError > §i参数不足: $bot spawn <名称>", sender)
+                self.client.tell("Bot | Error > 参数不足: $bot spawn <名称>", sender)
                 return
             await self._cmd_spawn(sender, p1)
         elif method == "remove":
             if p1 is None:
-                self.client.tell("§cBot | §fError > §i参数不足: $bot remove <名称>", sender)
+                self.client.tell("Bot | Error > 参数不足: $bot remove <名称>", sender)
                 return
             await self._cmd_remove(sender, p1)
         elif method == "move":
             if p1 is None:
-                self.client.tell("§cBot | §fError > §i参数不足: $bot move <名称>", sender)
+                self.client.tell("Bot | Error > 参数不足: $bot move <名称>", sender)
                 return
             await self._cmd_move(sender, p1)
         elif method == "chat":
             if p1 is None:
-                self.client.tell("§cBot | §fError > §i参数不足: $bot chat <消息>", sender)
+                self.client.tell("Bot | Error > 参数不足: $bot chat <消息>", sender)
                 return
             # 合并 p1 + p2 作为完整消息(支持含空格的消息)
             msg = p1 if p2 is None else f"{p1} {p2}"
             await self._cmd_chat(sender, msg)
         elif method == "list":
             await self._cmd_list(sender)
+        elif method == "shell":
+            await self._cmd_shell(sender)
 
     # ---- 实现 ----
 
@@ -370,22 +373,22 @@ class Mod:
         bot = BotProcess.get()
         result = await bot.start()
         if result["ok"]:
-            self.client.tell(f"§aBot | §fStart > §7{result['message']}", sender)
+            self.client.tell(f"Bot | Start > {result['message']}", sender)
         else:
-            self.client.tell(f"§cBot | §fError > §i{result['message']}", sender)
+            self.client.tell(f"Bot | Error > {result['message']}", sender)
 
     async def _cmd_stop(self, sender):
         bot = BotProcess.get()
         result = await bot.stop()
         if result["ok"]:
-            self.client.tell(f"§aBot | §fStop > §7{result['message']}", sender)
+            self.client.tell(f"Bot | Stop > {result['message']}", sender)
         else:
-            self.client.tell(f"§cBot | §fError > §i{result['message']}", sender)
+            self.client.tell(f"Bot | Error > {result['message']}", sender)
 
     async def _cmd_spawn(self, sender, name: str):
         name = name.strip()
         if not name:
-            self.client.tell("§cBot | §fError > §i名称不能为空", sender)
+            self.client.tell("Bot | Error > 名称不能为空", sender)
             return
 
         # 获取玩家位置
@@ -403,12 +406,12 @@ class Mod:
 
         if result.get("ok"):
             self.client.tell(
-                f"§aBot | §fSpawn > §7假人 §f{name} §7已加入游戏(出现在 Tab 列表)",
+                f"Bot | Spawn > 假人 {name} 已加入游戏(出现在 Tab 列表)",
                 sender,
             )
         else:
             self.client.tell(
-                f"§cBot | §fError > §i{result.get('message', '生成失败')}",
+                f"Bot | Error > {result.get('message', '生成失败')}",
                 sender,
             )
 
@@ -418,10 +421,10 @@ class Mod:
         result = await bot.send_command({"type": "remove", "name": name})
 
         if result.get("ok"):
-            self.client.tell(f"§aBot | §fRemove > §7假人 §f{name} §7已移除", sender)
+            self.client.tell(f"Bot | Remove > 假人 {name} 已移除", sender)
         else:
             self.client.tell(
-                f"§cBot | §fError > §i{result.get('message', '移除失败')}",
+                f"Bot | Error > {result.get('message', '移除失败')}",
                 sender,
             )
 
@@ -441,12 +444,12 @@ class Mod:
 
         if result.get("ok"):
             self.client.tell(
-                f"§aBot | §fMove > §7假人 §f{name} §7已传送至 §b({x:.1f}, {y:.1f}, {z:.1f})",
+                f"Bot | Move > 假人 {name} 已传送至 ({x:.1f}, {y:.1f}, {z:.1f})",
                 sender,
             )
         else:
             self.client.tell(
-                f"§cBot | §fError > §i{result.get('message', '移动失败')}",
+                f"Bot | Error > {result.get('message', '移动失败')}",
                 sender,
             )
 
@@ -458,30 +461,73 @@ class Mod:
         })
 
         if result.get("ok"):
-            self.client.tell(f"§aBot | §fChat > §7消息已发送", sender)
+            self.client.tell(f"Bot | Chat > 消息已发送", sender)
         else:
             self.client.tell(
-                f"§cBot | §fError > §i{result.get('message', '发送失败')}",
+                f"Bot | Error > {result.get('message', '发送失败')}",
                 sender,
             )
 
     async def _cmd_list(self, sender):
         bot = BotProcess.get()
         if not bot.proc or bot.proc.returncode is not None:
-            self.client.tell("§cBot | §fError > §iBot 未运行,请先 $bot start", sender)
+            self.client.tell("Bot | Error > Bot 未运行,请先 $bot start", sender)
             return
 
         result = await bot.send_command({"type": "list"})
         players = result.get("players", []) if result.get("ok") else []
 
         if not players:
-            self.client.tell("§eBot | §fList > §7当前无假人", sender)
+            self.client.tell("Bot | List > 当前无假人", sender)
         else:
             lines = "\n".join(
-                f"§7  §f{p['name']} §7@ §b({p['x']:.0f}, {p['y']:.0f}, {p['z']:.0f})"
+                f"  {p['name']} @ ({p['x']:.0f}, {p['y']:.0f}, {p['z']:.0f})"
                 for p in players
             )
-            self.client.tell(f"§eBot | §fList > §7假人列表:\n{lines}", sender)
+            self.client.tell(f"Bot | List > 假人列表:\n{lines}", sender)
+
+    async def _cmd_shell(self, sender):
+        """进入 Bot Shell 交互模式"""
+        bot = BotProcess.get()
+        if not bot.proc or bot.proc.returncode is not None:
+            self.client.tell("Bot | Error > Bot 未运行,请先 $bot start", sender)
+            return
+
+        # 设置 shell 模式
+        shared.bot_shell_mode = True
+        shared.bot_shell_queue = asyncio.Queue()
+        self.client.tell(
+            "Bot | Shell > 已进入交互模式,直接输入 MCBE 命令(如 /tp /say /execute),输入 exit 退出",
+            sender,
+        )
+
+        try:
+            while True:
+                line = await shared.bot_shell_queue.get()
+                line = line.strip()
+                if not line:
+                    continue
+                if line.lower() == "exit":
+                    break
+
+                # 自动加 / 前缀(如果没有)
+                cmd_str = line if line.startswith("/") else f"/{line}"
+                result = await bot.send_command({
+                    "type": "command",
+                    "command": cmd_str,
+                })
+
+                if result.get("ok"):
+                    self.client.tell(f"[Shell] > {cmd_str}", sender)
+                else:
+                    self.client.tell(
+                        f"[Shell] Error > {result.get('message', '命令发送失败')}",
+                        sender,
+                    )
+        finally:
+            shared.bot_shell_mode = False
+            shared.bot_shell_queue = None
+            self.client.tell("Bot | Shell > 已退出交互模式", sender)
 
     def onDestroy(self):
         """Mod 销毁时停止 bot"""

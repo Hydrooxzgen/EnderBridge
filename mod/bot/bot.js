@@ -112,6 +112,9 @@ function handleCommand(cmd) {
     case 'list':
       handleList(cmd);
       break;
+    case 'command':
+      handleGameCommand(cmd);
+      break;
     case 'quit':
       handleQuit();
       break;
@@ -260,6 +263,26 @@ function handleList() {
     z: data.z,
   }));
   send({ type: 'ok', action: 'list', players: list });
+}
+
+function handleGameCommand(cmd) {
+  const { command } = cmd;
+  if (!command) {
+    send({ type: 'error', message: '缺少 command 参数' });
+    return;
+  }
+  try {
+    client.queue('command_request', {
+      command: command,
+      origin: { type: 0, uuid: generateUUID() },
+      interval: false,
+      version: 55,
+    });
+    send({ type: 'ok', action: 'command', command });
+  } catch (e) {
+    log('command_request 发送失败:', e.message);
+    send({ type: 'error', message: `命令发送失败: ${e.message}` });
+  }
 }
 
 function handleQuit() {
