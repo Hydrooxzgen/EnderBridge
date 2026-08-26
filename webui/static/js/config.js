@@ -101,7 +101,7 @@ function loadConfig() {
 
     $("cfg-name").value = data.config.name || "EnderBridge";
     $("cfg-port").value = data.config.port || 8800;
-    $("cfg-prefix").value = data.config.commandPrefix || "!";
+    $("cfg-prefix").value = data.config.commandPrefix || "$";
     $("cfg-loglevel").value = data.config.logLevel || "info";
     $("cfg-percussion").checked = !!music.playPercussion;
 
@@ -231,11 +231,19 @@ function saveConfig() {
   basePath.ezmatic = $("cfg-path-ezmatic").value.trim();
   basePath.image = $("cfg-path-image").value.trim();
 
+  var bot = {
+    host: $("cfg-bot-host").value.trim() || "127.0.0.1",
+    port: parseInt($("cfg-bot-port").value, 10) || 19132,
+    username: $("cfg-bot-username").value.trim() || "FakeBot",
+    version: $("cfg-bot-version").value.trim() || null,
+    offline: $("cfg-bot-offline").checked,
+  };
+
   var payload = {
     config: {
       name: $("cfg-name").value.trim() || "EnderBridge",
       port: parseInt($("cfg-port").value, 10) || 8800,
-      commandPrefix: $("cfg-prefix").value.trim() || "!",
+      commandPrefix: $("cfg-prefix").value.trim() || "$",
       logLevel: $("cfg-loglevel").value,
       githubToken: $("cfg-github-token").value.trim(),
       features: f, rateLimit: rl, webui: webui, ai: ai,
@@ -244,7 +252,7 @@ function saveConfig() {
   };
   api("/config", { method: "PUT", body: JSON.stringify(payload) })
     .then(function (data) { toast(data.message, data.ok ? "ok" : "err"); if (data.ok) loadConfig(); })
-    .catch(function () {});
+    .catch(function (e) { toast("保存失败: " + (e.message || e), "err"); });
 }
 
 var cs1 = $("configSave"); if (cs1) cs1.addEventListener("click", saveConfig);

@@ -111,7 +111,7 @@ webuiConfig = {
 
 1. 让游戏客户端连接到 WebSocket 服务器（端口与向导中配置的一致，默认 `8800`）/ Connect your game client to the WebSocket server (port as configured, default `8800`)
 2. 第一个连接成为主客户端 / The first connection becomes the main client
-3. 在游戏内使用命令前缀（默认 `!`）调用各模组命令，例如 `!help` 查看全部命令帮助 / Use the command prefix (default `!`) in-game to call mod commands, e.g. `!help`
+3. 在游戏内使用命令前缀（默认 `$`）调用各模组命令，例如 `$help` 查看全部命令帮助 / Use the command prefix (default `$`) in-game to call mod commands, e.g. `$help`
 
 ### 4. 命令格式 / Command format
 
@@ -121,24 +121,24 @@ All built-in mods share a **single-entry command** format: `<prefix><entry> <met
 
 | 模组 / Mod | 入口 / Entry | 示例 / Example |
 |------|------|------|
-| 工具 / Tool | `tool` | `!tool reload Ezmatic` |
-| 命令帮助 / Help | `help` | `!help 2`（分页） |
-| 图片 / Image | `image` | `!image create demo.png` |
-| 音乐 / Music | `music` | `!music run <文件>` |
-| 坐标 / Position | `pos` | `!pos a`、`!pos fill <方块>` |
-| 权限 / Permission | `perm` | `!perm query Steve` |
-| 函数 / MCFunc | `function` | `!function function <路径>` |
-| 外接 WebSocket / MoreWS | `ws` | `!ws connect ws://127.0.0.1:8080` |
-| QQ 互通 / QQ | `qq` | `!qq send 你好` |
-| AI 对话 / AI | `ai` | `!ai chat 你好` |
-| 终端 / 聊天 / Terminal | `chat` | `!chat list`（终端与游戏内均可用） |
-| 刷屏 / Spam | `spam` | `!spam stop`（终端与游戏内均可用） |
-| Ezmatic 建筑 / Ezmatic | `ezmatic` | `!ezmatic preview <文件>` |
-| 假人 / Bot | `bot` | `!bot spawn Steve`（需要 Node.js + 启用 Bot Mod） |
+| 工具 / Tool | `tool` | `$tool reload Ezmatic` |
+| 命令帮助 / Help | `help` | `$help 2`（分页） |
+| 图片 / Image | `image` | `$image create demo.png` |
+| 音乐 / Music | `music` | `$music run <文件>` |
+| 坐标 / Position | `pos` | `$pos a`、`$pos fill <方块>` |
+| 权限 / Permission | `perm` | `$perm query Steve` |
+| 函数 / MCFunc | `function` | `$function function <路径>` |
+| 外接 WebSocket / MoreWS | `ws` | `$ws connect ws://127.0.0.1:8080` |
+| QQ 互通 / QQ | `qq` | `$qq send 你好` |
+| AI 对话 / AI | `ai` | `$ai chat 你好` |
+| 终端 / 聊天 / Terminal | `chat` | `$chat list`（终端与游戏内均可用） |
+| 刷屏 / Spam | `spam` | `$spam stop`（终端与游戏内均可用） |
+| Ezmatic 建筑 / Ezmatic | `ezmatic` | `$ezmatic preview <文件>` |
+| 假人 / Bot | `bot` | `$bot spawn Steve`（需要 Node.js + 启用 Bot Mod） |
 
-全局 `help` 命令（`!help [页码]`）分页显示全部命令；每个入口输入 `help` 可查看该模组的全部方法：`!tool help`、`!music help`……
+全局 `help` 命令（`$help [页码]`）分页显示全部命令；每个入口输入 `help` 可查看该模组的全部方法：`$tool help`、`$music help`……
 
-The global `help` command (`!help [page]`) lists all commands with paging; type `help` after any entry to list its methods: `!tool help`, `!music help`, ...
+The global `help` command (`$help [page]`) lists all commands with paging; type `help` after any entry to list its methods: `$tool help`, `$music help`, ...
 
 ---
 
@@ -234,8 +234,8 @@ EnderBridge/
 |------|----------|------|
 | `AI` | 客户端 + 服务端 / Client + Server | 与 AI 模型对话（单次 / 上下文模式）/ Chat with AI (single / context mode) |
 | `Bot` | 客户端 / Client | 假人管理：生成 / 移除 / 传送 / 聊天（通过 Node.js bedrock-protocol 连接 MCBE 服务器）/ Fake player: spawn / remove / move / chat |
-| `PermissionCommands` | 客户端 / Client | 游戏内权限查询与增删（`!perm query` / `!perm add` / `!perm remove`）/ In-game permission management |
-| `Tool` | 客户端 / Client | 全局命令帮助（`!help` 分页）、搜索、终端执行、SAPI 控制 / Command help, search, terminal exec |
+| `PermissionCommands` | 客户端 / Client | 游戏内权限查询与增删（`$perm query` / `$perm add` / `$perm remove`）/ In-game permission management |
+| `Tool` | 客户端 / Client | 全局命令帮助（`$help` 分页）、搜索、终端执行、SAPI 控制 / Command help, search, terminal exec |
 | `Position` | 客户端 / Client | A/B 点标记、距离计算、区域填充、结构复制 / 粘贴 / 剪切 / Coordinates & structure ops |
 | `Music` | 客户端 / Client | 解析 MIDI/JSON 并播放为游戏音效 / Play MIDI/JSON as in-game sounds |
 | `MCFunc` | 客户端 / Client | 加载执行 `.mcfunction` 文件，支持嵌套与定时循环 / Run .mcfunction files |
@@ -256,7 +256,7 @@ EnderBridge/
 |--------|--------|------|
 | `wsConfig.name` | `"EnderBridge"` | WebSocket 服务器名称 / Server name |
 | `wsConfig.port` | `8800` | WebSocket 端口 / WebSocket port |
-| `commandPrefix` | `!` | 游戏内命令前缀 / In-game command prefix |
+| `commandPrefix` | `$` | 游戏内命令前缀 / In-game command prefix |
 | `logLevel` | `"info"` | 日志等级 / Log level：`debug` < `info` < `warning` < `error` |
 | `rateLimit.command` | `enabled: False, windowMs: 1000, maxPerWindow: 20` | 命令限流：开关、时间窗口（毫秒）、窗口内最大次数 / Rate limit: toggle, window (ms), max per window |
 | `features.qq` | 关闭 / off | QQ 桥接：群号、主机、端口、访问令牌 / QQ bridge settings |
@@ -319,9 +319,9 @@ Platform detection and path adaptation (`resolvePath`) are built in; use relativ
 **Q：假人 Bot 怎么用？/ How to use the fake player bot?**
 1. 在配置向导或 WebUI 中启用 Bot Mod 并配置服务器地址（默认 `127.0.0.1:19132`）
 2. 确保系统已安装 Node.js 16+
-3. 在游戏内执行 `!bot start` 启动 Bot 进程
-4. 执行 `!bot spawn <玩家名>` 生成假人
-5. 假人会出现在 Tab 列表和游戏世界中，可通过 `!bot move` / `!bot chat` / `!bot remove` 管理
+3. 在游戏内执行 `$bot start` 启动 Bot 进程
+4. 执行 `$bot spawn <玩家名>` 生成假人
+5. 假人会出现在 Tab 列表和游戏世界中，可通过 `$bot move` / `$bot chat` / `$bot remove` 管理
 See wiki section "8. 内置模组详解 → Bot 假人详解" for details.
 
 ---

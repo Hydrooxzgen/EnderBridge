@@ -417,6 +417,7 @@ def save_config(new: dict) -> None:
         "enabled": bool(webui.get("enabled", True)),
         "port": int(webui.get("port") or 18888),
         "token": str(webui.get("token") or "").strip(),
+        "localOnly": bool(webui.get("localOnly", False)),
     }
     apply_block_or_append("webuiConfig", webui_value, "# Web 管理界面配置（每次启动时监听该端口）")
 

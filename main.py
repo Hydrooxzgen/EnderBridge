@@ -14,8 +14,8 @@ from uuid import uuid4
 ROOT = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PY = os.path.join(ROOT, "config.py")
 CONFIG_EXAMPLE = os.path.join(ROOT, "config.example.py")
-VERSION = "b0.3.0 dev2"
-DESCRIPTION = "新增假人功能(dev1)、新增在setup/管理页面中可以配置假人（待测试\n已知问题：help命令和终端命令强绑定'$'修复发布dev3" # 仅当不为None时从Github拉取更新日志，反之则直接显示该变量内容。
+VERSION = "b0.3.0 dev7"
+DESCRIPTION = "config保存问题修复中，bot功能待测试" # 仅当不为None时从Github拉取更新日志，反之则直接显示该变量内容。
 GITHUB_REPO = "Hydrooxzgen/EnderBridge"  # You can edit this to your own repository if you fork it :)
 WANT_RESET = "--reset-all" in sys.argv
 WANT_EXPORT = "export" in sys.argv
@@ -1055,6 +1055,10 @@ async def _hot_restart() -> None:
             ping_timeout=None,
         )
 
+        # 重新加载配置(含命令前缀等模块级变量)
+        from lib.command import Command
+        Command.reload_prefix()
+
         # 重新启动 Web 管理界面
         _start_webui()
 
@@ -1078,7 +1082,6 @@ async def _hot_restart() -> None:
 
 # ===== 交互式终端提示符 =====
 CONSOLE_PROMPT = "EnderBridge> "
-CONSOLE_PREFIX = "$"  # 命令前缀
 _restarting = False  # 重启/更新中,抑制提示符输出
 _prompt_visible = False  # 提示符是否已在终端显示(防重复)
 
@@ -1093,16 +1096,18 @@ def console_out(msg):
 
 def _console_help():
     """显示帮助信息"""
+    from lib.command import Command
+    cp = Command.command_prefix
     console_out("可用命令:")
-    console_out(f"  {CONSOLE_PREFIX}help       - 显示此帮助")
-    console_out(f"  {CONSOLE_PREFIX}status     - 显示服务器状态")
-    console_out(f"  {CONSOLE_PREFIX}list       - 列出所有客户端连接")
-    console_out(f"  {CONSOLE_PREFIX}say <msg>  - 向主客户端发送消息")
-    console_out(f"  {CONSOLE_PREFIX}cmd <cmd>  - 向主客户端发送命令")
+    console_out(f"  {cp}help       - 显示此帮助")
+    console_out(f"  {cp}status     - 显示服务器状态")
+    console_out(f"  {cp}list       - 列出所有客户端连接")
+    console_out(f"  {cp}say <msg>  - 向主客户端发送消息")
+    console_out(f"  {cp}cmd <cmd>  - 向主客户端发送命令")
     console_out(f"  /<cmd>     - 直接发送游戏命令(如 /list)")
     console_out(f"  <text>     - 作为聊天消息发送")
     console_out(f"  exit/quit  - 退出程序")
-    console_out(f"  {CONSOLE_PREFIX}chat ...   - Mod 命令(如 {CONSOLE_PREFIX}chat help)")
+    console_out(f"  {cp}chat ...   - Mod 命令(如 {cp}chat help)")
 
 
 def _console_status():
@@ -1176,9 +1181,12 @@ async def _dispatch_console_command(text):
             console_out("§c无客户端连接")
         return
 
-    # 以 $ 开头:本地控制台命令
-    if text.startswith(CONSOLE_PREFIX):
-        cmd = text[len(CONSOLE_PREFIX):].strip()
+    # 以命令前缀开头:本地控制台命令
+    from lib.command import Command
+    Command.reload_prefix()
+    cp = Command.command_prefix
+    if text.startswith(cp):
+        cmd = text[len(cp):].strip()
 
         if cmd in ("help", "h", "?"):
             _console_help()
@@ -1202,11 +1210,10 @@ async def _dispatch_console_command(text):
                 console_out("§c无客户端连接")
         else:
             # 转发给服务端 Mod 执行(如 $chat、$spam 等)
-            from lib.command import Command
-            mod_cmd = f"{Command.command_prefix}{cmd}"
+            mod_cmd = f"{cp}{cmd}"
             handled = await ServerModManager.execute_terminal(mod_cmd)
             if not handled:
-                console_out(f"§c未知命令: §f{cmd}，输入 {CONSOLE_PREFIX}help 查看帮助")
+                console_out(f"§c未知命令: §f{cmd}，输入 {cp}help 查看帮助")
         return
 
     # 非命令文本:作为聊天消息发送给主客户端

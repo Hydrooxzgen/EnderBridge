@@ -489,7 +489,8 @@ class ClientModManager:
             if type_ != "chat" or len(msg) >= 256:
                 return
 
-            # 检查消息是否以命令前缀开头(动态读取,与 Command.set_command_prefix 保持同步)
+            # 检查消息是否以命令前缀开头(动态读取 config.py,与 WebUI 保存保持同步)
+            Command.reload_prefix()
             if not msg.startswith(Command.command_prefix):
                 return
 
@@ -500,16 +501,6 @@ class ClientModManager:
             # 内置命令:终端侧的本地命令,任何人可用,无需权限分级
             token = msg.split(" ")[0]  # e.g. "$help"
             token_suffix = token[len(Command.command_prefix):].strip()  # e.g. "help"
-            if token_suffix in ("help", "h", "?"):
-                cp = Command.command_prefix
-                self.client.tell(sender, f"§e可用命令:")
-                self.client.tell(sender, f"§7{cp}help       - 显示帮助")
-                self.client.tell(sender, f"§7{cp}status     - 显示服务器状态")
-                self.client.tell(sender, f"§7{cp}list       - 列出在线客户端")
-                self.client.tell(sender, f"§7{cp}perm ...   - 权限管理")
-                self.client.tell(sender, f"§7{cp}say <msg>  - 向主客户端发送消息")
-                self.client.tell(sender, f"§7{cp}cmd <cmd>  - 向主客户端发送命令")
-                return
             if token_suffix in ("status", "info"):
                 st = shared.start_time
                 conns = shared.connections_ref

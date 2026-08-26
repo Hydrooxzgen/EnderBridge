@@ -194,7 +194,7 @@ COMMAND_MODEL = re.compile(
 RULES = [
     {"key": "服务器名称", "apply": make_rule('"name": "EnderBridge"', lambda f: f'"name": {_json(f["name"])}')},
     {"key": "WebSocket 端口", "apply": make_rule('"port": 8800', lambda f: f'"port": {_num(f["port"])}')},
-    {"key": "命令前缀", "apply": make_rule('commandPrefix = "!"', lambda f: f"commandPrefix = {_json(f['commandPrefix'])}")},
+    {"key": "命令前缀", "apply": make_rule('commandPrefix = "$"', lambda f: f"commandPrefix = {_json(f['commandPrefix'])}")},
     {"key": "日志等级", "apply": make_rule('logLevel = "info"', lambda f: f"logLevel = {_json(f['logLevel'])}")},
     {"key": "AI API Key", "apply": make_rule('"apiKey": ""', lambda f: f'"apiKey": {_json(f["apiKey"])}')},
     {"key": "AI Base URL", "apply": make_rule('"baseURL": "https://api.deepseek.com"', lambda f: f'"baseURL": {_json(f["baseURL"])}')},
@@ -326,7 +326,7 @@ def load_defaults() -> dict:
     return {
         "name": _get(cfg, "wsConfig", "name", default="EnderBridge"),
         "port": _get(cfg, "wsConfig", "port", default=8800),
-        "commandPrefix": cfg.get("commandPrefix", "!"),
+        "commandPrefix": cfg.get("commandPrefix", "$"),
         "logLevel": cfg.get("logLevel", "info"),
         "apiKey": _get(cfg, "AIConfig", "options", "apiKey", default=""),
         "baseURL": _get(cfg, "AIConfig", "options", "baseURL", default="https://api.deepseek.com"),
@@ -759,7 +759,7 @@ button[type=submit]:disabled { opacity: 0.7; cursor: wait; transform: none; }
         <div><label for="port">WebSocket 端口</label><input id="port" name="port" type="number" min="1" max="65535"></div>
       </div>
       <div class="grid">
-        <div><label for="commandPrefix">命令前缀</label><input id="commandPrefix" name="commandPrefix" type="text" maxlength="4" placeholder="!"></div>
+        <div><label for="commandPrefix">命令前缀</label><input id="commandPrefix" name="commandPrefix" type="text" maxlength="4" placeholder="$"></div>
         <div><label for="logLevel">日志等级</label>
           <select id="logLevel" name="logLevel">
             <option value="debug">debug</option>

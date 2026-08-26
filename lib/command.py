@@ -8,20 +8,19 @@ import time
 
 
 def _load_config():
-    """从 config 读取命令前缀与限流配置(失败时使用默认值)"""
+    """从 config.py 读取命令前缀与限流配置(强制重新加载,确保 WebUI 保存后生效)
+
+    使用 importlib.reload 强制重新执行 config.py,绕过 Python 模块缓存。
+    """
+    import importlib
     try:
-        # 配置文件中为驼峰命名(rateLimit/commandPrefix),兼容下划线写法
-        try:
-            from config import rateLimit as rate_limit
-        except ImportError:
-            from config import rate_limit
-        try:
-            from config import commandPrefix as command_prefix
-        except ImportError:
-            from config import command_prefix
+        import config
+        importlib.reload(config)
+        command_prefix = getattr(config, "commandPrefix", None) or getattr(config, "command_prefix", "$")
+        rate_limit = getattr(config, "rateLimit", None) or getattr(config, "rate_limit", None)
         return command_prefix, rate_limit
     except Exception:
-        return "!", None
+        return "$", None
 
 
 _PREFIX, _RATE_LIMIT = _load_config()
@@ -35,6 +34,12 @@ class Command:
 
     # 命令限流桶:commander -> {"start": ms, "count": n}
     _rate_buckets: dict = {}
+
+    @classmethod
+    def reload_prefix(cls) -> None:
+        """从 config.py 重新读取命令前缀(热重启/配置保存后调用)"""
+        prefix, _ = _load_config()
+        cls.command_prefix = prefix
 
     @classmethod
     def _check_rate_limit(cls, commander: str) -> bool:

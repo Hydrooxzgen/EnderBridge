@@ -52,7 +52,7 @@ webuiConfig = {
 # 可选值: "debug" < "info" < "warning" < "error"
 logLevel = "info"
 
-commandPrefix = "!"
+commandPrefix = "$"
 
 # GitHub API Token（可选，用于减少 API 速率限制）
 # 在 https://github.com/settings/tokens 创建，只需 public_repo 读取权限
