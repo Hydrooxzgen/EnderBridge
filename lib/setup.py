@@ -995,7 +995,8 @@ var MOD_REGISTRY = {
 };
 var ADVANCED_MODS = {
   AI: { label: "AI 对话（客户端 + 服务端）", config: "ai" },
-  QQ: { label: "QQ 群互通", config: "qq" }
+  QQ: { label: "QQ 群互通", config: "qq" },
+  Bot: { label: "假人 Bot（Tab 列表玩家）", config: "bot" }
 };
 
 function buildModList(containerId, side) {
