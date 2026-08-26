@@ -14,8 +14,8 @@ from uuid import uuid4
 ROOT = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PY = os.path.join(ROOT, "config.py")
 CONFIG_EXAMPLE = os.path.join(ROOT, "config.example.py")
-VERSION = "b0.3.0 dev7"
-DESCRIPTION = "config保存问题修复中，bot功能待测试" # 仅当不为None时从Github拉取更新日志，反之则直接显示该变量内容。
+VERSION = "b0.3.0 dev10"
+DESCRIPTION = "config保存问题修复中，bot功能待测试，现在终端可用bot命令(修复中)" # 仅当不为None时从Github拉取更新日志，反之则直接显示该变量内容。
 GITHUB_REPO = "Hydrooxzgen/EnderBridge"  # You can edit this to your own repository if you fork it :)
 WANT_RESET = "--reset-all" in sys.argv
 WANT_EXPORT = "export" in sys.argv
@@ -1108,6 +1108,7 @@ def _console_help():
     console_out(f"  <text>     - 作为聊天消息发送")
     console_out(f"  exit/quit  - 退出程序")
     console_out(f"  {cp}chat ...   - Mod 命令(如 {cp}chat help)")
+    console_out(f"  {cp}bot ...    - 假人管理(如 {cp}bot start)")
 
 
 def _console_status():
@@ -1212,6 +1213,9 @@ async def _dispatch_console_command(text):
             # 转发给服务端 Mod 执行(如 $chat、$spam 等)
             mod_cmd = f"{cp}{cmd}"
             handled = await ServerModManager.execute_terminal(mod_cmd)
+            if not handled:
+                # 再尝试客户端 Mod(如 $bot)
+                handled = await ClientModManager.execute_terminal(mod_cmd)
             if not handled:
                 console_out(f"§c未知命令: §f{cmd}，输入 {cp}help 查看帮助")
         return

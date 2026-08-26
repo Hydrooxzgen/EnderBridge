@@ -118,6 +118,10 @@ class PermissionManager:
         按 owner > blocker > op > user > normal 优先级返回最高权限:
         -1 - blocker / 0 - normal / 1 - user / 2 - op / 3 - owner
         """
+        # 终端(控制台)拥有最高权限(owner)
+        if queried == "Terminal":
+            return 3
+
         try:
             permission = await cls.get()
 

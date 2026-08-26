@@ -26,6 +26,17 @@ _BOT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bot")
 _BOT_SCRIPT = os.path.join(_BOT_DIR, "bot.js")
 
 
+def _find_npm() -> str:
+    """跨平台查找 npm 可执行文件路径"""
+    import shutil
+    # 优先查找 npm.cmd (Windows) 或 npm (Unix)
+    for name in ("npm.cmd", "npm"):
+        path = shutil.which(name)
+        if path:
+            return path
+    return "npm"  # 回退,让 subprocess 报明确错误
+
+
 def _bot_config() -> dict:
     """读取 botConfig 配置"""
     try:
@@ -83,8 +94,9 @@ class BotProcess:
         if not os.path.isdir(node_modules):
             shared.logger.info("[Bot] 首次运行,正在安装 npm 依赖...")
             try:
+                npm_path = _find_npm()
                 r = subprocess.run(
-                    ["npm", "install"],
+                    [npm_path, "install"],
                     cwd=_BOT_DIR,
                     capture_output=True,
                     timeout=60,

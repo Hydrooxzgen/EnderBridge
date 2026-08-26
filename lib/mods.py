@@ -14,6 +14,34 @@ from lib.permission import PermissionManager
 from lib.sapi import SAPIMessageHandler
 
 
+class _TerminalClient:
+    """终端虚拟客户端:拦截 tell()/tellAll() 输出到终端"""
+
+    def __init__(self):
+        self.id = "terminal"
+        self.clientMod = None
+        self.sapi = None
+        self.utils = None
+
+    def tell(self, msg: str, target: str = "@a", isPrefix: bool = True) -> None:
+        """将消息输出到终端(代替发送到游戏客户端)"""
+        from main import console_out
+        console_out(msg)
+
+    def tellAll(self, msg: str) -> None:
+        """将消息输出到终端"""
+        self.tell(msg, "@a")
+
+    def runCommand(self, command: str) -> None:
+        """终端不支持运行游戏命令"""
+        from main import console_out
+        console_out("§c终端不支持运行游戏命令")
+
+    def getPosition(self, target: str = "@s"):
+        """终端无玩家位置"""
+        return None
+
+
 def _mods_config() -> dict:
     try:
         from config import mods
@@ -461,6 +489,91 @@ class ClientModManager:
             failed.extend(f"{client_id}:{name}" for name in result["failed"])
 
         return {"success": success, "failed": failed}
+
+    @staticmethod
+    async def execute_terminal(msg: str) -> bool:
+        """终端命令转发给客户端 Mod 执行
+
+        用终端虚拟客户端替代真实游戏客户端,将输出重定向到终端。
+        返回 True 表示已处理。
+
+        Args:
+            msg: 完整命令文本(如 $bot start)
+
+        Returns:
+            True = 有 Mod 处理了该命令;False = 无 Mod 匹配
+        """
+        from lib.current import Current
+
+        terminal_client = _TerminalClient()
+
+        # 策略1: 从已有客户端的 Mod 实例中匹配命令
+        for client, manager in Current.client_mods.items():
+            if not manager or not hasattr(manager, "commands"):
+                continue
+
+            all_cmds = []
+            for cmd_list in manager.commands.values():
+                if isinstance(cmd_list, list):
+                    all_cmds.extend(cmd_list)
+
+            if not all_cmds:
+                continue
+
+            # 临时替换所有 client 引用
+            original_manager_client = manager.client
+            manager.client = terminal_client
+            original_mod_clients = {}
+            for mod_name, mod_instance in manager.mod_instances.items():
+                original_mod_clients[mod_name] = getattr(mod_instance, "client", None)
+                mod_instance.client = terminal_client
+
+            try:
+                for cmd in all_cmds:
+                    result = cmd.execute("Terminal", msg)
+                    if result:
+                        if not result.get("status") and result.get("message"):
+                            from main import console_out
+                            console_out(f"§cCommand | §fError > §i{result['message']}")
+                        return True
+            except Exception as e:
+                shared.logger.error(f"Client Mod 终端执行错误: {e}")
+                shared.logger.debug(str(e))
+            finally:
+                manager.client = original_manager_client
+                for mod_name, mod_instance in manager.mod_instances.items():
+                    if mod_name in original_mod_clients:
+                        mod_instance.client = original_mod_clients[mod_name]
+
+        # 策略2: 无客户端连接或未匹配时,临时实例化已加载的 Mod 类
+        for name, mod_class in ClientModManager.loaded_mod.items():
+            try:
+                instance = mod_class(terminal_client)
+                instance.modName = name
+                instance.logger = ModLogger(f"Client:{name}")
+                instance.storage = StorageManager.get_store(f"terminal_{name}")
+
+                command_method = getattr(instance, "onCommand", None) or getattr(instance, "commands", None)
+                if not callable(command_method):
+                    continue
+
+                cmd_map = command_method()
+                all_cmds = []
+                for cmd_list in cmd_map.values():
+                    if isinstance(cmd_list, list):
+                        all_cmds.extend(cmd_list)
+
+                for cmd in all_cmds:
+                    result = cmd.execute("Terminal", msg)
+                    if result:
+                        if not result.get("status") and result.get("message"):
+                            from main import console_out
+                            console_out(f"§cCommand | §fError > §i{result['message']}")
+                        return True
+            except Exception as e:
+                shared.logger.warning(f"终端命令 {name} 异常: {e}")
+
+        return False
 
     def _create_mod_sapi(self, mod_name: str) -> _ModSAPIHandle:
         """创建 Mod 的 SAPI 处理句柄(所有 Mod 共享同一个轮询器)"""
