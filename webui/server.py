@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """Web 管理后端服务
 
 每次启动时随主程序启动,监听配置的 Web 端口,提供:

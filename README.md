@@ -19,6 +19,7 @@ EnderBridge is a Python-based mod loader for Minecraft Bedrock Edition. It runs 
 - 🎵 **音乐播放 / Music playback**：解析 MIDI/JSON 音乐，映射为游戏内 `playsound` 音效
 - 🖼️ **图片像素画 / Image to pixel art**：按 HSV/LAB 颜色匹配调色板，自动生成 MC 像素画
 - 🏗️ **Ezmatic 导入 / Ezmatic import**：解析 Java 版 `.litematic` 建筑并转换为基岩版结构
+- 🤖 **假人 Bot / Fake player bot**：通过 `bedrock-protocol` 连接 MCBE 服务器，生成出现在 Tab 列表和游戏世界中的假人玩家（离线模式无需 Xbox Live）
 - 🛡️ **权限系统 / Permission system**：owner / op / user / blocker 四级权限，命令分级执行
 - 🚦 **命令限流 / Command rate limit**：按玩家分桶的窗口限流，防刷屏
 - 🔧 **图形化配置向导 / Web setup wizard**：首次运行自动打开浏览器向导（`http://127.0.0.1:18888`），无需手改配置
@@ -33,6 +34,7 @@ EnderBridge is a Python-based mod loader for Minecraft Bedrock Edition. It runs 
 | 项目 / Item | 要求 / Requirement |
 |------|------|
 | Python | 3.8+（推荐 3.10+ / recommended 3.10+） |
+| Node.js | 假人 Bot 功能需要 / Required for fake player bot feature |
 | 游戏 / Game | Minecraft 基岩版（支持 WebSocket 连接，如 BDS 服务器 / 基岩版客户端）<br/>Minecraft Bedrock with WebSocket support (e.g. BDS server / Bedrock client) |
 | QQ（可选 / optional） | NapCat 等 OneBot v11 实现 / NapCat or other OneBot v11 implementations |
 
@@ -132,6 +134,7 @@ All built-in mods share a **single-entry command** format: `<prefix><entry> <met
 | 终端 / 聊天 / Terminal | `chat` | `!chat list`（终端与游戏内均可用） |
 | 刷屏 / Spam | `spam` | `!spam stop`（终端与游戏内均可用） |
 | Ezmatic 建筑 / Ezmatic | `ezmatic` | `!ezmatic preview <文件>` |
+| 假人 / Bot | `bot` | `!bot spawn Steve`（需要 Node.js + 启用 Bot Mod） |
 
 全局 `help` 命令（`!help [页码]`）分页显示全部命令；每个入口输入 `help` 可查看该模组的全部方法：`!tool help`、`!music help`……
 
@@ -219,7 +222,8 @@ EnderBridge/
     ├── tool.py              # 工具 / 命令帮助 / 管理 / Tools & command help
     ├── image/               # 图片转像素画 / Image to pixel art
     ├── ezmatic/             # Ezmatic 建筑导入 / Ezmatic build import
-    └── qq/                  # QQ 群互通（NapCat）/ QQ bridge (NapCat)
+│   ├── qq/                  # QQ 群互通（NapCat）/ QQ bridge (NapCat)
+│   └── bot/                 # 假人 Bot（Node.js bedrock-protocol）/ Fake player bot
 ```
 
 ---
@@ -229,6 +233,7 @@ EnderBridge/
 | 模组 / Mod | 加载位置 / Load | 功能 / Description |
 |------|----------|------|
 | `AI` | 客户端 + 服务端 / Client + Server | 与 AI 模型对话（单次 / 上下文模式）/ Chat with AI (single / context mode) |
+| `Bot` | 客户端 / Client | 假人管理：生成 / 移除 / 传送 / 聊天（通过 Node.js bedrock-protocol 连接 MCBE 服务器）/ Fake player: spawn / remove / move / chat |
 | `PermissionCommands` | 客户端 / Client | 游戏内权限查询与增删（`!perm query` / `!perm add` / `!perm remove`）/ In-game permission management |
 | `Tool` | 客户端 / Client | 全局命令帮助（`!help` 分页）、搜索、终端执行、SAPI 控制 / Command help, search, terminal exec |
 | `Position` | 客户端 / Client | A/B 点标记、距离计算、区域填充、结构复制 / 粘贴 / 剪切 / Coordinates & structure ops |
@@ -280,6 +285,7 @@ graph LR
     B --> G[NapCat OneBot<br/>QQ 群互通]
     B --> H[OpenAI 兼容接口<br/>AI 对话]
     B --> I[外部 WebSocket<br/>MoreWS 转发]
+    B --> J[Node.js Bot<br/>bedrock-protocol]
 ```
 
 - **客户端 Mod / Client Mods**：每个连接独立实例化，处理游戏内命令（`onCommand`）与消息（`onPocket`）/ Instantiated per connection, handle in-game commands and messages
@@ -309,6 +315,14 @@ Run `python setup.py`, or just run `python main.py` to auto-install.
 **Q：如何在 Android / Linux 上运行？/ How to run on Android / Linux?**
 项目已内置平台检测与路径适配（`resolvePath`），统一使用相对路径即可跨平台运行。
 Platform detection and path adaptation (`resolvePath`) are built in; use relative paths to run anywhere.
+
+**Q：假人 Bot 怎么用？/ How to use the fake player bot?**
+1. 在配置向导或 WebUI 中启用 Bot Mod 并配置服务器地址（默认 `127.0.0.1:19132`）
+2. 确保系统已安装 Node.js 16+
+3. 在游戏内执行 `!bot start` 启动 Bot 进程
+4. 执行 `!bot spawn <玩家名>` 生成假人
+5. 假人会出现在 Tab 列表和游戏世界中，可通过 `!bot move` / `!bot chat` / `!bot remove` 管理
+See wiki section "8. 内置模组详解 → Bot 假人详解" for details.
 
 ---
 
