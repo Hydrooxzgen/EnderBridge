@@ -241,6 +241,7 @@ RULES = [
     {"key": "GitHub Token", "apply": make_rule('githubToken = ""', lambda f: f'githubToken = {_json(f["githubToken"])}')},
     # botConfig 块
     {"key": "Bot 配置", "apply": make_block_rule("botConfig", lambda f: _py_dump({
+        "enabled": bool(f.get("botEnabled", True)),
         "host": f.get("botHost", "127.0.0.1"),
         "port": int(f.get("botPort") or 19132),
         "username": f.get("botUsername", "FakeBot"),
@@ -826,7 +827,14 @@ button[type=submit]:disabled { opacity: 0.7; cursor: wait; transform: none; }
 
     <section class="card" id="botFields">
       <h2><span class="icon">🤖</span>假人 Bot 设置</h2>
-      <p class="hint">假人以独立玩家身份连接 MCBE 服务器，出现在 Tab 列表和游戏世界中。需要 Node.js 运行时。</p>
+      <p class="hint">假人以独立玩家身份连接 MCBE 服务器，出现在 Tab 列表和游戏世界中。需要 Node.js 运行时。修改启用开关需要重启生效。</p>
+      <div class="switch-row">
+        <label class="switch">
+          <input id="botEnabled" name="botEnabled" type="checkbox" checked>
+          <span class="track"></span>
+          <span class="switch-label">启用假人 Bot</span>
+        </label>
+      </div>
       <div class="grid">
         <div><label for="botHost">服务器地址</label><input id="botHost" name="botHost" type="text" placeholder="127.0.0.1"></div>
         <div><label for="botPort">服务器端口</label><input id="botPort" name="botPort" type="number" min="1" max="65535" placeholder="19132"></div>

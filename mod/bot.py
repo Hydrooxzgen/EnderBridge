@@ -73,6 +73,8 @@ class BotProcess:
         cfg = _bot_config()
         if not cfg:
             return {"ok": False, "message": "未配置 botConfig,请在 config.py 中添加"}
+        if cfg.get("enabled") is False:
+            return {"ok": False, "message": "Bot 已在配置中禁用,请在 config.py 中设置 botConfig.enabled = True 并重启"}
 
         host = cfg.get("host", "127.0.0.1")
         port = cfg.get("port", 19132)

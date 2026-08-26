@@ -177,7 +177,7 @@ function handleSpawn(cmd) {
   }
 
   log(`已生成假人 "${name}" 于 (${x}, ${y}, ${z})`);
-  send({ type: 'ok', action: 'spawn', name });
+  send({ ok: true, action: 'spawn', name });
 }
 
 function handleRemove(cmd) {
@@ -202,7 +202,7 @@ function handleRemove(cmd) {
 
   delete players[name];
   log(`已移除假人 "${name}"`);
-  send({ type: 'ok', action: 'remove', name });
+  send({ ok: true, action: 'remove', name });
 }
 
 function handleMove(cmd) {
@@ -229,7 +229,7 @@ function handleMove(cmd) {
   }
 
   log(`假人 "${name}" 已移动至 (${x}, ${y}, ${z})`);
-  send({ type: 'ok', action: 'move', name });
+  send({ ok: true, action: 'move', name });
 }
 
 function handleChat(cmd) {
@@ -239,20 +239,39 @@ function handleChat(cmd) {
     return;
   }
 
-  // 使用假人名称发送聊天消息
+  const proto = client.options?.protocolVersion || 0;
+  const srcName = name || 'Bot';
+
   try {
-    client.queue('text', {
-      type: 'chat',
-      message,
-      needs_translation: false,
-      source_name: name || 'Bot',
-      xuid: '',
-    });
+    if (proto >= 898) {
+      // 1.21.130+: needs_translation 在前,新增 category,filtered_message 变为 has_filtered_message + switch
+      client.queue('text', {
+        needs_translation: false,
+        category: 'authored',
+        type: 'chat',
+        source_name: srcName,
+        message,
+        xuid: '',
+        platform_chat_id: '',
+        has_filtered_message: false,
+      });
+    } else {
+      // 1.21.120 及更早版本
+      client.queue('text', {
+        type: 'chat',
+        needs_translation: false,
+        source_name: srcName,
+        message,
+        xuid: '',
+        platform_chat_id: '',
+        filtered_message: '',
+      });
+    }
   } catch (e) {
     log('text 发送失败:', e.message);
   }
 
-  send({ type: 'ok', action: 'chat' });
+  send({ ok: true, action: 'chat' });
 }
 
 function handleList() {
@@ -262,7 +281,7 @@ function handleList() {
     y: data.y,
     z: data.z,
   }));
-  send({ type: 'ok', action: 'list', players: list });
+  send({ ok: true, action: 'list', players: list });
 }
 
 function handleGameCommand(cmd) {
@@ -271,14 +290,37 @@ function handleGameCommand(cmd) {
     send({ type: 'error', message: '缺少 command 参数' });
     return;
   }
+
+  const proto = client.options?.protocolVersion || 0;
+
   try {
-    client.queue('command_request', {
-      command: command,
-      origin: { type: 0, uuid: generateUUID() },
-      interval: false,
-      version: 55,
-    });
-    send({ type: 'ok', action: 'command', command });
+    if (proto >= 898) {
+      // 1.21.130+: origin.type 改为 string,version 改为 string,player_entity_id 必填
+      client.queue('command_request', {
+        command,
+        origin: {
+          type: 'player',
+          uuid: generateUUID(),
+          request_id: '',
+          player_entity_id: BigInt(0),
+        },
+        internal: false,
+        version: '',
+      });
+    } else {
+      // 1.21.120 及更早版本: origin.type 为 varint,version 为 varint
+      client.queue('command_request', {
+        command,
+        origin: {
+          type: 0,
+          uuid: generateUUID(),
+          request_id: '',
+        },
+        internal: false,
+        version: proto || 554,
+      });
+    }
+    send({ ok: true, action: 'command', command });
   } catch (e) {
     log('command_request 发送失败:', e.message);
     send({ type: 'error', message: `命令发送失败: ${e.message}` });

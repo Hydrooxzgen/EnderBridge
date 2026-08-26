@@ -70,6 +70,7 @@ sapiConfig = {
 # offline: 离线模式(不需要 Xbox Live 账号)
 # version: MCBE 协议版本(留空自动检测)
 botConfig = {
+    "enabled": True,
     "host": "127.0.0.1",
     "port": 19132,
     "username": "FakeBot",

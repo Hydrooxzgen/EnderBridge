@@ -313,6 +313,7 @@ def load_config() -> dict:
             "smsg": sapi.get("smsg", "smsg"),
         },
         "bot": {
+            "enabled": ns.get("botConfig", {}).get("enabled", True),
             "host": ns.get("botConfig", {}).get("host", "127.0.0.1"),
             "port": ns.get("botConfig", {}).get("port", 19132),
             "username": ns.get("botConfig", {}).get("username", "FakeBot"),
@@ -404,6 +405,7 @@ def save_config(new: dict) -> None:
     # 假人 Bot 配置
     bot_form = new.get("bot") or {}
     apply_block_or_append("botConfig", {
+        "enabled": bool(bot_form.get("enabled", True)),
         "host": str(bot_form.get("host") or "127.0.0.1").strip(),
         "port": int(bot_form.get("port") or 19132),
         "username": str(bot_form.get("username") or "FakeBot").strip(),
