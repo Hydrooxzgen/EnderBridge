@@ -6,6 +6,6 @@
   "description": "EnderBridge 假人 Bot (Bedrock Protocol)",
   "main": "bot.js",
   "dependencies": {
-    "bedrock-protocol": "^3.72.0"
+    "bedrock-protocol": "^3.58.3"
   }
 }
