@@ -7,5 +7,8 @@
   "main": "bot.js",
   "dependencies": {
     "bedrock-protocol": "^3.58.3"
+  },
+  "overrides": {
+    "axios": "^1.8.2"
   }
 }
