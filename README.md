@@ -1,3 +1,20 @@
+<p align="center">
+  <img src="https://img.shields.io/badge/⛏️-EnderBridge-6366f1?style=for-the-badge" alt="EnderBridge">
+</p>
+
+<p align="center">
+  <b>如果这个项目对你有帮助，请点一个 ⭐ Star 支持一下吧！</b><br/>
+  <b>If you find this project useful, please give it a ⭐ Star — it means a lot!</b>
+</p>
+
+<p align="center">
+  <a href="https://github.com/Hydrooxzgen/EnderBridge/stargazers">
+    <img src="https://img.shields.io/github/stars/Hydrooxzgen/EnderBridge?style=social" alt="Star EnderBridge">
+  </a>
+</p>
+
+---
+
 # ⛏️ EnderBridge
 
 > Minecraft 基岩版（Bedrock Edition）服务器端模组加载框架 —— 通过 WebSocket 桥接游戏客户端，加载并运行你的自定义模组。
