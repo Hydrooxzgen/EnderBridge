@@ -14,8 +14,8 @@ from uuid import uuid4
 ROOT = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PY = os.path.join(ROOT, "config.py")
 CONFIG_EXAMPLE = os.path.join(ROOT, "config.example.py")
-VERSION = "b0.3.1"
-DESCRIPTION = None # 仅当不为None时从Github拉取更新日志，反之则直接显示该变量内容。
+VERSION = "b0.3.2"
+DESCRIPTION = "修复了main.py中的warning，不发布github release" # 仅当不为None时从Github拉取更新日志，反之则直接显示该变量内容。
 GITHUB_REPO = "Hydrooxzgen/EnderBridge"  # You can edit this to your own repository if you fork it :)
 WANT_RESET = "--reset-all" in sys.argv
 WANT_EXPORT = "export" in sys.argv
@@ -134,9 +134,11 @@ if WANT_UPDATE:
         try:
             import importlib.util
             spec = importlib.util.spec_from_file_location("_cfg_token", CONFIG_PY)
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            return getattr(mod, "githubToken", "") or ""
+            if spec and spec.loader:
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+                return getattr(mod, "githubToken", "") or ""
+            return ""
         except Exception:
             return ""
 
@@ -246,7 +248,8 @@ if WANT_UPDATE:
                 target = os.path.join(tmp, *rel.split("/"))
                 os.makedirs(os.path.dirname(target), exist_ok=True)
                 with open(target, "wb") as out:
-                    shutil.copyfileobj(fobj, out)
+                    if fobj is not None:
+                        shutil.copyfileobj(fobj, out)
 
             # 3. 校验解压结果
             if not os.path.exists(os.path.join(tmp, "main.py")):
@@ -319,6 +322,7 @@ if WANT_UPDATE:
         print(f"  API: {api_url}")
 
         # 1. 查询 release 信息
+        data: dict = {}
         try:
             req = urllib.request.Request(api_url, headers=_github_headers())
             with urllib.request.urlopen(req, timeout=30) as resp:
@@ -336,6 +340,9 @@ if WANT_UPDATE:
         except Exception as e:
             _update_err(f"网络请求失败: {e}")
 
+        if not isinstance(data, dict):
+            _update_err("GitHub API 返回格式异常")
+
         release_tag = data.get("tag_name", "unknown")
         release_name = data.get("name") or release_tag
         print(f"  版本: {release_name} ({release_tag})")
@@ -351,6 +358,7 @@ if WANT_UPDATE:
 
         if not asset:
             _update_err(f"版本 {release_tag} 中未找到 zip/tar.gz 压缩包资源")
+        assert asset is not None
 
         download_url = asset["browser_download_url"]
         asset_name = asset["name"]
@@ -414,6 +422,7 @@ if WANT_UPDATE:
         print(f"  正在查询 GitHub Commits ...")
         print(f"  API: {api_url}")
 
+        commit_data = None
         try:
             req = urllib.request.Request(api_url, headers=_github_headers())
             with urllib.request.urlopen(req, timeout=30) as resp:
@@ -424,6 +433,10 @@ if WANT_UPDATE:
             _update_err(f"查询 GitHub Commits 失败: {e}")
         except Exception as e:
             _update_err(f"网络请求失败: {e}")
+
+        if not isinstance(commit_data, dict):
+            _update_err("GitHub API 返回格式异常")
+        assert isinstance(commit_data, dict)
 
         sha = commit_data["sha"]
         short_sha = sha[:7]
@@ -501,12 +514,13 @@ if WANT_UPDATE:
         if rest and rest[0].lower() == "commit":
             # commit 模式:py main.py update --online commit [HEAD|commitID]
             ref = rest[1] if len(rest) > 1 else None
-            dl_path, new_ver = _download_commit(ref)
+            dl_path, new_ver = _download_commit(ref)  # type: ignore[misc]
             try:
                 _do_update(dl_path, new_version=new_ver)
             finally:
                 try:
-                    os.unlink(dl_path)
+                    if dl_path:
+                        os.unlink(dl_path)
                 except Exception:
                     pass
         else:
@@ -523,7 +537,8 @@ if WANT_UPDATE:
                 _do_update(dl_path, new_version=tag)
             finally:
                 try:
-                    os.unlink(dl_path)
+                    if dl_path:
+                        os.unlink(dl_path)
                 except Exception:
                     pass
     elif len(sys.argv) > sys.argv.index("update") + 1:
@@ -536,7 +551,8 @@ if WANT_UPDATE:
             _do_update(dl_path)
         finally:
             try:
-                os.unlink(dl_path)
+                if dl_path:
+                    os.unlink(dl_path)
             except Exception:
                 pass
 
@@ -672,7 +688,9 @@ if os.path.isfile(UPDATE_MARKER) and not WANT_UPDATE:
         except Exception as e:
             print(f"  更新失败: {e}")
         finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+            shutil.rmtree(tmp, ignore_errors=True)  # type: ignore[possibly-undefined]
+else:
+    tmp = ""
 
 # ===== 一键导出:python main.py export [输出路径] =====
 # 将项目代码打包为 zip(排除用户数据/设置,与 update 命令的保留规则对称),
@@ -785,13 +803,15 @@ try:
     from config import basePath, resolvePath
     _resource_dirs = [resolvePath(d) for d in list(basePath.values())]
 except Exception:
+    resolvePath = None
     _resource_dirs = [
         "./resources/midi",
         "./resources/mcfunc",
         "./resources/ezmatic",
         "./resources/pictures",
     ]
-_resource_dirs.append(resolvePath("./structures"))  # ezmatic 导出目录
+if resolvePath is not None:
+    _resource_dirs.append(resolvePath("./structures"))  # ezmatic 导出目录
 for _d in _resource_dirs:
     try:
         os.makedirs(_d, exist_ok=True)
@@ -854,7 +874,7 @@ async def connection_handler(ws):
 
     # 分配唯一 ID,用于客户端 Mod 存储和事件总线隔离
     conn = ClientConnection(ws)
-    conn.id = str(uuid4())
+    conn.id = str(uuid4())  # type: ignore[attr-defined]
     connections.add(conn)
 
     client_mod = None
@@ -899,17 +919,17 @@ async def connection_handler(ws):
         return
 
     # 为当前客户端绑定工具方法(runCommand, subscribe, tell 等)
-    conn.utils = Utils(conn)
+    conn.utils = Utils(conn)  # type: ignore[attr-defined]
 
     # 记录第一个连接的客户端为主客户端
     is_main_client = Current.client is None
     if is_main_client:
-        Current.client = conn
+        Current.client = conn  # type: ignore[assignment]
         shared.logger.info("主客户端已连接")
 
     # 实例化客户端 Mod,注入当前连接
     client_mod = ClientModManager(conn)
-    conn.clientMod = client_mod
+    conn.clientMod = client_mod  # type: ignore[attr-defined]
     Current.client_mods[conn] = client_mod
 
     # 通知服务端 Mod 客户端已连接
@@ -1163,8 +1183,9 @@ async def _dispatch_console_command(text):
         return
 
     # Bot Shell 模式:所有输入转发给 bot
-    if getattr(shared, "bot_shell_mode", False) and getattr(shared, "bot_shell_queue", None):
-        shared.bot_shell_queue.put_nowait(text)
+    bot_queue = getattr(shared, "bot_shell_queue", None)
+    if getattr(shared, "bot_shell_mode", False) and bot_queue is not None:
+        bot_queue.put_nowait(text)
         return
 
     if text in ("exit", "quit"):
@@ -1172,14 +1193,15 @@ async def _dispatch_console_command(text):
         loop = _main_loop
         fut = _main_future
         if loop is not None and not loop.is_closed() and fut is not None and not fut.done():
-            loop.call_soon_threadsafe(fut.cancel)
+            loop.call_soon_threadsafe(fut.cancel)  # type: ignore[union-attr]
         return
 
     # 以 / 开头:转发为游戏命令
     if text.startswith("/"):
-        if Current.client:
+        client = Current.client
+        if client:
             try:
-                data = await Current.client.runCommand(text)
+                data = await client.runCommand(text)  # type: ignore[misc]
                 body = data.get("body", {})
                 console_out(f"CMD {body.get('statusCode')} -> {body.get('statusMessage') or 'Null'}")
             except Exception as e:
@@ -1210,8 +1232,9 @@ async def _dispatch_console_command(text):
                 console_out("§c无客户端连接")
         elif cmd.startswith("cmd "):
             c = cmd[4:]
-            if Current.client:
-                await Current.client.runCommand(c)
+            client = Current.client
+            if client:
+                await client.runCommand(c)  # type: ignore[misc]
                 console_out(f"§a已执行: §f{c}")
             else:
                 console_out("§c无客户端连接")
@@ -1285,18 +1308,18 @@ async def main():
                 break
             if not line:
                 break
-            _main_loop.call_soon_threadsafe(on_line, line.rstrip("\n"))
+            _main_loop.call_soon_threadsafe(on_line, line.rstrip("\n"))  # type: ignore[union-attr]
 
     threading.Thread(target=stdin_loop, daemon=True).start()
 
     # Ctrl+C 处理:Windows 下 await Future() 可能无法可靠捕获 KeyboardInterrupt
     # 用信号处理器取消阻塞的 Future,让 finally 块执行 destroy()
     import signal
-    def _sigint(sig, frame):
+    def _sigint(sig, frame):  # type: ignore[no-untyped-def]
         loop = _main_loop
         fut = _main_future
         if loop is not None and not loop.is_closed() and fut is not None and not fut.done():
-            loop.call_soon_threadsafe(fut.cancel)
+            loop.call_soon_threadsafe(fut.cancel)  # type: ignore[union-attr]
     signal.signal(signal.SIGINT, _sigint)
 
     _main_future = asyncio.Future()
@@ -1349,8 +1372,9 @@ async def destroy():
 
     shared.logger.info("正在关闭服务器...")
     try:
-        server.close()
-        await asyncio.wait_for(server.wait_closed(), timeout=5)
+        if server is not None:
+            server.close()
+            await asyncio.wait_for(server.wait_closed(), timeout=5)
         shared.logger.info("服务器已关闭")
     except Exception:
         shared.logger.warning("服务器关闭异常，正在强制退出")
