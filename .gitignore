@@ -18,3 +18,5 @@ structures/*
 wiki/
 importtime.log
 mod/bot/node_modules/
+mod/bot/.minecraft/
+mod/bot/TheCandyBot/
