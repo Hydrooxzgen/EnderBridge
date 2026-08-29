@@ -883,6 +883,8 @@ class WebUIHandler(BaseHTTPRequestHandler):
                 **bot_cfg,
                 "activeXboxAccount": username,
                 "username": username,
+                # 切换到活跃账号时强制在线模式 — 有活跃 Xbox 账号时必须真在线连接
+                "offline": False,
             })
             import shutil
             shutil.copy2(CONFIG_PY, CONFIG_PY_BAK)
