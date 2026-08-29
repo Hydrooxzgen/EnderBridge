@@ -27,6 +27,54 @@ _BOT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bot")
 _BOT_SCRIPT = os.path.join(_BOT_DIR, "bot.js")
 
 
+def _needs_npm_install():
+    """检查 Bot npm 依赖是否需要(重新)安装。
+
+    返回 (是否需要, 原因)。旧版本升级后 node_modules 可能仍是旧版
+    (axios 老版本 / prismarine-auth 补丁缺失),仅检查目录存在无法发现,
+    这里通过补丁标记与 package.json 变更时间双重判断。
+    """
+    node_modules = os.path.join(_BOT_DIR, "node_modules")
+    if not os.path.isdir(node_modules):
+        return True, "node_modules 不存在"
+
+    # 1. 依赖补丁是否已应用(缺失 = 依赖是旧版安装的,升级后必现 400/401)
+    missing = []
+    auth_flow = os.path.join(
+        node_modules, "prismarine-auth", "src", "MicrosoftAuthFlow.js"
+    )
+    if os.path.isfile(auth_flow):
+        try:
+            with open(auth_flow, "r", encoding="utf-8", errors="replace") as f:
+                if "PATCH_TITLE_TOKEN_FALLBACK" not in f.read():
+                    missing.append("prismarine-auth")
+        except OSError:
+            pass
+    else:
+        missing.append("prismarine-auth")
+    bedrock_opt = os.path.join(node_modules, "bedrock-protocol", "src", "options.js")
+    if os.path.isfile(bedrock_opt):
+        try:
+            with open(bedrock_opt, "r", encoding="utf-8", errors="replace") as f:
+                if "EXTRA_VERSIONS" not in f.read():
+                    missing.append("bedrock-protocol")
+        except OSError:
+            pass
+    else:
+        missing.append("bedrock-protocol")
+    if missing:
+        return True, f"依赖补丁未应用: {', '.join(missing)}"
+
+    # 2. package.json 比安装标记新 = 依赖声明有变更
+    pkg = os.path.join(_BOT_DIR, "package.json")
+    marker = os.path.join(node_modules, ".package-lock.json")
+    if os.path.isfile(pkg) and os.path.isfile(marker):
+        if os.path.getmtime(pkg) > os.path.getmtime(marker):
+            return True, "package.json 已更新"
+
+    return False, ""
+
+
 def _find_npm() -> str:
     """跨平台查找 npm 可执行文件路径"""
     import shutil
@@ -106,22 +154,22 @@ class BotProcess:
         except Exception as e:
             return {"ok": False, "message": f"Node.js 检测失败: {e}"}
 
-        # 检查依赖是否安装
-        node_modules = os.path.join(_BOT_DIR, "node_modules")
-        if not os.path.isdir(node_modules):
-            shared.logger.info("[Bot] 首次运行,正在安装 npm 依赖...")
+        # 检查依赖是否安装/是否需要重装(旧版升级后自愈)
+        need_install, install_reason = _needs_npm_install()
+        if need_install:
+            shared.logger.info(f"[Bot] npm 依赖需要安装({install_reason}),正在安装...")
             try:
                 npm_path = _find_npm()
                 r = subprocess.run(
                     [npm_path, "install"],
                     cwd=_BOT_DIR,
                     capture_output=True,
-                    timeout=60,
+                    timeout=300,
                 )
                 if r.returncode != 0:
                     err = r.stderr.decode("utf-8", errors="replace")[:200]
                     return {"ok": False, "message": f"npm install 失败: {err}"}
-                shared.logger.info("[Bot] npm 依赖安装完成")
+                shared.logger.info("[Bot] npm 依赖安装完成(补丁已自动应用)")
             except Exception as e:
                 return {"ok": False, "message": f"npm install 异常: {e}"}
 
