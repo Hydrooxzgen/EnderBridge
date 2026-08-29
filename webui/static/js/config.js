@@ -150,7 +150,8 @@ function loadConfig() {
     $("cfg-bot-port").value = bot.port || 19132;
     $("cfg-bot-username").value = bot.username || "FakeBot";
     $("cfg-bot-version").value = bot.version || "";
-    $("cfg-bot-offline").checked = bot.offline !== false;
+    // 反转: 勾选=正版(online), 不勾选=离线(offline)
+    $("cfg-bot-offline").checked = bot.offline === false;
     $("cfg-bot-authtitle").value = bot.authTitle || "";
     $("cfg-bot-profilesfolder").value = bot.profilesFolder || "";
     $("cfg-bot-realmid").value = bot.realmId || "";
@@ -199,11 +200,12 @@ function toggleBotMode() {
   $("cfgBotServerFields").style.display = isServer ? "" : "none";
   $("cfgBotRealmFields").style.display = isServer ? "none" : "";
   // Xbox Live: server 模式下离线时隐藏, Realm 模式始终显示
+  // 反转: 勾选=正版(online), 不勾选=离线(offline)
   var isOnline = false;
   if (isServer) {
-    var offline = $("cfg-bot-offline").checked;
-    $("cfgBotXboxLiveFields").style.display = offline ? "none" : "";
-    isOnline = !offline;
+    var hasLicense = $("cfg-bot-offline").checked;
+    $("cfgBotXboxLiveFields").style.display = hasLicense ? "" : "none";
+    isOnline = hasLicense;
   } else {
     $("cfgBotXboxLiveFields").style.display = "";
     isOnline = true;
@@ -434,7 +436,8 @@ function saveConfig() {
     port: parseInt($("cfg-bot-port").value, 10) || 19132,
     username: $("cfg-bot-username").value.trim() || "FakeBot",
     version: $("cfg-bot-version").value.trim() || null,
-    offline: $("cfg-bot-offline").checked,
+    // 反转: 勾选=正版(online,offline=false), 不勾选=离线(offline=true)
+    offline: !$("cfg-bot-offline").checked,
     authTitle: $("cfg-bot-authtitle").value.trim() || null,
     profilesFolder: $("cfg-bot-profilesfolder").value.trim() || null,
     realmId: $("cfg-bot-realmid").value.trim() || null,

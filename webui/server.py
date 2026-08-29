@@ -414,8 +414,6 @@ def save_config(new: dict) -> None:
     # 保留已有的 xboxAccounts 和 activeXboxAccount(这些由登录 API 管理,不通过表单修改)
     ns_cur = _load_config_module()
     cur_bot = ns_cur.get("botConfig") or {}
-    # 有活跃 Xbox 账号时强制 online 模式并以该账号身份连接,
-    # 避免保存配置后 bot 变回离线或使用错误 ID
     active_xbox = cur_bot.get("activeXboxAccount") or None
     apply_block_or_append("botConfig", {
         "enabled": bool(bot_form.get("enabled", True)),
@@ -423,7 +421,8 @@ def save_config(new: dict) -> None:
         "host": str(bot_form.get("host") or "127.0.0.1").strip(),
         "port": int(bot_form.get("port") or 19132),
         "username": active_xbox or str(bot_form.get("username") or "FakeBot").strip(),
-        "offline": False if active_xbox else bool(bot_form.get("offline", True)),
+        # offline 完全由用户开关控制,不再被 activeXboxAccount 强制覆盖
+        "offline": bool(bot_form.get("offline", True)),
         "version": bot_form.get("version") or None,
         "authTitle": bot_form.get("authTitle") or None,
         "profilesFolder": bot_form.get("profilesFolder") or None,
@@ -883,8 +882,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
                 **bot_cfg,
                 "activeXboxAccount": username,
                 "username": username,
-                # 切换到活跃账号时强制在线模式 — 有活跃 Xbox 账号时必须真在线连接
-                "offline": False,
+                # offline 完全由用户开关控制,切换账号不再强制覆盖
             })
             import shutil
             shutil.copy2(CONFIG_PY, CONFIG_PY_BAK)

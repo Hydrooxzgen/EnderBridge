@@ -82,12 +82,10 @@ class BotProcess:
         port = cfg.get("port", 19132)
         username = cfg.get("username", "FakeBot")
         offline = cfg.get("offline", True)
-        # 有活跃 Xbox 账号时强制 online 模式并以其身份连接,
-        # 避免"账号已登录但 bot 仍用离线模式或错误 ID 连接"
+        # 有活跃 Xbox 账号时使用其用户名,但 offline 完全由配置控制
         active_xbox = cfg.get("activeXboxAccount")
         if active_xbox:
             username = active_xbox
-            offline = False
         version = cfg.get("version", None)
         auth_title = cfg.get("authTitle", None)
         profiles_folder = cfg.get("profilesFolder", None)
