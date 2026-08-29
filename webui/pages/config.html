@@ -190,28 +190,75 @@
       <div class="cfg-category" data-cfg-cat="integration">
         <div class="cfg-section" id="cfgCardBot">
           <h3>🤖 假人 Bot</h3>
-          <p class="hint" style="margin:0 0 8px 0">假人以独立玩家身份连接 MCBE 服务器，出现在 Tab 列表和游戏世界中。需要 Node.js 运行时。</p>
+          <p class="hint" style="margin:0 0 8px 0">假人以独立玩家身份连接 MCBE 服务器或加入 Realm，出现在 Tab 列表和游戏世界中。需要 Node.js 运行时。</p>
           <div class="cfg-grid">
-            <div class="cfg-field">
-              <label>服务器地址 (host)</label>
-              <input id="cfg-bot-host" class="cfg-input" placeholder="127.0.0.1" />
+            <div class="cfg-field cfg-grid-full">
+              <label>连接模式</label>
+              <div class="cfg-switch" style="gap:20px;">
+                <label class="switch"><input type="radio" name="cfg-bot-mode" id="cfg-bot-mode-server" value="server" checked><span class="track"></span></label>
+                <span class="switch-label">🖥️ 服务器直连（可选 offline）</span>
+              </div>
+              <div class="cfg-switch">
+                <label class="switch"><input type="radio" name="cfg-bot-mode" id="cfg-bot-mode-realm" value="realm"><span class="track"></span></label>
+                <span class="switch-label">☁️ Xbox Live Realm（强制在线）</span>
+              </div>
             </div>
-            <div class="cfg-field">
-              <label>服务器端口 (port)</label>
-              <input id="cfg-bot-port" class="cfg-input" type="number" placeholder="19132" />
+            <!-- Server 模式字段 -->
+            <div id="cfgBotServerFields" class="cfg-grid-full">
+              <div class="cfg-grid">
+                <div class="cfg-field">
+                  <label>服务器地址 (host)</label>
+                  <input id="cfg-bot-host" class="cfg-input" placeholder="127.0.0.1" />
+                </div>
+                <div class="cfg-field">
+                  <label>服务器端口 (port)</label>
+                  <input id="cfg-bot-port" class="cfg-input" type="number" placeholder="19132" />
+                </div>
+              </div>
+              <div class="cfg-grid">
+                <div class="cfg-field">
+                  <label>协议版本 (version)</label>
+                  <input id="cfg-bot-version" class="cfg-input" placeholder="留空自动检测" />
+                </div>
+                <div class="cfg-field">
+                  <div class="cfg-switch">
+                    <label class="switch"><input type="checkbox" id="cfg-bot-offline"><span class="track"></span></label>
+                    <span class="switch-label">离线模式 (offline) — 不需要 Xbox Live</span>
+                  </div>
+                </div>
+              </div>
             </div>
+            <!-- Realm 模式字段 -->
+            <div id="cfgBotRealmFields" class="cfg-grid-full" style="display:none;">
+              <div class="cfg-grid">
+                <div class="cfg-field">
+                  <label>Realm ID</label>
+                  <input id="cfg-bot-realmid" class="cfg-input" placeholder="Realm 数字 ID" />
+                  <span class="hint">可在 Realms 管理页面或 Minecraft 内获取</span>
+                </div>
+                <div class="cfg-field">
+                  <label>Realm 邀请链接</label>
+                  <input id="cfg-bot-realminvite" class="cfg-input" placeholder="例如 https://realms.gg/xxxxxxx" />
+                  <span class="hint">与 Realm ID 二选一即可</span>
+                </div>
+              </div>
+            </div>
+            <!-- 通用字段 -->
             <div class="cfg-field">
               <label>假人名称 (username)</label>
               <input id="cfg-bot-username" class="cfg-input" placeholder="FakeBot" />
             </div>
-            <div class="cfg-field">
-              <label>协议版本 (version)</label>
-              <input id="cfg-bot-version" class="cfg-input" placeholder="留空自动检测" />
-            </div>
-            <div class="cfg-field cfg-grid-full">
-              <div class="cfg-switch">
-                <label class="switch"><input type="checkbox" id="cfg-bot-offline"><span class="track"></span></label>
-                <span class="switch-label">离线模式 (offline) — 不需要 Xbox Live 账号</span>
+            <!-- Xbox Live 认证 -->
+            <div id="cfgBotXboxLiveFields" class="cfg-grid-full" style="display:none;">
+              <div class="cfg-field">
+                <label>Xbox Live 认证 Title (authTitle)</label>
+                <input id="cfg-bot-authtitle" class="cfg-input" placeholder="留空使用默认 Nintendo Switch" />
+                <span class="hint">可选：MinecraftAndroid、MinecraftIOS、MinecraftNintendoSwitch 等</span>
+              </div>
+              <div class="cfg-field">
+                <label>Token 缓存目录 (profilesFolder)</label>
+                <input id="cfg-bot-profilesfolder" class="cfg-input" placeholder="留空使用默认路径" />
+                <span class="hint">首次认证需在终端查看验证 URL 并完成登录</span>
               </div>
             </div>
           </div>

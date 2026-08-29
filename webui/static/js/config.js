@@ -151,6 +151,14 @@ function loadConfig() {
     $("cfg-bot-username").value = bot.username || "FakeBot";
     $("cfg-bot-version").value = bot.version || "";
     $("cfg-bot-offline").checked = bot.offline !== false;
+    $("cfg-bot-authtitle").value = bot.authTitle || "";
+    $("cfg-bot-profilesfolder").value = bot.profilesFolder || "";
+    $("cfg-bot-realmid").value = bot.realmId || "";
+    $("cfg-bot-realminvite").value = bot.realmInvite || "";
+    var mode = bot.mode || "server";
+    $("cfg-bot-mode-server").checked = mode === "server";
+    $("cfg-bot-mode-realm").checked = mode === "realm";
+    toggleBotMode();
 
     var spam = data.config.spam || {};
     $("cfg-spamattack").value = spam.attack || "";
@@ -176,6 +184,26 @@ function loadConfig() {
     toggleSub(subId, this.checked);
   });
 });
+
+function toggleBotMode() {
+  var mode = $("cfg-bot-mode-server").checked ? "server" : "realm";
+  var isServer = mode === "server";
+  $("cfgBotServerFields").style.display = isServer ? "" : "none";
+  $("cfgBotRealmFields").style.display = isServer ? "none" : "";
+  // Xbox Live: server 模式下离线时隐藏, Realm 模式始终显示
+  if (isServer) {
+    var offline = $("cfg-bot-offline").checked;
+    $("cfgBotXboxLiveFields").style.display = offline ? "none" : "";
+  } else {
+    $("cfgBotXboxLiveFields").style.display = "";
+  }
+}
+var botModeSvr = $("cfg-bot-mode-server");
+var botModeRealm = $("cfg-bot-mode-realm");
+if (botModeSvr) botModeSvr.addEventListener("change", toggleBotMode);
+if (botModeRealm) botModeRealm.addEventListener("change", toggleBotMode);
+var botOfflineEl = $("cfg-bot-offline");
+if (botOfflineEl) botOfflineEl.addEventListener("change", toggleBotMode);
 
 function saveConfig() {
   if (!cfgData) return;
@@ -232,11 +260,17 @@ function saveConfig() {
   basePath.image = $("cfg-path-image").value.trim();
 
   var bot = {
+    enabled: true,
+    mode: $("cfg-bot-mode-server").checked ? "server" : "realm",
     host: $("cfg-bot-host").value.trim() || "127.0.0.1",
     port: parseInt($("cfg-bot-port").value, 10) || 19132,
     username: $("cfg-bot-username").value.trim() || "FakeBot",
     version: $("cfg-bot-version").value.trim() || null,
     offline: $("cfg-bot-offline").checked,
+    authTitle: $("cfg-bot-authtitle").value.trim() || null,
+    profilesFolder: $("cfg-bot-profilesfolder").value.trim() || null,
+    realmId: $("cfg-bot-realmid").value.trim() || null,
+    realmInvite: $("cfg-bot-realminvite").value.trim() || null,
   };
 
   var payload = {

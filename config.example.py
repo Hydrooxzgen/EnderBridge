@@ -67,15 +67,30 @@ sapiConfig = {
 # 假人 Bot 配置(需要 Node.js 运行时)
 # host/port: MCBE 服务器地址(假人将连接到此服务器)
 # username: 假人显示名称
-# offline: 离线模式(不需要 Xbox Live 账号)
-# version: MCBE 协议版本(留空自动检测)
+# mode: 连接模式 - "server"(直连服务器) 或 "realm"(加入 Xbox Live Realm)
+#   server 模式: 使用 host + port 连接,offline 可选
+#   realm 模式:  使用 realmId 或 realmInvite 加入 Realm,强制 online
+# offline: 仅 server 模式生效,离线模式(不需要 Xbox Live 账号)
+# version: MCBE 协议版本(留空自动检测,仅 server 模式)
+# authTitle: Xbox Live 认证 Title ID(可选,默认 Nintendo Switch)
+# profilesFolder: token 缓存目录(可选,默认 .minecraft/nmp-cache)
+# realmId: Realm 数字 ID(仅 realm 模式)
+# realmInvite: Realm 邀请链接(仅 realm 模式,如 https://realms.gg/xxxxx)
 botConfig = {
     "enabled": True,
+    "mode": "server",
+    # ---- server 模式参数 ----
     "host": "127.0.0.1",
     "port": 19132,
-    "username": "FakeBot",
     "offline": True,
     "version": None,
+    # ---- realm 模式参数 ----
+    "realmId": None,
+    "realmInvite": None,
+    # ---- 通用参数 ----
+    "username": "FakeBot",
+    "authTitle": None,
+    "profilesFolder": None,
 }
 
 # 功能开关

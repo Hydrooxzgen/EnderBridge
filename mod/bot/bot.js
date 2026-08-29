@@ -43,14 +43,27 @@ async function main() {
   }
 
   const {
+    mode = 'server',
     host = '127.0.0.1',
     port = 19132,
     offline = true,
     version = null,
+    authTitle = null,
+    profilesFolder = null,
+    realmId = null,
+    realmInvite = null,
   } = config;
   username = config.username || 'FakeBot';
 
-  log(`正在连接 ${host}:${port} (用户: ${username}, 离线: ${offline})`);
+  // Realm 模式强制 online
+  const isRealm = mode === 'realm';
+  const effectiveOffline = isRealm ? false : offline;
+
+  if (isRealm) {
+    log(`正在加入 Realm (用户: ${username}, Realm: ${realmId || realmInvite})`);
+  } else {
+    log(`正在连接 ${host}:${port} (用户: ${username}, 离线: ${effectiveOffline})`);
+  }
 
   // 2. 连接服务器
   try {
@@ -58,10 +71,75 @@ async function main() {
       host,
       port,
       username,
-      offline,
-      // authTitle: '00000000-0000-0000-0000-000000000000', // 离线模式不需要
+      offline: effectiveOffline,
     };
     if (version) opts.version = version;
+
+    // Xbox Live 认证配置（Realm 模式强制启用）
+    if (!effectiveOffline) {
+      log('Xbox Live 在线模式: 需要认证才能连接服务器');
+      log('首次认证需要在浏览器中完成设备码流程');
+
+      opts.onMsaCode = (code) => {
+        send({
+          type: 'auth',
+          user_code: code.user_code,
+          verification_uri: code.verification_uri,
+          message: code.message || `请访问 ${code.verification_uri} 并输入代码: ${code.user_code}`,
+        });
+        log(`========================================`);
+        log(`  Xbox Live 认证需要你的操作！`);
+        log(`  1. 在浏览器中打开: ${code.verification_uri}`);
+        log(`  2. 输入验证码: ${code.user_code}`);
+        log(`  3. 使用 Microsoft 账号登录`);
+        log(`  完成后 Bot 将自动继续连接`);
+        log(`========================================`);
+      };
+
+      if (authTitle) {
+        // 支持友好名称(如 'MinecraftAndroid')或 Title ID(如 '0000000048183522')
+        try {
+          const { Titles } = require('prismarine-auth');
+          const resolved = Titles[authTitle] || authTitle;
+          opts.authTitle = resolved;
+
+          // auth.js 的 validateOptions 只在 authTitle===undefined 时设置 flow/deviceType,
+          // 自定义 authTitle 时需要手动补充,否则 prismarine-auth 会报错
+          if (!opts.flow) opts.flow = 'live';
+          if (!opts.deviceType) {
+            // 根据 Title ID 推断设备类型
+            if (resolved === Titles.MinecraftAndroid) opts.deviceType = 'Android';
+            else if (resolved === Titles.MinecraftIOS) opts.deviceType = 'iOS';
+            else if (resolved === Titles.MinecraftPlaystation) opts.deviceType = 'PlayStation';
+            else if (resolved === Titles.MinecraftNintendoSwitch) opts.deviceType = 'Nintendo';
+            else opts.deviceType = 'Android'; // 默认 Android
+          }
+        } catch {
+          opts.authTitle = authTitle;
+          if (!opts.flow) opts.flow = 'live';
+          if (!opts.deviceType) opts.deviceType = 'Android';
+        }
+      }
+
+      if (profilesFolder) {
+        opts.profilesFolder = profilesFolder;
+      } else {
+        opts.profilesFolder = '.minecraft/nmp-cache';
+      }
+    }
+
+    // Realm 模式：加入指定的 Realm 房间
+    if (isRealm) {
+      opts.realms = {};
+      if (realmId) {
+        opts.realms.realmId = realmId;
+      } else if (realmInvite) {
+        opts.realms.realmInvite = realmInvite;
+      } else {
+        send({ type: 'error', message: 'Realm 模式需要提供 realmId 或 realmInvite' });
+        process.exit(1);
+      }
+    }
 
     client = createClient(opts);
   } catch (e) {
@@ -77,24 +155,22 @@ async function main() {
   });
 
   client.on('error', (err) => {
-    log('连接错误:', err.message);
+    log('连接错误:', err.message, err.stack || '');
     send({ type: 'error', message: err.message });
   });
 
   let disconnectReported = false;
 
   client.on('disconnect', (packet) => {
-    // 服务器主动踢出:收到 disconnect 包(含具体原因)
     const reason = packet?.message || '服务器主动断开';
-    log('被服务器踢出:', reason);
+    log('被服务器踢出 (disconnect):', JSON.stringify(packet));
     disconnectReported = true;
     send({ type: 'disconnect', reason: `服务器踢出: ${reason}` });
   });
 
   client.on('kick', (packet) => {
-    // 服务器踢出(另一种事件)
     const reason = packet?.message || '被服务器踢出';
-    log('被服务器踢出:', reason);
+    log('被服务器踢出 (kick):', JSON.stringify(packet));
     disconnectReported = true;
     send({ type: 'disconnect', reason: `服务器踢出: ${reason}` });
   });

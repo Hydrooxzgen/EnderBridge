@@ -366,25 +366,61 @@ button[type=submit]:disabled { opacity: 0.7; cursor: wait; transform: none; }
           <span class="switch-label">启用假人 Bot</span>
         </label>
       </div>
-      <div class="grid">
-        <div><label for="botHost">服务器地址</label><input id="botHost" name="botHost" type="text" placeholder="127.0.0.1"></div>
-        <div><label for="botPort">服务器端口</label><input id="botPort" name="botPort" type="number" min="1" max="65535" placeholder="19132"></div>
+      <label>连接模式</label>
+      <div class="switch-row" style="gap:24px;">
+        <label class="switch">
+          <input type="radio" name="botMode" value="server" id="botModeServer" checked>
+          <span class="track"></span>
+          <span class="switch-label">🖥️ 服务器直连</span>
+        </label>
+        <label class="switch">
+          <input type="radio" name="botMode" value="realm" id="botModeRealm">
+          <span class="track"></span>
+          <span class="switch-label">☁️ Xbox Live Realm</span>
+        </label>
       </div>
-      <div class="grid">
-        <div><label for="botUsername">假人名称</label><input id="botUsername" name="botUsername" type="text" placeholder="FakeBot"></div>
-        <div>
-          <label>离线模式（无需 Xbox Live）</label>
-          <div class="switch-row">
-            <label class="switch">
-              <input id="botOffline" name="botOffline" type="checkbox" checked>
-              <span class="track"></span>
-              <span class="switch-label">offline</span>
-            </label>
+      <p class="hint" id="botModeHintServer">直连 MCBE 服务器，可选离线或 Xbox Live 在线模式。</p>
+      <p class="hint" id="botModeHintRealm" style="display:none;">加入 Xbox Live Realm 房间，强制在线模式（需要 Xbox Live 账号）。</p>
+      <!-- ====== Server 模式字段 ====== -->
+      <div id="serverFields">
+        <div class="grid">
+          <div><label for="botHost">服务器地址</label><input id="botHost" name="botHost" type="text" placeholder="127.0.0.1"></div>
+          <div><label for="botPort">服务器端口</label><input id="botPort" name="botPort" type="number" min="1" max="65535" placeholder="19132"></div>
+        </div>
+        <div class="grid">
+          <div>
+            <label>离线模式（无需 Xbox Live）</label>
+            <div class="switch-row">
+              <label class="switch">
+                <input id="botOffline" name="botOffline" type="checkbox" checked>
+                <span class="track"></span>
+                <span class="switch-label">offline</span>
+              </label>
+            </div>
           </div>
+          <div><label for="botVersion">协议版本（留空自动检测）</label><input id="botVersion" name="botVersion" type="text" placeholder="留空则自动检测"></div>
         </div>
       </div>
-      <label for="botVersion">协议版本（留空自动检测）</label>
-      <input id="botVersion" name="botVersion" type="text" placeholder="留空则自动检测">
+      <!-- ====== Realm 模式字段 ====== -->
+      <div id="realmFields" style="display:none;">
+        <label for="botRealmId">Realm ID</label>
+        <input id="botRealmId" name="botRealmId" type="text" placeholder="Realm 数字 ID">
+        <p class="hint">你的 Realm 的数字 ID。可在 Realms 管理页面或 Minecraft 内获取。</p>
+        <label for="botRealmInvite">Realm 邀请链接（与 Realm ID 二选一）</label>
+        <input id="botRealmInvite" name="botRealmInvite" type="text" placeholder="例如 https://realms.gg/xxxxxxx">
+        <p class="hint">从 Realm 所有者获取的邀请链接。</p>
+      </div>
+      <!-- ====== 通用：假人名称 + Xbox Live 认证 ====== -->
+      <label for="botUsername">假人名称</label>
+      <input id="botUsername" name="botUsername" type="text" placeholder="FakeBot">
+      <div id="xboxLiveFields" style="display:none;">
+        <label for="botAuthTitle">Xbox Live 认证 Title（可选）</label>
+        <input id="botAuthTitle" name="botAuthTitle" type="text" placeholder="留空则使用默认 Nintendo Switch">
+        <p class="hint">指定 Xbox Live 认证平台身份。留空使用默认值（Nintendo Switch）。可选值：MinecraftAndroid、MinecraftIOS、MinecraftNintendoSwitch 等。</p>
+        <label for="botProfilesFolder">Token 缓存目录（可选）</label>
+        <input id="botProfilesFolder" name="botProfilesFolder" type="text" placeholder="留空则使用默认路径">
+        <p class="hint">Xbox Live 认证 token 的缓存目录。留空使用默认路径（.minecraft/nmp-cache）。首次认证需要在终端查看验证 URL 并完成登录。</p>
+      </div>
     </section>
 
     <section class="card" id="spamFields">
@@ -603,12 +639,30 @@ function syncConfig() {
   $("basePathFields").classList.toggle("hidden", !basePathAny);
   toggleRateLimit();
   toggleWebui();
+  toggleBotMode();
 }
 function toggleRateLimit() {
   $("rateLimitFields").style.display = $("rateLimitEnabled").checked ? "block" : "none";
 }
 function toggleWebui() {
   $("webuiFields").style.display = $("webuiEnabled").checked ? "block" : "none";
+}
+function toggleBotMode() {
+  var mode = $("botModeServer").checked ? "server" : "realm";
+  var isServer = mode === "server";
+  // Server 模式字段
+  $("serverFields").style.display = isServer ? "block" : "none";
+  $("realmFields").style.display = isServer ? "none" : "block";
+  // 模式提示
+  $("botModeHintServer").style.display = isServer ? "block" : "none";
+  $("botModeHintRealm").style.display = isServer ? "none" : "block";
+  // Xbox Live 认证字段：server 模式下离线时隐藏, Realm 模式始终显示
+  if (isServer) {
+    var offline = $("botOffline").checked;
+    $("xboxLiveFields").style.display = offline ? "none" : "block";
+  } else {
+    $("xboxLiveFields").style.display = "block";
+  }
 }
 
 function collectMods(side) {
@@ -661,11 +715,18 @@ function fill() {
   $("webuiLocalOnly").checked = DEFAULTS.webuiLocalOnly !== false;
   $("githubToken").value = DEFAULTS.githubToken || "";
   $("botEnabled").checked = DEFAULTS.botEnabled !== false;
+  var botMode = DEFAULTS.botMode || "server";
+  $("botModeServer").checked = botMode === "server";
+  $("botModeRealm").checked = botMode === "realm";
   $("botHost").value = DEFAULTS.botHost || "127.0.0.1";
   $("botPort").value = DEFAULTS.botPort || 19132;
-  $("botUsername").value = DEFAULTS.botUsername || "FakeBot";
   $("botOffline").checked = DEFAULTS.botOffline !== false;
   $("botVersion").value = DEFAULTS.botVersion || "";
+  $("botRealmId").value = DEFAULTS.botRealmId || "";
+  $("botRealmInvite").value = DEFAULTS.botRealmInvite || "";
+  $("botUsername").value = DEFAULTS.botUsername || "FakeBot";
+  $("botAuthTitle").value = DEFAULTS.botAuthTitle || "";
+  $("botProfilesFolder").value = DEFAULTS.botProfilesFolder || "";
   $("owner").value = DEFAULTS.owner;
   $("op").value = (DEFAULTS.op || []).join(", ");
   $("user").value = (DEFAULTS.user || []).join(", ");
@@ -721,11 +782,16 @@ document.getElementById("cfg").addEventListener("submit", function (e) {
     webuiLocalOnly: $("webuiLocalOnly").checked,
     githubToken: $("githubToken").value.trim(),
     botEnabled: $("botEnabled").checked,
+    botMode: $("botModeServer").checked ? "server" : "realm",
     botHost: $("botHost").value.trim(),
     botPort: parseInt($("botPort").value, 10),
-    botUsername: $("botUsername").value.trim(),
     botOffline: $("botOffline").checked,
     botVersion: $("botVersion").value.trim(),
+    botRealmId: $("botRealmId").value.trim(),
+    botRealmInvite: $("botRealmInvite").value.trim(),
+    botUsername: $("botUsername").value.trim(),
+    botAuthTitle: $("botAuthTitle").value.trim(),
+    botProfilesFolder: $("botProfilesFolder").value.trim(),
     owner: $("owner").value.trim(),
     op: $("op").value,
     user: $("user").value,
@@ -752,6 +818,8 @@ document.addEventListener("change", function (e) {
   if (e.target && e.target.closest && e.target.closest(".mod-list")) syncConfig();
   if (e.target && e.target.id === "rateLimitEnabled") toggleRateLimit();
   if (e.target && e.target.id === "webuiEnabled") toggleWebui();
+  if (e.target && e.target.id === "botOffline") toggleBotMode();
+  if (e.target && (e.target.id === "botModeServer" || e.target.id === "botModeRealm")) toggleBotMode();
 });
 fill();
 </script>

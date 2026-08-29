@@ -76,11 +76,20 @@ class BotProcess:
         if cfg.get("enabled") is False:
             return {"ok": False, "message": "Bot 已在配置中禁用,请在 config.py 中设置 botConfig.enabled = True 并重启"}
 
+        mode = cfg.get("mode", "server")
         host = cfg.get("host", "127.0.0.1")
         port = cfg.get("port", 19132)
         username = cfg.get("username", "FakeBot")
         offline = cfg.get("offline", True)
         version = cfg.get("version", None)
+        auth_title = cfg.get("authTitle", None)
+        profiles_folder = cfg.get("profilesFolder", None)
+        realm_id = cfg.get("realmId", None)
+        realm_invite = cfg.get("realmInvite", None)
+
+        # Realm 模式强制 online
+        is_realm = mode == "realm"
+        effective_offline = False if is_realm else offline
 
         # 检查 node 可用
         try:
@@ -113,11 +122,16 @@ class BotProcess:
 
         # 启动子进程
         config_payload = json.dumps({
+            "mode": mode,
             "host": host,
             "port": port,
             "username": username,
-            "offline": offline,
+            "offline": effective_offline,
             "version": version,
+            "authTitle": auth_title,
+            "profilesFolder": profiles_folder,
+            "realmId": realm_id,
+            "realmInvite": realm_invite,
         }, ensure_ascii=False)
 
         try:
@@ -144,6 +158,8 @@ class BotProcess:
         # 启动 stderr 读取(日志)
         asyncio.get_running_loop().create_task(self._read_stderr())
 
+        if is_realm:
+            return {"ok": True, "message": f"Bot 正在加入 Realm ({realm_id or realm_invite})..."}
         return {"ok": True, "message": f"Bot 正在连接 {host}:{port}..."}
 
     async def stop(self) -> dict:
@@ -179,7 +195,7 @@ class BotProcess:
         except Exception as e:
             return {"ok": False, "message": f"发送命令失败: {e}"}
 
-        # 从队列等待响应(最多 5 秒),丢弃非命令响应(如 join/disconnect 通知)
+        # 从队列等待响应(最多 5 秒),丢弃非命令响应(如 join/disconnect/auth 通知)
         try:
             deadline = asyncio.get_running_loop().time() + 5
             while True:
@@ -187,7 +203,7 @@ class BotProcess:
                 if remaining <= 0:
                     return {"ok": False, "message": "Bot 响应超时"}
                 resp = await asyncio.wait_for(self._resp_queue.get(), timeout=remaining)
-                # 命令响应:有 action 字段的是命令响应;join/disconnect 是事件通知,跳过
+                # 命令响应:有 action 字段的是命令响应;join/disconnect/auth 是事件通知,跳过
                 if resp.get("action") or resp.get("type") == "error":
                     return resp
         except asyncio.TimeoutError:
@@ -195,7 +211,22 @@ class BotProcess:
 
     def _on_response(self, resp: dict):
         """收到 bot 响应时调用"""
-        if resp.get("type") == "join":
+        if resp.get("type") == "auth":
+            # Xbox Live 认证信息 — 醒目提示
+            user_code = resp.get("user_code", "")
+            verification_uri = resp.get("verification_uri", "")
+            shared.logger.warning(
+                f"[Bot] ========================================\n"
+                f"[Bot]   Xbox Live 认证需要你的操作！\n"
+                f"[Bot]   1. 在浏览器中打开: {verification_uri}\n"
+                f"[Bot]   2. 输入验证码: {user_code}\n"
+                f"[Bot]   3. 使用 Microsoft 账号登录\n"
+                f"[Bot]   完成后 Bot 将自动继续连接\n"
+                f"[Bot] ========================================"
+            )
+            if self._resp_queue is not None:
+                self._resp_queue.put_nowait(resp)
+        elif resp.get("type") == "join":
             self.ready = True
             shared.logger.info("[Bot] 已加入游戏")
         elif resp.get("type") == "disconnect":
@@ -258,7 +289,12 @@ class BotProcess:
                     break
                 text = line.decode("utf-8", errors="replace").strip()
                 if text:
-                    shared.logger.debug(f"[Bot] {text}")
+                    # 包含 error/stack/throw 的是致命错误,用 warning 级别确保可见
+                    lower = text.lower()
+                    if any(kw in lower for kw in ('error', 'stack', 'throw', 'crash')):
+                        shared.logger.warning(f"[Bot] {text}")
+                    else:
+                        shared.logger.debug(f"[Bot] {text}")
         except asyncio.CancelledError:
             pass
         except Exception:

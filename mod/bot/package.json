@@ -5,6 +5,9 @@
   "type": "module",
   "description": "EnderBridge 假人 Bot (Bedrock Protocol)",
   "main": "bot.js",
+  "scripts": {
+    "postinstall": "node scripts/patch-bedrock-versions.js"
+  },
   "dependencies": {
     "bedrock-protocol": "^3.58.3"
   },

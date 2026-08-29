@@ -314,11 +314,16 @@ def load_config() -> dict:
         },
         "bot": {
             "enabled": ns.get("botConfig", {}).get("enabled", True),
+            "mode": ns.get("botConfig", {}).get("mode", "server"),
             "host": ns.get("botConfig", {}).get("host", "127.0.0.1"),
             "port": ns.get("botConfig", {}).get("port", 19132),
             "username": ns.get("botConfig", {}).get("username", "FakeBot"),
             "offline": ns.get("botConfig", {}).get("offline", True),
             "version": ns.get("botConfig", {}).get("version", None),
+            "authTitle": ns.get("botConfig", {}).get("authTitle", None),
+            "profilesFolder": ns.get("botConfig", {}).get("profilesFolder", None),
+            "realmId": ns.get("botConfig", {}).get("realmId", None),
+            "realmInvite": ns.get("botConfig", {}).get("realmInvite", None),
         },
         "githubToken": ns.get("githubToken", ""),
     }
@@ -406,11 +411,16 @@ def save_config(new: dict) -> None:
     bot_form = new.get("bot") or {}
     apply_block_or_append("botConfig", {
         "enabled": bool(bot_form.get("enabled", True)),
+        "mode": str(bot_form.get("mode") or "server").strip(),
         "host": str(bot_form.get("host") or "127.0.0.1").strip(),
         "port": int(bot_form.get("port") or 19132),
         "username": str(bot_form.get("username") or "FakeBot").strip(),
         "offline": bool(bot_form.get("offline", True)),
         "version": bot_form.get("version") or None,
+        "authTitle": bot_form.get("authTitle") or None,
+        "profilesFolder": bot_form.get("profilesFolder") or None,
+        "realmId": bot_form.get("realmId") or None,
+        "realmInvite": bot_form.get("realmInvite") or None,
     }, "# 假人 Bot 配置")
 
     # webuiConfig:整体块替换;旧版 config.py 无该块时自动追加到文件末尾
