@@ -155,6 +155,14 @@ function loadConfig() {
     $("cfg-bot-profilesfolder").value = bot.profilesFolder || "";
     $("cfg-bot-realmid").value = bot.realmId || "";
     $("cfg-bot-realminvite").value = bot.realmInvite || "";
+    // Xbox Live 账号
+    var xboxAccounts = bot.xboxAccounts || [];
+    var activeXbox = bot.activeXboxAccount || null;
+    if (activeXbox) {
+      $("cfg-bot-username").value = activeXbox;
+      var activeEl = $("cfg-bot-xbox-active");
+      if (activeEl) activeEl.textContent = activeXbox;
+    }
     var mode = bot.mode || "server";
     $("cfg-bot-mode-server").checked = mode === "server";
     $("cfg-bot-mode-realm").checked = mode === "realm";
@@ -191,11 +199,20 @@ function toggleBotMode() {
   $("cfgBotServerFields").style.display = isServer ? "" : "none";
   $("cfgBotRealmFields").style.display = isServer ? "none" : "";
   // Xbox Live: server 模式下离线时隐藏, Realm 模式始终显示
+  var isOnline = false;
   if (isServer) {
     var offline = $("cfg-bot-offline").checked;
     $("cfgBotXboxLiveFields").style.display = offline ? "none" : "";
+    isOnline = !offline;
   } else {
     $("cfgBotXboxLiveFields").style.display = "";
+    isOnline = true;
+  }
+  // online 模式: 禁用 username 输入框,显示 Xbox 账号管理
+  $("cfgBotUsernameOffline").style.display = isOnline ? "none" : "";
+  $("cfgBotUsernameOnline").style.display = isOnline ? "" : "none";
+  if (isOnline) {
+    loadXboxAccounts();
   }
 }
 var botModeSvr = $("cfg-bot-mode-server");
@@ -204,6 +221,157 @@ if (botModeSvr) botModeSvr.addEventListener("change", toggleBotMode);
 if (botModeRealm) botModeRealm.addEventListener("change", toggleBotMode);
 var botOfflineEl = $("cfg-bot-offline");
 if (botOfflineEl) botOfflineEl.addEventListener("change", toggleBotMode);
+
+// ===== Xbox Live 多账号管理 =====
+var _xboxPollTimer = null;
+
+function loadXboxAccounts() {
+  api("/bot/xbox-accounts").then(function (data) {
+    if (!data.ok) return;
+    var accounts = data.accounts || [];
+    var active = data.active || null;
+    // 更新当前账号显示
+    var activeEl = $("cfg-bot-xbox-active");
+    var badgeEl = $("cfg-bot-xbox-badge");
+    if (activeEl) {
+      activeEl.textContent = active || "未登录";
+    }
+    if (badgeEl) {
+      badgeEl.style.display = active ? "inline" : "none";
+    }
+    // 更新 username 隐藏字段(保存时使用)
+    var usernameEl = $("cfg-bot-username");
+    if (usernameEl && active) usernameEl.value = active;
+    // 更新切换下拉框
+    var switchEl = $("cfg-bot-xbox-switch");
+    var switchBtn = $("cfg-bot-xbox-switch-btn");
+    var removeBtn = $("cfg-bot-xbox-remove-btn");
+    if (accounts.length > 1) {
+      if (switchEl) {
+        switchEl.innerHTML = accounts.map(function (a) {
+          return '<option value="' + escapeHtml(a.username) + '"' +
+            (a.username === active ? ' selected' : '') + '>' +
+            escapeHtml(a.username) + '</option>';
+        }).join("");
+        switchEl.style.display = "";
+      }
+      if (switchBtn) switchBtn.style.display = "";
+    } else {
+      if (switchEl) switchEl.style.display = "none";
+      if (switchBtn) switchBtn.style.display = "none";
+    }
+    if (removeBtn) {
+      removeBtn.style.display = accounts.length > 0 ? "" : "none";
+    }
+  }).catch(function () {});
+}
+
+function startXboxLogin() {
+  var modal = $("cfgBotXboxLoginModal");
+  var step1 = $("cfgBotXboxLoginStep1");
+  var step2 = $("cfgBotXboxLoginStep2");
+  var result = $("cfgBotXboxLoginResult");
+  if (modal) modal.style.display = "";
+  if (step1) step1.style.display = "";
+  if (step2) step2.style.display = "none";
+  if (result) { result.style.display = "none"; result.innerHTML = ""; }
+}
+
+function startLoginProcess() {
+  var step1 = $("cfgBotXboxLoginStep1");
+  var step2 = $("cfgBotXboxLoginStep2");
+  api("/bot/xbox-login", { method: "POST", body: JSON.stringify({}) })
+    .then(function (data) {
+      if (!data.ok) { toast(data.message || "启动失败", "err"); return; }
+      if (step1) step1.style.display = "none";
+      if (step2) step2.style.display = "";
+      // 开始轮询登录状态
+      pollXboxLoginStatus();
+    })
+    .catch(function (e) { toast("启动失败: " + (e.message || e), "err"); });
+}
+
+function pollXboxLoginStatus() {
+  if (_xboxPollTimer) clearInterval(_xboxPollTimer);
+  _xboxPollTimer = setInterval(function () {
+    api("/bot/xbox-login-status").then(function (data) {
+      if (!data.ok) return;
+      if (data.status === "waiting" && data.user_code) {
+        var urlEl = $("cfg-bot-xbox-login-url");
+        var codeEl = $("cfg-bot-xbox-login-code");
+        if (urlEl) { urlEl.href = data.verification_uri; urlEl.textContent = data.verification_uri; }
+        if (codeEl) codeEl.textContent = data.user_code;
+      } else if (data.status === "done") {
+        clearInterval(_xboxPollTimer); _xboxPollTimer = null;
+        var result = $("cfgBotXboxLoginResult");
+        var step2 = $("cfgBotXboxLoginStep2");
+        if (step2) step2.style.display = "none";
+        if (result) { result.style.display = ""; result.innerHTML = '<p style="color:var(--accent);">✅ 登录成功! 账号 ' + escapeHtml(data.username) + ' 已保存。</p>'; }
+        loadXboxAccounts();
+        setTimeout(closeXboxLoginModal, 2000);
+      } else if (data.status === "error") {
+        clearInterval(_xboxPollTimer); _xboxPollTimer = null;
+        var result2 = $("cfgBotXboxLoginResult");
+        var step2b = $("cfgBotXboxLoginStep2");
+        if (step2b) step2b.style.display = "none";
+        if (result2) { result2.style.display = ""; result2.innerHTML = '<p style="color:var(--danger,#ef4444);">❌ 登录失败: ' + escapeHtml(data.error || "未知错误") + '</p>'; }
+      }
+    }).catch(function () {});
+  }, 2000);
+}
+
+function cancelXboxLogin() {
+  if (_xboxPollTimer) { clearInterval(_xboxPollTimer); _xboxPollTimer = null; }
+  api("/bot/xbox-login-stop", { method: "POST" }).catch(function () {});
+  closeXboxLoginModal();
+}
+
+function closeXboxLoginModal() {
+  var modal = $("cfgBotXboxLoginModal");
+  if (modal) modal.style.display = "none";
+}
+
+function switchXboxAccount() {
+  var select = $("cfg-bot-xbox-switch");
+  if (!select) return;
+  var username = select.value;
+  if (!username) return;
+  api("/bot/xbox-account/switch", { method: "POST", body: JSON.stringify({ username: username }) })
+    .then(function (data) {
+      toast(data.message, data.ok ? "ok" : "err");
+      if (data.ok) loadXboxAccounts();
+    })
+    .catch(function (e) { toast("切换失败: " + (e.message || e), "err"); });
+}
+
+function removeXboxAccount() {
+  var active = ($("cfg-bot-xbox-active").textContent || "").trim();
+  if (!active || active === "未登录") { toast("没有可移除的账号", "err"); return; }
+  var select = $("cfg-bot-xbox-switch");
+  var username = (select && select.style.display !== "none") ? select.value : active;
+  if (!username) return;
+  if (!confirm("确定要移除账号 " + username + " 吗?")) return;
+  api("/bot/xbox-account/remove", { method: "POST", body: JSON.stringify({ username: username }) })
+    .then(function (data) {
+      toast(data.message, data.ok ? "ok" : "err");
+      if (data.ok) loadXboxAccounts();
+    })
+    .catch(function (e) { toast("移除失败: " + (e.message || e), "err"); });
+}
+
+// 绑定 Xbox 账号按钮事件
+var xboxLoginBtn = $("cfg-bot-xbox-login");
+if (xboxLoginBtn) xboxLoginBtn.addEventListener("click", startXboxLogin);
+var xboxLoginStart = $("cfg-bot-xbox-login-start");
+if (xboxLoginStart) xboxLoginStart.addEventListener("click", startLoginProcess);
+var xboxLoginCancel = $("cfg-bot-xbox-login-cancel");
+if (xboxLoginCancel) xboxLoginCancel.addEventListener("click", cancelXboxLogin);
+var xboxLoginCancel2 = $("cfg-bot-xbox-login-cancel2");
+if (xboxLoginCancel2) xboxLoginCancel2.addEventListener("click", cancelXboxLogin);
+var xboxSwitchBtn = $("cfg-bot-xbox-switch-btn");
+if (xboxSwitchBtn) xboxSwitchBtn.addEventListener("click", switchXboxAccount);
+var xboxRemoveBtn = $("cfg-bot-xbox-remove-btn");
+if (xboxRemoveBtn) xboxRemoveBtn.addEventListener("click", removeXboxAccount);
 
 function saveConfig() {
   if (!cfgData) return;

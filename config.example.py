@@ -91,6 +91,11 @@ botConfig = {
     "username": "FakeBot",
     "authTitle": None,
     "profilesFolder": None,
+    # ---- Xbox Live 多账号 ----
+    # xboxAccounts: 已登录的 Xbox Live 账号列表 [{"username": "xxx"}, ...]
+    # activeXboxAccount: 当前活跃账号用户名
+    "xboxAccounts": [],
+    "activeXboxAccount": None,
 }
 
 # 功能开关

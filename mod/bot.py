@@ -22,6 +22,7 @@ from lib import shared
 from lib.command import Command
 
 # bot.js 路径
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _BOT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bot")
 _BOT_SCRIPT = os.path.join(_BOT_DIR, "bot.js")
 
@@ -81,6 +82,12 @@ class BotProcess:
         port = cfg.get("port", 19132)
         username = cfg.get("username", "FakeBot")
         offline = cfg.get("offline", True)
+        # 有活跃 Xbox 账号时强制 online 模式并以其身份连接,
+        # 避免"账号已登录但 bot 仍用离线模式或错误 ID 连接"
+        active_xbox = cfg.get("activeXboxAccount")
+        if active_xbox:
+            username = active_xbox
+            offline = False
         version = cfg.get("version", None)
         auth_title = cfg.get("authTitle", None)
         profiles_folder = cfg.get("profilesFolder", None)
@@ -299,6 +306,195 @@ class BotProcess:
             pass
         except Exception:
             pass
+
+
+class XboxLoginManager:
+    """管理 Xbox Live 登录流程(独立于 BotProcess)"""
+
+    _instance = None
+
+    def __init__(self):
+        self.proc = None
+        self.status = "idle"  # idle | waiting | done | error
+        self.user_code = ""
+        self.verification_uri = ""
+        self.username = ""
+        self.error = ""
+
+    @classmethod
+    def get(cls) -> "XboxLoginManager":
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
+    # 临时用户名(与 bot.js 中的 TEMP_USER 一致)
+    TEMP_USER = "__xbox_login_pending__"
+
+    async def start_login(self, auth_title: str = None) -> dict:
+        """启动 Xbox Live 登录流程 — 不需要传入用户名,Gamertag 从认证响应中自动获取"""
+        if self.proc and self.proc.returncode is None:
+            return {"ok": False, "message": "登录流程已在进行中"}
+
+        cfg = _bot_config()
+        profiles_folder = cfg.get("profilesFolder") or None
+        effective_auth_title = auth_title or cfg.get("authTitle") or None
+
+        # 检查 node 可用
+        try:
+            r = subprocess.run(["node", "--version"], capture_output=True, timeout=5)
+            if r.returncode != 0:
+                return {"ok": False, "message": "Node.js 不可用"}
+        except FileNotFoundError:
+            return {"ok": False, "message": "未找到 node 命令,请安装 Node.js"}
+
+        config_payload = json.dumps({
+            "mode": "server",
+            "host": "127.0.0.1",
+            "port": 19132,
+            "username": self.TEMP_USER,
+            "offline": False,
+            "version": None,
+            "authTitle": effective_auth_title,
+            "profilesFolder": profiles_folder,
+            "realmId": None,
+            "realmInvite": None,
+            "loginOnly": True,
+        }, ensure_ascii=False)
+
+        try:
+            self.proc = await asyncio.create_subprocess_exec(
+                "node", _BOT_SCRIPT,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=_BOT_DIR,
+            )
+            self.proc.stdin.write((config_payload + "\n").encode("utf-8"))
+            await self.proc.stdin.drain()
+        except Exception as e:
+            return {"ok": False, "message": f"启动登录进程失败: {e}"}
+
+        self.status = "waiting"
+        self.user_code = ""
+        self.verification_uri = ""
+        self.username = ""
+        self.error = ""
+
+        # 启动 stdout/stderr 读取
+        asyncio.get_running_loop().create_task(self._read_stdout())
+        asyncio.get_running_loop().create_task(self._read_stderr())
+
+        return {"ok": True, "message": "正在启动 Xbox Live 登录..."}
+
+    def get_status(self) -> dict:
+        return {
+            "status": self.status,
+            "user_code": self.user_code,
+            "verification_uri": self.verification_uri,
+            "username": self.username,
+            "error": self.error,
+        }
+
+    async def stop_login(self) -> dict:
+        if not self.proc or self.proc.returncode is not None:
+            self.status = "idle"
+            return {"ok": True, "message": "登录进程未运行"}
+        try:
+            self.proc.kill()
+        except Exception:
+            pass
+        self.status = "idle"
+        return {"ok": True, "message": "登录已取消"}
+
+    async def _read_stdout(self):
+        try:
+            while True:
+                line = await self.proc.stdout.readline()
+                if not line:
+                    break
+                text = line.decode("utf-8", errors="replace").strip()
+                if not text:
+                    continue
+                try:
+                    resp = json.loads(text)
+                    if resp.get("type") == "auth":
+                        self.user_code = resp.get("user_code", "")
+                        self.verification_uri = resp.get("verification_uri", "")
+                        self.status = "waiting"
+                    elif resp.get("type") == "login-ok":
+                        self.status = "done"
+                        self.username = resp.get("username", self.username)
+                        # 自动保存到 config.py
+                        self._save_account(self.username)
+                    elif resp.get("type") == "login-fail":
+                        self.status = "error"
+                        self.error = resp.get("message", "认证失败")
+                except json.JSONDecodeError:
+                    pass
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            pass
+
+    async def _read_stderr(self):
+        try:
+            while True:
+                line = await self.proc.stderr.readline()
+                if not line:
+                    break
+                text = line.decode("utf-8", errors="replace").strip()
+                if text:
+                    shared.logger.debug(f"[XboxLogin] {text}")
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            pass
+
+    def _save_account(self, username: str):
+        """将已认证的 Xbox 账号保存到 config.py"""
+        try:
+            import importlib.util
+            ns = {}
+            spec = importlib.util.spec_from_file_location("config", os.path.join(ROOT, "config.py"))
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            ns = module.__dict__
+
+            bot_cfg = dict(ns.get("botConfig") or {})
+            accounts = list(bot_cfg.get("xboxAccounts") or [])
+
+            # 检查是否已存在
+            exists = any(a.get("username") == username for a in accounts)
+            if not exists:
+                accounts.append({"username": username})
+                bot_cfg["xboxAccounts"] = accounts
+
+            # 登录成功后总是将新账号设为活跃 — 用户登录新账号就是希望立即使用它,
+            # 这样 web 显示的账号与实际 bot 连接的账号保持一致
+            bot_cfg["activeXboxAccount"] = username
+            bot_cfg["username"] = username
+            # 登录了 Xbox 账号必须使用 online 模式,否则 bot 还是离线连接
+            bot_cfg["offline"] = False
+
+            # 写回 config.py
+            config_path = os.path.join(ROOT, "config.py")
+            from webui.server import _replace_block
+            src = ""
+            with open(config_path, "r", encoding="utf-8") as f:
+                src = f.read()
+            src, ok = _replace_block(src, "botConfig", bot_cfg)
+            if ok:
+                import shutil
+                bak_path = config_path + ".bak"
+                if os.path.exists(config_path):
+                    shutil.copy2(config_path, bak_path)
+                with open(config_path, "w", encoding="utf-8") as f:
+                    f.write(src)
+                shared.logger.info(f"[XboxLogin] 账号 {username} 已保存到配置")
+            else:
+                shared.logger.warning(f"[XboxLogin] 无法保存账号: config.py 中未找到 botConfig")
+        except Exception as e:
+            shared.logger.warning(f"[XboxLogin] 保存账号失败: {e}")
 
 
 class Mod:

@@ -243,12 +243,46 @@
                 </div>
               </div>
             </div>
-            <!-- 通用字段 -->
-            <div class="cfg-field">
+            <!-- 通用字段: offline 模式 -->
+            <div id="cfgBotUsernameOffline" class="cfg-field">
               <label>假人名称 (username)</label>
               <input id="cfg-bot-username" class="cfg-input" placeholder="FakeBot" />
             </div>
-            <!-- Xbox Live 认证 -->
+            <!-- 通用字段: online 模式 — Xbox Live 账号管理 -->
+            <div id="cfgBotUsernameOnline" class="cfg-field cfg-grid-full" style="display:none;">
+              <label>Xbox Live 账号</label>
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                <span id="cfg-bot-xbox-active" style="font-weight:600;font-size:15px;">未登录</span>
+                <span id="cfg-bot-xbox-badge" style="display:none;padding:2px 8px;border-radius:6px;font-size:11px;background:var(--accent);color:#fff;">active</span>
+              </div>
+              <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center;">
+                <button type="button" id="cfg-bot-xbox-login" class="btn btn-sm">🔐 登录新账号</button>
+                <select id="cfg-bot-xbox-switch" class="cfg-input" style="max-width:220px;display:none;"></select>
+                <button type="button" id="cfg-bot-xbox-switch-btn" class="btn btn-sm btn-ghost" style="display:none;">切换</button>
+                <button type="button" id="cfg-bot-xbox-remove-btn" class="btn btn-sm btn-ghost" style="display:none;color:var(--danger,#ef4444);">移除</button>
+              </div>
+              <p class="hint" style="margin:6px 0 0 0;">登录后账号会自动保存。切换账号后需重启 Bot 生效。</p>
+            </div>
+            <!-- Xbox Live 登录弹窗 -->
+            <div id="cfgBotXboxLoginModal" class="cfg-grid-full" style="display:none;">
+              <div style="border:1px solid var(--border);border-radius:10px;padding:16px;background:var(--bg-card,#1a1a2e);">
+                <div style="font-weight:600;margin-bottom:8px;">🔐 Xbox Live 登录</div>
+                <div id="cfgBotXboxLoginStep1">
+                  <p style="margin:0 0 8px 0;font-size:13px;color:var(--text-dim);">点击下方按钮发起 Microsoft 设备码认证,Gamertag 将自动获取。</p>
+                  <button type="button" id="cfg-bot-xbox-login-start" class="btn btn-sm" style="margin-top:4px;">🔐 开始登录</button>
+                  <button type="button" id="cfg-bot-xbox-login-cancel" class="btn btn-sm btn-ghost" style="margin-top:4px;">取消</button>
+                </div>
+                <div id="cfgBotXboxLoginStep2" style="display:none;">
+                  <p style="margin:0 0 8px 0;">请在浏览器中完成认证:</p>
+                  <p style="margin:0 0 4px 0;"><b>1.</b> 打开 <a id="cfg-bot-xbox-login-url" href="#" target="_blank" rel="noopener"></a></p>
+                  <p style="margin:0 0 4px 0;"><b>2.</b> 输入验证码: <code id="cfg-bot-xbox-login-code" style="font-size:18px;font-weight:700;letter-spacing:2px;color:var(--accent);"></code></p>
+                  <p style="margin:8px 0 0 0;font-size:12px;color:var(--text-dim);">等待认证完成...</p>
+                  <button type="button" id="cfg-bot-xbox-login-cancel2" class="btn btn-sm btn-ghost" style="margin-top:8px;">取消</button>
+                </div>
+                <div id="cfgBotXboxLoginResult" style="display:none;"></div>
+              </div>
+            </div>
+            <!-- Xbox Live 认证高级选项 -->
             <div id="cfgBotXboxLiveFields" class="cfg-grid-full" style="display:none;">
               <div class="cfg-field">
                 <label>Xbox Live 认证 Title (authTitle)</label>

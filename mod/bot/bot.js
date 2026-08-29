@@ -52,6 +52,7 @@ async function main() {
     profilesFolder = null,
     realmId = null,
     realmInvite = null,
+    loginOnly = false,
   } = config;
   username = config.username || 'FakeBot';
 
@@ -125,6 +126,87 @@ async function main() {
         opts.profilesFolder = profilesFolder;
       } else {
         opts.profilesFolder = '.minecraft/nmp-cache';
+      }
+    }
+
+    // ========== login-only 模式: 只做 Xbox Live 认证,成功后退出 ==========
+    // 不需要传入用户名 — 认证完成后从 Xbox Live 响应中提取 Gamertag
+    if (loginOnly && !effectiveOffline) {
+      log(`[Login] 开始 Xbox Live 认证...`);
+      try {
+        const crypto = require('crypto');
+        const fs = require('fs');
+        const pathMod = require('path');
+        const { Authflow, Titles } = require('prismarine-auth');
+        const resolvedTitle = authTitle ? (Titles[authTitle] || authTitle) : Titles.MinecraftAndroid;
+        const folder = profilesFolder || '.minecraft/nmp-cache';
+        // 临时用户名(缓存键): 认证完成后会重命名为实际 Gamertag
+        const TEMP_USER = '__xbox_login_pending__';
+        // 必须与 prismarine-auth 的 createHash 完全一致(SHA1 + binary + 取前 6 位),
+        // 否则清理/重命名缓存时会匹配不到文件,导致旧缓存残留、下次秒登录
+        const createHash = (data) => crypto.createHash('sha1').update(data ?? '', 'binary').digest('hex').substr(0, 6);
+        // 清理临时用户名的旧缓存 — 防止上次未完成的认证留下 token 导致"秒登录"跳过设备码
+        const tempHash0 = createHash(TEMP_USER);
+        try {
+          const cacheDir0 = pathMod.resolve(folder);
+          if (fs.existsSync(cacheDir0)) {
+            for (const f of fs.readdirSync(cacheDir0)) {
+              if (f.startsWith(tempHash0 + '_')) {
+                fs.unlinkSync(pathMod.join(cacheDir0, f));
+                log(`[Login] 已清理旧缓存: ${f}`);
+              }
+            }
+          }
+        } catch (cleanErr) {
+          log(`[Login] 清理缓存失败(非致命):`, cleanErr.message);
+        }
+        const loginOpts = {
+          authTitle: resolvedTitle,
+          flow: 'live',
+          deviceType: 'Android',
+        };
+        const flow = new Authflow(TEMP_USER, folder, loginOpts, (code) => {
+          send({
+            type: 'auth',
+            user_code: code.user_code,
+            verification_uri: code.verification_uri,
+            message: code.message || `请访问 ${code.verification_uri} 并输入代码: ${code.user_code}`,
+          });
+          log(`[Login] 设备码: ${code.user_code}`);
+        });
+        const xboxToken = await flow.getXboxToken();
+        // 从 XSTS 响应中提取 Gamertag
+        const gamertag = xboxToken.gamertag || null;
+        if (!gamertag) {
+          send({ type: 'login-fail', message: '无法获取 Xbox Gamertag,请重试' });
+          process.exit(1);
+        }
+        log(`[Login] Xbox Live 认证成功! Gamertag: ${gamertag}`);
+        // 重命名缓存文件: 临时用户名 hash → 实际 Gamertag hash
+        const tempHash = createHash(TEMP_USER);
+        const realHash = createHash(gamertag);
+        if (tempHash !== realHash) {
+          try {
+            const cacheDir = pathMod.resolve(folder);
+            if (fs.existsSync(cacheDir)) {
+              for (const f of fs.readdirSync(cacheDir)) {
+                if (f.startsWith(tempHash + '_')) {
+                  const newFile = f.replace(tempHash, realHash);
+                  fs.renameSync(pathMod.join(cacheDir, f), pathMod.join(cacheDir, newFile));
+                  log(`[Login] 缓存迁移: ${f} → ${newFile}`);
+                }
+              }
+            }
+          } catch (renameErr) {
+            log(`[Login] 缓存重命名失败(非致命):`, renameErr.message);
+          }
+        }
+        send({ type: 'login-ok', username: gamertag });
+        process.exit(0);
+      } catch (e) {
+        log(`[Login] 认证失败:`, e.message);
+        send({ type: 'login-fail', message: e.message });
+        process.exit(1);
       }
     }
 

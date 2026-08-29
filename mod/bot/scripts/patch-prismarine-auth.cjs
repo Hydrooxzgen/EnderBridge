@@ -83,3 +83,50 @@ if (fs.existsSync(flowPath)) {
     console.log('[patch-auth] MicrosoftAuthFlow.js: titleId 补丁已存在,跳过');
   }
 }
+// ===== XboxTokenManager.js: 在 XSTS 响应中提取 Gamertag =====
+const xblPath = path.join(base, 'TokenManagers', 'XboxTokenManager.js');
+if (fs.existsSync(xblPath)) {
+  let src = fs.readFileSync(xblPath, 'utf8');
+  if (!src.includes('PATCH_GAMERTAG')) {
+    // getXSTSToken: 在 xsts 对象中添加 gamertag
+    const oldXsts = `    const xsts = {
+      userXUID: ret.DisplayClaims.xui[0].xid || null,
+      userHash: ret.DisplayClaims.xui[0].uhs,
+      XSTSToken: ret.Token,
+      expiresOn: ret.NotAfter
+    }`;
+    const newXsts = `    const xsts = {
+      userXUID: ret.DisplayClaims.xui[0].xid || null,
+      userHash: ret.DisplayClaims.xui[0].uhs,
+      XSTSToken: ret.Token,
+      expiresOn: ret.NotAfter,
+      // ===== PATCH_GAMERTAG =====
+      gamertag: ret.DisplayClaims.xui[0].gtg || null
+    }`;
+    if (src.includes(oldXsts)) {
+      src = src.replace(oldXsts, newXsts);
+    }
+    // doSisuAuth: 在 xsts 对象中添加 gamertag
+    const oldSisu = `    const xsts = {
+      userXUID: ret.AuthorizationToken.DisplayClaims.xui[0].xid || null,
+      userHash: ret.AuthorizationToken.DisplayClaims.xui[0].uhs,
+      XSTSToken: ret.AuthorizationToken.Token,
+      expiresOn: ret.AuthorizationToken.NotAfter
+    }`;
+    const newSisu = `    const xsts = {
+      userXUID: ret.AuthorizationToken.DisplayClaims.xui[0].xid || null,
+      userHash: ret.AuthorizationToken.DisplayClaims.xui[0].uhs,
+      XSTSToken: ret.AuthorizationToken.Token,
+      expiresOn: ret.AuthorizationToken.NotAfter,
+      // ===== PATCH_GAMERTAG =====
+      gamertag: ret.AuthorizationToken.DisplayClaims.xui[0].gtg || null
+    }`;
+    if (src.includes(oldSisu)) {
+      src = src.replace(oldSisu, newSisu);
+    }
+    fs.writeFileSync(xblPath, src, 'utf8');
+    console.log('[patch-auth] XboxTokenManager.js: gamertag 提取 ✓');
+  } else {
+    console.log('[patch-auth] XboxTokenManager.js: 已有补丁,跳过');
+  }
+}

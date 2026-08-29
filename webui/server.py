@@ -324,6 +324,8 @@ def load_config() -> dict:
             "profilesFolder": ns.get("botConfig", {}).get("profilesFolder", None),
             "realmId": ns.get("botConfig", {}).get("realmId", None),
             "realmInvite": ns.get("botConfig", {}).get("realmInvite", None),
+            "xboxAccounts": ns.get("botConfig", {}).get("xboxAccounts", []),
+            "activeXboxAccount": ns.get("botConfig", {}).get("activeXboxAccount", None),
         },
         "githubToken": ns.get("githubToken", ""),
     }
@@ -409,18 +411,26 @@ def save_config(new: dict) -> None:
 
     # 假人 Bot 配置
     bot_form = new.get("bot") or {}
+    # 保留已有的 xboxAccounts 和 activeXboxAccount(这些由登录 API 管理,不通过表单修改)
+    ns_cur = _load_config_module()
+    cur_bot = ns_cur.get("botConfig") or {}
+    # 有活跃 Xbox 账号时强制 online 模式并以该账号身份连接,
+    # 避免保存配置后 bot 变回离线或使用错误 ID
+    active_xbox = cur_bot.get("activeXboxAccount") or None
     apply_block_or_append("botConfig", {
         "enabled": bool(bot_form.get("enabled", True)),
         "mode": str(bot_form.get("mode") or "server").strip(),
         "host": str(bot_form.get("host") or "127.0.0.1").strip(),
         "port": int(bot_form.get("port") or 19132),
-        "username": str(bot_form.get("username") or "FakeBot").strip(),
-        "offline": bool(bot_form.get("offline", True)),
+        "username": active_xbox or str(bot_form.get("username") or "FakeBot").strip(),
+        "offline": False if active_xbox else bool(bot_form.get("offline", True)),
         "version": bot_form.get("version") or None,
         "authTitle": bot_form.get("authTitle") or None,
         "profilesFolder": bot_form.get("profilesFolder") or None,
         "realmId": bot_form.get("realmId") or None,
         "realmInvite": bot_form.get("realmInvite") or None,
+        "xboxAccounts": cur_bot.get("xboxAccounts") or [],
+        "activeXboxAccount": cur_bot.get("activeXboxAccount") or None,
     }, "# 假人 Bot 配置")
 
     # webuiConfig:整体块替换;旧版 config.py 无该块时自动追加到文件末尾
@@ -618,6 +628,12 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if path == "/api/mods":
             self._api_get_mods()
             return
+        if path == "/api/bot/xbox-accounts":
+            self._api_bot_xbox_accounts()
+            return
+        if path == "/api/bot/xbox-login-status":
+            self._api_bot_xbox_login_status()
+            return
         self.send_response(404)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.end_headers()
@@ -655,6 +671,18 @@ class WebUIHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/console":
             self._api_console()
+            return
+        if parsed.path == "/api/bot/xbox-login":
+            self._api_bot_xbox_login()
+            return
+        if parsed.path == "/api/bot/xbox-login-stop":
+            self._api_bot_xbox_login_stop()
+            return
+        if parsed.path == "/api/bot/xbox-account/switch":
+            self._api_bot_xbox_account_switch()
+            return
+        if parsed.path == "/api/bot/xbox-account/remove":
+            self._api_bot_xbox_account_remove()
             return
         self.send_response(404)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
@@ -764,6 +792,162 @@ class WebUIHandler(BaseHTTPRequestHandler):
             })
         except Exception as e:
             self._respond({"ok": False, "message": f"命令执行失败: {e}"})
+
+    # ---- Xbox Live 多账号登录 ----
+
+    def _api_bot_xbox_accounts(self) -> None:
+        """获取已保存的 Xbox Live 账号列表"""
+        if not _require_admin(self):
+            return
+        ns = _load_config_module()
+        bot_cfg = ns.get("botConfig") or {}
+        accounts = bot_cfg.get("xboxAccounts") or []
+        active = bot_cfg.get("activeXboxAccount") or None
+        self._respond({"ok": True, "accounts": accounts, "active": active})
+
+    def _api_bot_xbox_login(self) -> None:
+        """启动 Xbox Live 登录流程 — Gamertag 从认证响应中自动获取,无需传入用户名"""
+        if not _require_admin(self):
+            return
+        if _event_loop is None or _event_loop.is_closed():
+            self._respond({"ok": False, "message": "事件循环未就绪,请稍后重试"})
+            return
+        body = self._read_body()
+        auth_title = (body.get("authTitle") or "").strip() or None
+        try:
+            from mod.bot import XboxLoginManager
+            import asyncio
+            login_mgr = XboxLoginManager.get()
+            fut = asyncio.run_coroutine_threadsafe(
+                login_mgr.start_login(auth_title), _event_loop
+            )
+            result = fut.result(timeout=10)
+            self._respond(result)
+        except Exception as e:
+            self._respond({"ok": False, "message": f"启动登录失败: {e}"})
+
+    def _api_bot_xbox_login_status(self) -> None:
+        """查询 Xbox Live 登录状态"""
+        if not _require_admin(self):
+            return
+        try:
+            from mod.bot import XboxLoginManager
+            login_mgr = XboxLoginManager.get()
+            self._respond({"ok": True, **login_mgr.get_status()})
+        except Exception as e:
+            self._respond({"ok": False, "message": f"查询状态失败: {e}"})
+
+    def _api_bot_xbox_login_stop(self) -> None:
+        """取消 Xbox Live 登录流程"""
+        if not _require_admin(self):
+            return
+        if _event_loop is None or _event_loop.is_closed():
+            self._respond({"ok": True})
+            return
+        try:
+            from mod.bot import XboxLoginManager
+            import asyncio
+            login_mgr = XboxLoginManager.get()
+            fut = asyncio.run_coroutine_threadsafe(
+                login_mgr.stop_login(), _event_loop
+            )
+            fut.result(timeout=5)
+            self._respond({"ok": True, "message": "登录已取消"})
+        except Exception as e:
+            self._respond({"ok": False, "message": f"取消登录失败: {e}"})
+
+    def _api_bot_xbox_account_switch(self) -> None:
+        """切换活跃的 Xbox Live 账号"""
+        if not _require_admin(self):
+            return
+        body = self._read_body()
+        username = (body.get("username") or "").strip()
+        if not username:
+            self._respond({"ok": False, "message": "缺少用户名"})
+            return
+        ns = _load_config_module()
+        bot_cfg = dict(ns.get("botConfig") or {})
+        accounts = list(bot_cfg.get("xboxAccounts") or [])
+        found = False
+        for acc in accounts:
+            if acc.get("username") == username:
+                found = True
+                break
+        if not found:
+            self._respond({"ok": False, "message": f"账号 {username} 未找到"})
+            return
+        # 更新 activeXboxAccount 和 username（通过整体替换 botConfig 块）
+        try:
+            src = _read_config_src()
+            src_new, _ = _replace_block(src, "botConfig", {
+                **bot_cfg,
+                "activeXboxAccount": username,
+                "username": username,
+            })
+            import shutil
+            shutil.copy2(CONFIG_PY, CONFIG_PY_BAK)
+            with open(CONFIG_PY, "w", encoding="utf-8") as f:
+                f.write(src_new)
+            self._respond({"ok": True, "message": f"已切换到账号 {username}"})
+        except Exception as e:
+            self._respond({"ok": False, "message": f"切换失败: {e}"})
+
+    def _api_bot_xbox_account_remove(self) -> None:
+        """移除 Xbox Live 账号"""
+        if not _require_admin(self):
+            return
+        body = self._read_body()
+        username = (body.get("username") or "").strip()
+        if not username:
+            self._respond({"ok": False, "message": "缺少用户名"})
+            return
+        ns = _load_config_module()
+        bot_cfg = dict(ns.get("botConfig") or {})
+        accounts = list(bot_cfg.get("xboxAccounts") or [])
+        new_accounts = [a for a in accounts if a.get("username") != username]
+        if len(new_accounts) == len(accounts):
+            self._respond({"ok": False, "message": f"账号 {username} 未找到"})
+            return
+        # 如果移除的是活跃账号,切到第一个或清空
+        active = bot_cfg.get("activeXboxAccount")
+        if active == username:
+            active = new_accounts[0]["username"] if new_accounts else None
+        try:
+            new_cfg = {**bot_cfg, "xboxAccounts": new_accounts, "activeXboxAccount": active}
+            if active:
+                new_cfg["username"] = active
+            src = _read_config_src()
+            src, _ = _replace_block(src, "botConfig", new_cfg)
+            import shutil
+            shutil.copy2(CONFIG_PY, CONFIG_PY_BAK)
+            with open(CONFIG_PY, "w", encoding="utf-8") as f:
+                f.write(src)
+            # 删除该账号的 token 缓存文件(与 prismarine-auth 相同的 SHA1 前缀),防止重新登录时秒复用
+            self._delete_account_cache(username, bot_cfg)
+            self._respond({"ok": True, "message": f"已移除账号 {username}"})
+        except Exception as e:
+            self._respond({"ok": False, "message": f"移除失败: {e}"})
+
+    def _delete_account_cache(self, username: str, bot_cfg: dict) -> None:
+        """删除指定账号在 nmp-cache 中的 token 缓存文件"""
+        try:
+            import hashlib
+            folder = bot_cfg.get("profilesFolder") or ".minecraft/nmp-cache"
+            if not os.path.isabs(folder):
+                folder = os.path.join(ROOT, "mod", "bot", folder)
+            if not os.path.isdir(folder):
+                return
+            prefix = hashlib.sha1(username.encode("utf-8")).digest().hex()[:6]
+            removed = []
+            for f in os.listdir(folder):
+                if f.startswith(prefix + "_"):
+                    os.remove(os.path.join(folder, f))
+                    removed.append(f)
+            if removed:
+                from lib import shared
+                shared.logger.info(f"[Xbox] 已删除账号 {username} 的缓存: {', '.join(removed)}")
+        except Exception:
+            pass
 
     def _api_auth(self) -> None:
         """登录校验:令牌正确返回 admin;错误返回失败(不自动进入访客模式)"""
