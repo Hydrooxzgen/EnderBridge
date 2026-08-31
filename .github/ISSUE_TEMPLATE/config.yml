@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📖 使用文档 / Wiki & Docs
+    url: https://github.com/Hydrooxzgen/EnderBridge/wiki
+    about: 先查阅 Wiki，很多问题都能在这里找到答案 / Check the Wiki first, answers to many questions can be found here
+  - name: 💬 讨论 / Discussions
+    url: https://github.com/Hydrooxzgen/EnderBridge/discussions
+    about: 提问、分享想法或交流使用经验 / Ask questions, share ideas, or discuss usage

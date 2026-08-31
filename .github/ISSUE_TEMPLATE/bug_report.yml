@@ -1,0 +1,106 @@
+name: 🐛 Bug 报告 / Bug Report
+description: 提交一个 bug 帮助我们改进 / Report a bug to help us improve
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢你花时间报告这个 bug！请尽量填写完整信息，这能帮助我们更快定位问题。
+        Thanks for taking the time to report this bug! Please fill in as much detail as possible.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: 检查清单 / Checklist
+      description: 请确认你已经完成了以下步骤 / Please confirm you've done the following
+      options:
+        - label: 我使用的是最新版本 / I'm using the latest version (b0.3.4)
+          required: true
+        - label: 我搜索过已有的 issue，没有重复 / I searched existing issues, no duplicates
+          required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 问题描述 / Description
+      description: 发生了什么？期望的行为是什么？/ What happened? What did you expect?
+      placeholder: |
+        清晰简洁地描述这个 bug...
+        A clear and concise description of what the bug is...
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤 / Steps to Reproduce
+      description: 如何复现这个问题？/ How to reproduce this issue?
+      placeholder: |
+        1. 启动服务器 '...' / Start the server '...'
+        2. 执行命令 '....' / Run command '....'
+        3. 看到错误 '....' / See error '....'
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: 涉及组件 / Affected Component
+      description: 问题出在哪个部分？/ Which part of the project is affected?
+      options:
+        - 假人 Bot（Xbox 登录 / 连接 / 缓存）/ Fake Player Bot (Xbox login / connect / cache)
+        - 模组加载部分 / Mod Loader
+        - QQ 桥接 / QQ Bridge
+        - AI 对话 / AI Chat
+        - 音乐播放 / Music Playback
+        - 图片像素画 / Image to Pixel Art
+        - Ezmatic (Litematic) / Litematic Importer
+        - Web 管理界面 / Web UI
+        - 更新 / 升级（main.py update）/ Update / Upgrade
+        - 安装 / 依赖 / Installation / Dependencies
+        - 其他 / Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: 运行环境 / Environment
+      description: 请填写你的环境信息 / Please provide your environment info
+      value: |
+        - 操作系统 / OS: Windows / Linux / Android / macOS
+        - Python 版本 / Python version: 
+        - Node.js 版本 / Node.js version: （使用假人 Bot 时必填 / required for Bot feature）
+        - Minecraft 版本 / Minecraft version: 
+        - 服务器类型 / Server type: BDS / 其他客户端 / Other client
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: 相关配置 / Relevant Config
+      description: 请粘贴相关配置片段（注意不要上传 token / API key!!）/ Paste relevant config (mask tokens / API keys!!!)
+      placeholder: |
+        config.py 中相关的片段 / Relevant snippet from config.py
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志 / Logs
+      description: 请粘贴相关日志（控制台输出或 logs/ 目录下的日志）/ Paste relevant logs (console output or from logs/)
+      placeholder: |
+        粘贴日志内容... / Paste log content here...
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: 补充信息 / Additional Context
+      description: 任何其他信息（截图、录屏等）/ Any other context (screenshots, recordings, etc.)
+    validations:
+      required: false
