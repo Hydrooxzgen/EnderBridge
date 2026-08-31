@@ -14,6 +14,7 @@ import zlib
 
 from config import basePath, resolvePath
 from lib.command import Command
+from lib.utils import ClientConnection
 
 # ---- NBT 标签类型常量 ----
 TAG_END = 0
@@ -121,10 +122,13 @@ def parse_nbt(buf):
     return read_tag(root_type)
 
 
-def decompress_and_parse(file_buffer):
+def decompress_and_parse(file_buffer) -> dict:
     """解压 gzip 并解析 NBT"""
     unzipped = zlib.decompress(file_buffer, 16 + zlib.MAX_WBITS)
-    return parse_nbt(unzipped)
+    nbt = parse_nbt(unzipped)
+    if not isinstance(nbt, dict):
+        raise ValueError("无效的 NBT 根标签")
+    return nbt
 
 
 # 从 BlockStates 提取方块索引
@@ -303,7 +307,6 @@ async def parse_litematic(file_path):
     blocks = []
     unmapped_blocks = []
     unmapped_summary = {}
-    slice_size = sx * sz
     idx = 0
     min_y = float("inf")
     max_y = float("-inf")
@@ -536,18 +539,17 @@ class Mod:
     task_seq = 0
     tasks = {}
 
-    def __init__(self, client):
-        self.client = client
-        self.pending = None
-        self.job = None
-        self.page = 1
-        self.preview_timer = None
-        self.preview_data = None
-        self.verify_job = None
-        self.fix_job = None
+    def __init__(self, client: ClientConnection):
+        self.client: ClientConnection = client
+        self.pending: dict | None = None
+        self.job: dict | None = None
+        self.page: int = 1
+        self.preview_timer: asyncio.Task | None = None
+        self.preview_data: dict | None = None
+        self.verify_job: dict | None = None
+        self.fix_job: dict | None = None
 
     def onCommand(self):
-        c = self.client
         return {
             "op": [
                 # l:help [命令名] — 列出所有命令,或查看指定命令的用法
@@ -733,7 +735,7 @@ class Mod:
             elapsed = (time.time() * 1000 - v["startTime"]) / 1000
             lines.append(
                 f"§eLitematic | §fStatus > §i世界检查 §f(任务 #{v['taskId']}: {v['fileName']})\n"
-                f"§f进度: {((v['checked'] / v['total'] * 100) if v['total'] > 0 else 0.0):.1f}% | {v['checked']} / {v['total']} 方块 | 不匹配: {v['mismatches']} | {elapsed:.1f}s"
+                f"§f进度: {f'{(v['checked'] / v['total'] * 100):.1f}' if v['total'] > 0 else '0.0'}% | {v['checked']} / {v['total']} 方块 | 不匹配: {v['mismatches']} | {elapsed:.1f}s"
             )
         if self.fix_job:
             f = self.fix_job
@@ -1000,6 +1002,8 @@ class Mod:
     async def run(self):
         task = self.pending
         self.pending = None
+        if task is None:
+            return
 
         data = task["data"]
         origin = task["origin"]
@@ -1185,6 +1189,8 @@ class Mod:
     # l:verify <ID> map: 检查任务投影中方块映射错误
     def verify(self, id_, sender):
         task = Mod.tasks.get(id_)
+        if task is None:
+            return
         data = task["data"]
         unmapped = data.get("unmappedBlocks") or []
         if not unmapped:
@@ -1206,6 +1212,8 @@ class Mod:
     async def verify_world(self, id_, sender):
         c = self.client
         task = Mod.tasks.get(id_)
+        if task is None:
+            return
         data = task["data"]
         origin = task["origin"]
         blocks = data["blocks"]
@@ -1218,10 +1226,11 @@ class Mod:
         CONC = 4
         mismatches = []
         checked = 0
-        self.verify_job = {
+        vj: dict = {
             "cancelled": False, "taskId": id_, "fileName": task["file"],
             "total": len(blocks), "checked": 0, "mismatches": 0, "startTime": time.time() * 1000,
         }
+        self.verify_job = vj
         try:
             async def check_one(b):
                 nonlocal checked
@@ -1242,12 +1251,12 @@ class Mod:
                             await asyncio.sleep(0.3)
                 if not matched:
                     mismatches.append({"x": ax, "y": ay, "z": az, "expect": b["identifier"], "cmd": b["cmd"] or b["identifier"]})
-                    self.verify_job["mismatches"] = len(mismatches)
+                    vj["mismatches"] = len(mismatches)
                 checked += 1
-                self.verify_job["checked"] = checked
+                vj["checked"] = checked
 
             i = 0
-            while i < len(blocks) and not self.verify_job["cancelled"]:
+            while i < len(blocks) and not vj["cancelled"]:
                 batch = blocks[i:i + CONC]
                 await asyncio.gather(*(check_one(b) for b in batch))
                 if checked >= 500 and checked % 500 == 0:
@@ -1285,6 +1294,8 @@ class Mod:
     async def fix(self, id_, sender, fb):
         c = self.client
         task = Mod.tasks.get(id_)
+        if task is None:
+            return
         data = task["data"]
         n1 = 0
         n2 = 0
@@ -1295,34 +1306,35 @@ class Mod:
         if mismatches:
             n1 = len(mismatches)
             CONC = 4
-            self.fix_job = {
+            fj: dict = {
                 "cancelled": False, "taskId": id_, "fileName": task["file"],
                 "total": len(mismatches), "done": 0, "startTime": time.time() * 1000,
             }
+            self.fix_job = fj
             try:
                 async def place_one(m):
                     idn = re.sub(r"^minecraft:", "", m["expect"])
                     cmd = f"/setblock {m['x']} {m['y']} {m['z']} {m['cmd'] or idn}"
-                    for attempt in range(3):
+                    for _ in range(3):
                         try:
                             d = await c.runCommand(cmd, 3000)
                             if isinstance(d, dict) and d.get("body", {}).get("statusCode") == 0:
                                 fixed.append(f"§7({m['x']},{m['y']},{m['z']}) §f→ §e{idn}")
-                                self.fix_job["done"] += 1
+                                fj["done"] += 1
                                 return
                         except Exception:
                             pass
                         await asyncio.sleep(0.3)
                     failed.append(m)
-                    self.fix_job["done"] += 1
+                    fj["done"] += 1
 
                 i = 0
-                while i < len(mismatches) and not self.fix_job["cancelled"]:
+                while i < len(mismatches) and not fj["cancelled"]:
                     batch = mismatches[i:i + CONC]
                     await asyncio.gather(*(place_one(m) for m in batch))
                     i += CONC
                 # 中断时未处理的差异保留,供再次 $fix 继续
-                for idx in range(self.fix_job["done"], len(mismatches)):
+                for idx in range(fj["done"], len(mismatches)):
                     failed.append(mismatches[idx])
             finally:
                 self.fix_job = None
@@ -1440,6 +1452,8 @@ class Mod:
         ]
 
     async def spawn_preview_entities(self):
+        if not self.preview_data:
+            return
         origin = self.preview_data["origin"]
         data = self.preview_data["data"]
         x1, y1, z1 = origin["x"], origin["y"], origin["z"]
@@ -1541,4 +1555,4 @@ class Mod:
         self.verify_job = None
         self.fix_job = None
         self.preview_data = None
-        self.client = None
+        self.client = None  # type: ignore[assignment]  # 销毁标记;类型注解保持 ClientConnection,使其余方法的成员访问不报 Optional

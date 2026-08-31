@@ -19,6 +19,11 @@ import sys
 ROOT = os.path.dirname(os.path.abspath(__file__))
 ONLY_CHECK = "--check" in sys.argv
 
+# 最低 Python 版本: 3.12+ (代码使用了 PEP 701 嵌套 f-string 等 3.12 语法)
+if sys.version_info < (3, 12):
+    print(f"EnderBridge 需要 Python 3.12+,当前版本: {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
+    sys.exit(1)
+
 REQUIREMENTS = os.path.join(ROOT, "requirements.txt")
 
 # 依赖名 -> 检测用的导入名(处理包名与导入名不一致的情况)

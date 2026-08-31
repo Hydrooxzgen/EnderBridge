@@ -30,7 +30,7 @@
     <img src="https://img.shields.io/github/release-date-pre/Hydrooxzgen/EnderBridge?style=flat-square" alt="Release Date">
   </a>
   <a href="https://www.python.org/">
-    <img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python&logoColor=white" alt="Python 3.10+">
+    <img src="https://img.shields.io/badge/python-3.12%2B-blue?style=flat-square&logo=python&logoColor=white" alt="Python 3.12+">
   </a>
   <a href="https://nodejs.org/">
     <img src="https://img.shields.io/badge/Node.js-Required-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js Required">
@@ -80,7 +80,7 @@ EnderBridge is a Python-based mod loader for Minecraft Bedrock Edition. It runs 
 
 | 项目 / Item | 要求 / Requirement |
 |------|------|
-| Python | 3.8+（推荐 3.10+ / recommended 3.10+） |
+| Python | 3.12+ |
 | Node.js | 假人 Bot 功能需要 / Required for fake player bot feature |
 | 游戏 / Game | Minecraft 基岩版（支持 WebSocket 连接，如 BDS 服务器 / 基岩版客户端）<br/>Minecraft Bedrock with WebSocket support (e.g. BDS server / Bedrock client) |
 | QQ（可选 / optional） | NapCat 等 OneBot v11 实现 / NapCat or other OneBot v11 implementations |
