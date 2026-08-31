@@ -11,6 +11,36 @@
   <a href="https://github.com/Hydrooxzgen/EnderBridge/stargazers">
     <img src="https://img.shields.io/github/stars/Hydrooxzgen/EnderBridge?style=social" alt="Star EnderBridge">
   </a>
+  <a href="https://github.com/Hydrooxzgen/EnderBridge/forks">
+    <img src="https://img.shields.io/github/forks/Hydrooxzgen/EnderBridge?style=social" alt="Fork EnderBridge">
+  </a>
+  <a href="https://github.com/Hydrooxzgen/EnderBridge/watchers">
+    <img src="https://img.shields.io/github/watchers/Hydrooxzgen/EnderBridge?style=social" alt="Watch EnderBridge">
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/Hydrooxzgen/EnderBridge/blob/main/LICENSE">
+    <img src="https://img.shields.io/github/license/Hydrooxzgen/EnderBridge?style=flat-square" alt="License: GPL-3.0">
+  </a>
+  <a href="https://github.com/Hydrooxzgen/EnderBridge/releases">
+    <img src="https://img.shields.io/github/v/release/Hydrooxzgen/EnderBridge?include_prereleases&style=flat-square" alt="Release">
+  </a>
+  <a href="https://github.com/Hydrooxzgen/EnderBridge/releases">
+    <img src="https://img.shields.io/github/release-date-pre/Hydrooxzgen/EnderBridge?style=flat-square" alt="Release Date">
+  </a>
+  <a href="https://www.python.org/">
+    <img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python&logoColor=white" alt="Python 3.10+">
+  </a>
+  <a href="https://nodejs.org/">
+    <img src="https://img.shields.io/badge/Node.js-Required-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js Required">
+  </a>
+  <a href="https://github.com/Hydrooxzgen/EnderBridge/commits/main">
+    <img src="https://img.shields.io/github/last-commit/Hydrooxzgen/EnderBridge?style=flat-square" alt="Last Commit">
+  </a>
+  <a href="https://github.com/Hydrooxzgen/EnderBridge/issues">
+    <img src="https://img.shields.io/github/issues/Hydrooxzgen/EnderBridge?style=flat-square" alt="Issues">
+  </a>
 </p>
 
 ---
