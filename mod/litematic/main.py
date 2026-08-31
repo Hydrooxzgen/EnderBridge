@@ -733,7 +733,7 @@ class Mod:
             elapsed = (time.time() * 1000 - v["startTime"]) / 1000
             lines.append(
                 f"§eLitematic | §fStatus > §i世界检查 §f(任务 #{v['taskId']}: {v['fileName']})\n"
-                f"§f进度: {f'{(v['checked'] / v['total'] * 100):.1f}' if v['total'] > 0 else '0.0'}% | {v['checked']} / {v['total']} 方块 | 不匹配: {v['mismatches']} | {elapsed:.1f}s"
+                f"§f进度: {((v['checked'] / v['total'] * 100) if v['total'] > 0 else 0.0):.1f}% | {v['checked']} / {v['total']} 方块 | 不匹配: {v['mismatches']} | {elapsed:.1f}s"
             )
         if self.fix_job:
             f = self.fix_job

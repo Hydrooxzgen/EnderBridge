@@ -833,25 +833,6 @@ with open(CONFIG_EXAMPLE, "r", encoding="utf-8") as f:
 _m = re.search(r"is_first_run = (True|False)", _example_src)
 is_first_run = _m is not None and _m.group(1) == "True"
 
-# 首次运行检查:is_first_run 为 True 时启动图形化配置向导(向导中可设置 Web 管理端口)
-# --load-without-config 模式跳过向导,直接使用默认配置运行
-if is_first_run and not WANT_LOAD_WITHOUT_CONFIG:
-    shared.logger.info("检测到首次运行或是被更新/改动，启动图形化配置向导...")
-    from lib.setup import start_setup_server
-    try:
-        asyncio.run(start_setup_server())
-        shared.logger.info("配置已保存，正在自动启动服务器...")
-    except Exception as error:
-        shared.logger.error(f"配置向导异常: {error}")
-        close_log_streams()
-        sys.exit(1)
-    # 向导已基于模板生成新的 config.py:重新加载配置模块,
-    # 使下方服务器启动代码使用用户在向导中保存的值(不退出,自动启动服务器)
-    import importlib
-    import config as _config_module
-    importlib.reload(_config_module)
-    wsConfig = _config_module.wsConfig
-
 # ===== WebSocket 服务器 =====
 import websockets
 from websockets.protocol import State
@@ -1381,6 +1362,25 @@ async def destroy():
 
 
 if __name__ == "__main__":
+    # 首次运行检查:is_first_run 为 True 时启动图形化配置向导(向导中可设置 Web 管理端口)
+    # --load-without-config 模式跳过向导,直接使用默认配置运行
+    # 放在 __main__ 块内:保证 import main 无副作用(CI 导入检查等场景可安全执行)
+    if is_first_run and not WANT_LOAD_WITHOUT_CONFIG:
+        shared.logger.info("检测到首次运行或是被更新/改动，启动图形化配置向导...")
+        from lib.setup import start_setup_server
+        try:
+            asyncio.run(start_setup_server())
+            shared.logger.info("配置已保存，正在自动启动服务器...")
+        except Exception as error:
+            shared.logger.error(f"配置向导异常: {error}")
+            close_log_streams()
+            sys.exit(1)
+        # 向导已基于模板生成新的 config.py:重新加载配置模块,
+        # 使服务器启动代码使用用户在向导中保存的值(不退出,自动启动服务器)
+        import importlib
+        import config as _config_module
+        importlib.reload(_config_module)
+        wsConfig = _config_module.wsConfig
     try:
         asyncio.run(main())
     finally:

@@ -26,12 +26,12 @@ jobs:
       - name: 语法编译检查 (py_compile)
         run: |
           python -m compileall -q main.py lib mod webui
-          echo "✅ 所有 Python 文件语法检查通过"
+          echo "[PASS] 所有 Python 文件语法检查通过"
 
       - name: 导入检查 (确保模块可加载)
         run: |
           python -c "import main"
-          echo "✅ main.py 导入成功"
+          echo "main.py 导入成功"
 
   node-check:
     name: Node 补丁脚本检查
@@ -48,14 +48,14 @@ jobs:
         run: |
           cd mod/bot
           for f in scripts/*.cjs; do
-            node --check "$f" && echo "✅ $f 语法通过"
+            node --check "$f" && echo "[PASS] $f 语法通过"
           done
 
       - name: 补丁脚本可执行性检查
         run: |
           cd mod/bot
           node scripts/patch-bedrock-versions.cjs || echo "⚠️ 脚本未运行 (node_modules 缺失属正常,语法已通过)"
-          echo "✅ 补丁脚本检查完成"
+          echo "[PASS] 补丁脚本检查完成"
 
   yaml-check:
     name: Issue 模板 YAML 检查
@@ -81,5 +81,5 @@ jobs:
               sys.exit(0)
           for f in files:
               yaml.safe_load(open(f, encoding="utf-8"))
-              print(f"✅ {f} 语法通过")
+              print(f"[PASS] {f} 语法通过")
           EOF
