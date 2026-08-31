@@ -33,6 +33,14 @@ jobs:
           python -c "import main"
           echo "main.py 导入成功"
 
+      - name: 安装 pytest
+        run: pip install pytest
+
+      - name: 单元测试 (pytest)
+        run: |
+          python -m pytest tests/ -q
+          echo "[PASS] 单元测试全部通过"
+
   node-check:
     name: Node 补丁脚本检查
     runs-on: ubuntu-latest

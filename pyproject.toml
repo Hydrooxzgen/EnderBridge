@@ -1,0 +1,4 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+norecursedirs = ["mod", "lib", "wiki", "resources", "structures", "logs", ".git", "*__pycache__*"]

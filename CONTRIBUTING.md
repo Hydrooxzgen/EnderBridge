@@ -174,7 +174,7 @@ docs: 更新 README 安装说明
 
 | Job | 内容 |
 |-----|------|
-| **python-check** | `python -m compileall` 编译检查 + `import main` 导入检查 |
+| **python-check** | `python -m compileall` 编译检查 + `import main` 导入检查 + `pytest` 单元测试 |
 | **node-check** | Bot 补丁脚本语法检查 |
 | **yaml-check** | Issue 模板 YAML 语法检查 |
 
@@ -186,7 +186,19 @@ python -m compileall -q . -x "useful|\.git|resources|structures|wiki|logs|__pyca
 
 # 导入检查（注意：会读 config.py，首次运行前需确保 config.py 存在）
 python -c "import main"
+
+# 单元测试（无需 config.py，测试会自动 mock）
+python -m pytest tests/ -v
 ```
+
+### 单元测试 / Unit Tests
+
+测试位于 `tests/` 目录，覆盖 NBT 解析、位索引提取、方块状态格式化、空气层裁剪、矩形合并等核心逻辑：
+
+- 运行全部测试：`python -m pytest tests/ -v`
+- 只跑单个文件：`python -m pytest tests/test_nbt.py -v`
+- 修改核心逻辑后**必须**运行测试确认无回归
+- 新增功能时建议补充对应测试（参考现有测试的构造方式）
 
 ### 注意事项 / Important Notes
 
