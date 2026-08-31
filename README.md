@@ -373,6 +373,14 @@ See wiki section "8. 内置模组详解 → Bot 假人详解" for details.
 
 ---
 
+## 🤝 贡献 / Contributing
+
+欢迎提交 Issue 和 Pull Request！请先阅读 [贡献指南 / Contributing Guide](CONTRIBUTING.md)。
+
+Issues and PRs are welcome! Please read the [Contributing Guide](CONTRIBUTING.md) first.
+
+---
+
 ## 📄 许可 / License
 
 本项目基于 [GPL-3.0](LICENSE) 许可证开源，仅供学习交流使用。Minecraft 及相关名称、商标归 Mojang Studios 所有。
