@@ -595,6 +595,10 @@ class ClientModManager:
             if not msg or not type_ or not sender:
                 return
 
+            # 过滤系统消息: say/me 等命令产生的输出不应被重新处理,否则会死循环
+            if sender in ("Server", "server") or sender.startswith("* "):
+                return
+
             # 记录消息日志
             self.log(sender, msg, type_)
 

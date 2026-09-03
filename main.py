@@ -15,7 +15,7 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PY = os.path.join(ROOT, "config.py")
 CONFIG_EXAMPLE = os.path.join(ROOT, "config.example.py")
 VERSION = "b0.3.4"
-DESCRIPTION = "现在更新版本后会自动更新nodejs所需依赖" # 仅当不为None时从Github拉取更新日志，反之则直接显示该变量内容。
+DESCRIPTION = None # 仅当不为None时从Github拉取更新日志，反之则直接显示该变量内容。
 GITHUB_REPO = "Hydrooxzgen/EnderBridge"  # You can edit this to your own repository if you fork it :)
 WANT_RESET = "--reset-all" in sys.argv
 WANT_EXPORT = "export" in sys.argv
@@ -839,6 +839,8 @@ from websockets.protocol import State
 
 # 当前所有连接(含未初始化完成的),用于关闭时统一通知
 connections = set()
+# 已发送过连接通知的客户端 IP（避免 MCBE 握手重连时重复发送）
+_notified_ips = set()
 server = None
 # 主事件循环引用(供 Web 管理界面线程提交关闭协程,实现一键重启)
 _main_loop = None
@@ -916,8 +918,10 @@ async def connection_handler(ws):
     # 通知服务端 Mod 客户端已连接
     ServerModManager.on_client_connect(conn, is_main_client)
 
-    # 广播连接通知
-    conn.tell(f"§e{wsConfig.get('name', 'starws')} | §fSystem > §i已连接")
+    # 广播连接通知（用 /me 避免 tellraw 重复显示）
+    if client_ip not in _notified_ips:
+        _notified_ips.add(client_ip)
+        conn._fire_send_command(f"me §e{wsConfig.get('name', 'starws')} | §fSystem > §i已连接")
     initialized = True
 
     # 等待消息循环结束(连接关闭)
@@ -934,6 +938,7 @@ async def connection_handler(ws):
 
     # ===== 客户端断开连接 =====
     connections.discard(conn)
+    _notified_ips.discard(client_ip)
     shared.logger.info(f"客户端 {client_ip} 连接已关闭")
 
     # 通知服务端 Mod 客户端已断开连接
@@ -1111,6 +1116,7 @@ def _console_help():
     console_out(f"  exit/quit  - 退出程序")
     console_out(f"  {cp}chat ...   - Mod 命令(如 {cp}chat help)")
     console_out(f"  {cp}bot ...    - 假人管理(如 {cp}bot start)")
+    console_out(f"  {cp}message .. - 全体通知(如 {cp}message 服务器即将重启)")
 
 
 def _console_status():

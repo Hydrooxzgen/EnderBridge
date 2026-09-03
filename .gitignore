@@ -1,6 +1,7 @@
 mod/__pycache__/
 lib/__pycache__/
 __pycache__/
+.pytest_cache/
 .venv./
 .idea/
 logs/*
@@ -20,3 +21,5 @@ importtime.log
 mod/bot/node_modules/
 mod/bot/.minecraft/
 mod/bot/TheCandyBot/
+logs/
+CHANGELOG.md

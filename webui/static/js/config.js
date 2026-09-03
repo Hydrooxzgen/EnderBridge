@@ -8,7 +8,7 @@ var MOD_CATALOG = {
     ["AI", "mod.ai"], ["PermissionCommands", "mod.permission"], ["Tool", "mod.tool"],
     ["Position", "mod.position"], ["Music", "mod.music"], ["MCFunc", "mod.mcfunc"],
     ["MoreWS", "mod.morews"], ["Ezmatic", "mod.ezmatic.main"], ["ImageMod", "mod.image.main"],
-    ["Bot", "mod.bot"],
+    ["Message", "mod.message"], ["Bot", "mod.bot"],
   ],
   server: [
     ["chat", "mod.read"], ["spam", "mod.spam"],

@@ -50,6 +50,8 @@ STATIC_DIR = os.path.join(WEBUI_DIR, "static")
 CONFIG_PY = os.path.join(ROOT, "config.py")
 CONFIG_PY_BAK = os.path.join(ROOT, "config.py.bak")
 PERMISSION_JSON = os.path.join(ROOT, "permission.json")
+# 仅作代码内兜底提示:真实版本由 main.py 启动时通过 set_app_info(main.VERSION) 注入,
+# 实际显示/更新检测均以 main.py 的 VERSION 为准,此处无需随发布同步更新。
 APP_VERSION = "b0.2.1"
 
 # 静态资源 MIME 类型(前端可自由使用 css/js/图片/字体等,甚至接入 Vue 等框架)
@@ -105,7 +107,7 @@ def set_event_loop(loop):
 
 # 应用信息(main.py 注入):用于 Release Notes 获取
 _github_repo = ""    # e.g. "UserXYY123/EnderBridge"
-_app_version = APP_VERSION    # e.g. "b0.1.0"
+_app_version = APP_VERSION    # 初始为兜底值,set_app_info 后为 main.py 的真实 VERSION
 _description = None  # 非 None 时直接用作 Release Notes,跳过 GitHub API
 
 
@@ -370,7 +372,12 @@ def save_config(new: dict) -> None:
     apply_block("features", new.get("features") or {})
     apply_block("rateLimit", new.get("rateLimit") or {})
     # Mod 开关 / 刷屏数据 / 资源路径:整块替换;缺失时自动追加
-    apply_block_or_append("mods", new.get("mods") or {"client": {}, "server": {}}, "# Mod 加载配置（模块名，相对项目根目录）")
+    # Message 是核心 mod(通知),保存时强制注入,防止被 UI 误删
+    mods_form = new.get("mods") or {"client": {}, "server": {}}
+    mods_form.setdefault("client", {})
+    mods_form.setdefault("server", {})
+    mods_form["client"].setdefault("Message", "mod.message")
+    apply_block_or_append("mods", mods_form, "# Mod 加载配置（模块名，相对项目根目录）")
     apply_block_or_append("spam", new.get("spam") or {}, "# 刷屏数据配置")
     apply_block_or_append("basePath", new.get("basePath") or {}, "# 文件路径配置（所有平台统一使用相对路径）")
 
@@ -1343,6 +1350,8 @@ class WebUIHandler(BaseHTTPRequestHandler):
             return
         # 处理器在后台线程执行,这里先响应,保证浏览器能收到结果
         self._respond({"ok": True, "message": "服务器正在重启,请稍候..."})
+
+
 
 
 def _check_importable(mod_path: str) -> bool:
