@@ -611,6 +611,24 @@ class ClientModManager:
             if ServerModManager.has_command(msg.split(" ")[0]):
                 return
 
+            # 协议同意检查:未同意协议的玩家只能使用 $agree 和 $message 命令
+            msg_cmd = msg.split(" ")[0].lower()
+            try:
+                from config import commandPrefix as _cp
+            except Exception:
+                _cp = "$"
+            if msg_cmd not in (f"{_cp}agree", f"{_cp}message"):
+                msg_mod = self.mod_instances.get("Message")
+                if msg_mod and hasattr(msg_mod, "check_agreement"):
+                    if not msg_mod.check_agreement(sender):
+                        if hasattr(msg_mod, "show_agreement_dialog"):
+                            msg_mod.show_agreement_dialog(sender)
+                        self.client.tell(
+                            f"§cMessage | §fError > §i请先同意服务器协议（输入 {_cp}agree）",
+                            sender,
+                        )
+                        return
+
             # 内置命令:终端侧的本地命令,任何人可用,无需权限分级
             token = msg.split(" ")[0]  # e.g. "$help"
             token_suffix = token[len(Command.command_prefix):].strip()  # e.g. "help"

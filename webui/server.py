@@ -328,7 +328,32 @@ def load_config() -> dict:
             "activeXboxAccount": ns.get("botConfig", {}).get("activeXboxAccount", None),
         },
         "githubToken": ns.get("githubToken", ""),
+        "agreement": {
+            "enabled": ns.get("messageConfig", {}).get("agreement", {}).get("enabled", False),
+            "title": ns.get("messageConfig", {}).get("agreement", {}).get("title", "📋 服务器协议"),
+            "text": ns.get("messageConfig", {}).get("agreement", {}).get("text", ""),
+        },
     }
+
+
+def _get_agreed_players() -> list:
+    """从 ModStorage 读取已同意协议的玩家列表"""
+    try:
+        from lib.mods import StorageManager
+        store = StorageManager.get_store("client_Message")
+        return store.get("agreed_players", [])
+    except Exception:
+        return []
+
+
+def _clear_agreed_players() -> None:
+    """清除 ModStorage 中的已同意玩家列表"""
+    try:
+        from lib.mods import StorageManager
+        store = StorageManager.get_store("client_Message")
+        store.delete("agreed_players")
+    except Exception:
+        pass
 
 
 def save_config(new: dict) -> None:
@@ -408,6 +433,17 @@ def save_config(new: dict) -> None:
         "gmsg": str(sapi_form.get("gmsg") or "gmsg").strip(),
         "smsg": str(sapi_form.get("smsg") or "smsg").strip(),
     }, "# 消息通道配置")
+
+    # 消息通知与协议配置(由 agreement 页面单独保存,此处保留默认值)
+    agreement_form = new.get("agreement") or {}
+    if agreement_form:
+        apply_block_or_append("messageConfig", {
+            "agreement": {
+                "enabled": bool(agreement_form.get("enabled", False)),
+                "title": str(agreement_form.get("title") or "📋 服务器协议").strip() or "📋 服务器协议",
+                "text": str(agreement_form.get("text") or ""),
+            },
+        }, "# 消息通知与协议配置")
 
     # 假人 Bot 配置
     bot_form = new.get("bot") or {}
@@ -603,6 +639,12 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if path == "/console":
             self._serve_page("console.html")
             return
+        if path == "/agreement":
+            self._serve_page("agreement.html")
+            return
+        if path == "/api/agreement":
+            self._api_get_agreement()
+            return
         if path.startswith("/static/"):
             self._serve_static(path)
             return
@@ -646,6 +688,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/permissions":
             self._api_save_permissions()
             return
+        if parsed.path == "/api/agreement":
+            self._api_save_agreement()
+            return
         self.send_response(404)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.end_headers()
@@ -682,6 +727,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/bot/xbox-account/remove":
             self._api_bot_xbox_account_remove()
+            return
+        if parsed.path == "/api/agreement/clear":
+            self._api_clear_agreement()
             return
         self.send_response(404)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
@@ -1343,6 +1391,78 @@ class WebUIHandler(BaseHTTPRequestHandler):
             return
         # 处理器在后台线程执行,这里先响应,保证浏览器能收到结果
         self._respond({"ok": True, "message": "服务器正在重启,请稍候..."})
+
+    # ---- 协议管理 API ----
+
+    def _api_get_agreement(self) -> None:
+        """读取协议配置和已同意玩家列表"""
+        if not _require_any(self):
+            return
+        ns = _load_config_module()
+        agreement_cfg = ns.get("messageConfig", {}).get("agreement", {})
+        is_admin = _auth_role(self) == "admin"
+        agreed = _get_agreed_players() if is_admin else []
+        self._respond({
+            "ok": True,
+            "config": {
+                "enabled": agreement_cfg.get("enabled", False),
+                "title": agreement_cfg.get("title", "📋 服务器协议"),
+                "text": agreement_cfg.get("text", ""),
+            },
+            "agreed": agreed,
+        })
+
+    def _api_save_agreement(self) -> None:
+        """保存协议配置（直接写入 config.py 的 messageConfig 块）"""
+        if not _require_admin(self):
+            return
+        body = self._read_body()
+        if not body:
+            self._respond({"ok": False, "message": "请求数据为空"})
+            return
+        try:
+            import shutil
+            src = _read_config_src()
+            new_block = {
+                "agreement": {
+                    "enabled": bool(body.get("enabled", False)),
+                    "title": str(body.get("title") or "📋 服务器协议").strip() or "📋 服务器协议",
+                    "text": str(body.get("text") or ""),
+                },
+            }
+            new_src, ok = _replace_block(src, "messageConfig", new_block)
+            if not ok:
+                # 不存在则追加
+                text = _py_dump(new_block)
+                if not new_src.endswith("\n"):
+                    new_src += "\n"
+                new_src += f"\n# 消息通知与协议配置\nmessageConfig = {text}\n"
+            # 备份并写入
+            bak = CONFIG_PY + ".bak"
+            if os.path.exists(CONFIG_PY):
+                shutil.copy2(CONFIG_PY, bak)
+            with open(CONFIG_PY, "w", encoding="utf-8") as f:
+                f.write(new_src)
+        except Exception as e:
+            self._respond({"ok": False, "message": f"保存失败: {e}"})
+            return
+        self._respond({"ok": True, "message": "协议配置已保存"})
+
+    def _api_clear_agreement(self) -> None:
+        """清除所有已同意协议的玩家记录"""
+        if not _require_admin(self):
+            return
+        _clear_agreed_players()
+        # 同时清除 Message mod 内存中的冷却记录
+        try:
+            from lib.current import Current
+            if Current.client and hasattr(Current.client, "Message"):
+                mod = Current.client.Message
+                if hasattr(mod, "_dialog_cooldown"):
+                    mod._dialog_cooldown.clear()
+        except Exception:
+            pass
+        self._respond({"ok": True, "message": "已清除所有协议同意记录"})
 
 
 def _check_importable(mod_path: str) -> bool:
