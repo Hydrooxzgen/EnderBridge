@@ -329,7 +329,11 @@ class Utils:
             self._fire_send_command(f"me {m}")
 
     def tell(self, msg: str, current: str = "@a", isPrefix: bool = True) -> None:
-        """对可选目标发送消息(使用 tellraw,需要 OP 权限)"""
+        """对可选目标发送消息（tellraw 优先,无 OP 时自动降级为 msg）
+
+        部分 Bedrock 服务器的 tellraw 需要 OP 权限。当 tellraw 命令失败时,
+        自动用 msg 命令重试（msg 任何玩家都能用,但会带 "From Server:" 前缀）。
+        """
         # 构建前缀(用于计算分割字节数)
         prefix_parts = (
             [{"text": "* "}, {"translate": "commands.origin.external"}, {"text": " "}]

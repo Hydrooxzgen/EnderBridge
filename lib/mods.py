@@ -595,6 +595,10 @@ class ClientModManager:
             if not msg or not type_ or not sender:
                 return
 
+            # 过滤系统消息: say/me 等命令产生的输出不应被重新处理,否则会死循环
+            if sender in ("Server", "server") or sender.startswith("* "):
+                return
+
             # 记录消息日志
             self.log(sender, msg, type_)
 
@@ -610,24 +614,6 @@ class ClientModManager:
             # 服务端 Mod 专属命令(如 $chat)由服务端处理,客户端不拦截、不报"未知的命令"
             if ServerModManager.has_command(msg.split(" ")[0]):
                 return
-
-            # 协议同意检查:未同意协议的玩家只能使用 $agree 和 $message 命令
-            msg_cmd = msg.split(" ")[0].lower()
-            try:
-                from config import commandPrefix as _cp
-            except Exception:
-                _cp = "$"
-            if msg_cmd not in (f"{_cp}agree", f"{_cp}message"):
-                msg_mod = self.mod_instances.get("Message")
-                if msg_mod and hasattr(msg_mod, "check_agreement"):
-                    if not msg_mod.check_agreement(sender):
-                        if hasattr(msg_mod, "show_agreement_dialog"):
-                            msg_mod.show_agreement_dialog(sender)
-                        self.client.tell(
-                            f"§cMessage | §fError > §i请先同意服务器协议（输入 {_cp}agree）",
-                            sender,
-                        )
-                        return
 
             # 内置命令:终端侧的本地命令,任何人可用,无需权限分级
             token = msg.split(" ")[0]  # e.g. "$help"

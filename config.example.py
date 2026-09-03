@@ -136,7 +136,7 @@ mods = {
 # 消息通知与协议配置
 messageConfig = {
     "agreement": {
-        "enabled": False,
+        "enabled": True,
         "title": "📋 服务器协议",
         "text": "欢迎来到本服务器！\n\n请遵守以下规则：\n1. 尊重其他玩家\n2. 禁止作弊和破坏\n3. 禁止刷屏和骚扰\n\n输入 agree 同意协议后即可游戏。",
     },

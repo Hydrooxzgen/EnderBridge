@@ -127,6 +127,7 @@ MOD_REGISTRY = {
         "MoreWS": {"path": "mod.morews", "label": "MoreWS"},
         "Ezmatic": {"path": "mod.ezmatic.main", "label": "Ezmatic 结构", "basePath": "ezmatic"},
         "ImageMod": {"path": "mod.image.main", "label": "图片", "basePath": "image"},
+        "Message": {"path": "mod.message", "label": "消息通知 / 协议"},
     },
     "server": {
         "chat": {"path": "mod.read", "label": "聊天 / 终端"},
@@ -149,6 +150,9 @@ def _build_mods(f) -> dict:
         meta = MOD_REGISTRY["client"].get(name)
         if meta:
             mods["client"][name] = meta["path"]
+    # Message 是核心 mod(协议/通知),始终自动注入
+    if "Message" not in mods["client"]:
+        mods["client"]["Message"] = MOD_REGISTRY["client"]["Message"]["path"]
     for name in f.get("serverMods") or []:
         meta = MOD_REGISTRY["server"].get(name)
         if meta:
@@ -252,6 +256,14 @@ RULES = [
         "username": f.get("botUsername", "FakeBot"),
         "authTitle": f.get("botAuthTitle") or None,
         "profilesFolder": f.get("botProfilesFolder") or None,
+    }))},
+    # messageConfig 块(协议/通知配置)
+    {"key": "消息协议配置", "apply": make_block_rule("messageConfig", lambda f: _py_dump({
+        "agreement": {
+            "enabled": True,
+            "title": "📋 服务器协议",
+            "text": "欢迎来到本服务器！\n\n请遵守以下规则：\n1. 尊重其他玩家\n2. 禁止作弊和破坏\n3. 禁止刷屏和骚扰\n\n输入 agree 同意协议后即可游戏。",
+        },
     }))},
     # 注意:config.py 不包含 isFirstRun 标记(判定仅存在于模板 config.example.py)
 ]
