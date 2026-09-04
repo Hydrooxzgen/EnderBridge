@@ -602,18 +602,21 @@ class ClientModManager:
             # 记录消息日志
             self.log(sender, msg, type_)
 
-            # 审计日志:记录玩家聊天
-            from lib.logger import audit_log
-            if type_ == "chat":
-                audit_log.append("chat", sender, msg)
-
             # 仅处理 chat 类型且长度小于 256 的消息
             if type_ != "chat" or len(msg) >= 256:
                 return
 
             # 检查消息是否以命令前缀开头(动态读取 config.py,与 WebUI 保存保持同步)
             Command.reload_prefix()
-            if not msg.startswith(Command.command_prefix):
+            is_command = msg.startswith(Command.command_prefix)
+
+            # 审计日志:普通聊天记 chat;命令在 execute() 执行后记录(含结果)
+            from lib.logger import audit_log
+            if not is_command:
+                audit_log.append("chat", sender, msg)
+
+            # 非命令直接返回
+            if not is_command:
                 return
 
             # 服务端 Mod 专属命令(如 $chat)由服务端处理,客户端不拦截、不报"未知的命令"
@@ -710,11 +713,11 @@ class ClientModManager:
                 result = cmd.execute(sender, msg)
 
                 if result:
-                    # 审计日志:记录命令执行(成功和失败都记录)
+                    # 审计日志:记录命令执行结果(成功/失败)
                     from lib.logger import audit_log
                     status = "OK" if result.get("status") else "FAIL"
                     detail = result.get("message", "") if not result.get("status") else ""
-                    audit_log.append("command", sender, f"{msg} [{status}]{' ' + detail if detail else ''}")
+                    audit_log.append("command", sender, f"{msg} → [{status}]{' ' + detail if detail else ''}")
 
                     # 命令执行出错时通知发送者
                     if not result.get("status") and result.get("message"):
