@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EnderBridge - 审计日志</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<script>document.documentElement.setAttribute('data-theme',localStorage.getItem('enderbridge_theme')||(window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark'));</script>
+</head>
+<body>
+<aside class="sidebar">
+  <div class="brand">
+    <span class="logo">⛏️</span>
+    <div>
+      <div class="name" id="srvName">EnderBridge</div>
+      <div class="ver">Web 管理</div>
+    </div>
+  </div>
+  <div class="nav-item" data-page="dashboard"><span>📊</span><span>仪表盘</span></div>
+  <div class="nav-item" data-page="permissions"><span>👥</span><span>权限管理</span></div>
+  <div class="nav-item" data-page="config"><span>⚙️</span><span>功能设置</span></div>
+  <div class="nav-item" data-page="mods"><span>🧩</span><span>Mod 管理</span></div>
+  <div class="nav-item" data-page="console"><span>💻</span><span>控制台</span></div>
+  <div class="nav-item active" data-page="audit"><span>📋</span><span>审计日志</span></div>
+  <div class="nav-item" data-page="update"><span>🔄</span><span>检查更新</span></div>
+  <div class="spacer"></div>
+  <button class="theme-toggle" id="themeToggle"><span class="theme-icon">🌙</span><span class="theme-label">深色模式</span></button>
+  <div class="guest-badge" id="guestBadge">👤 访客模式</div>
+  <div class="nav-item hidden" id="adminLoginBtn"><span>🔑</span><span>管理员登录</span></div>
+  <div class="logout" id="logoutBtn"><span>🚪</span><span>退出登录</span></div>
+</aside>
+<div class="main">
+  <h2>📋 审计日志</h2>
+  <div class="card">
+    <div style="font-weight:600;margin-bottom:8px;">筛选</div>
+    <div class="row gap-10" style="align-items:stretch;flex-wrap:wrap;">
+      <select id="auditTypeFilter" style="padding:8px 12px;border:1px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:14px;">
+        <option value="">全部类型</option>
+        <option value="chat">💬 聊天</option>
+        <option value="command">⚡ 命令</option>
+        <option value="terminal">🖥️ 终端</option>
+        <option value="connect">🟢 连接</option>
+        <option value="disconnect">🔴 断开</option>
+      </select>
+      <input type="text" id="auditSenderFilter" placeholder="按玩家名过滤…" style="flex:1;min-width:160px;padding:8px 12px;border:1px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:14px;" autocomplete="off" />
+      <button class="btn btn-sm btn-primary" id="auditQueryBtn">🔍 查询</button>
+      <button class="btn btn-sm" id="auditAutoBtn">🔄 自动刷新: 关</button>
+    </div>
+  </div>
+  <div class="card" style="margin-top:12px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <span style="font-weight:600;">日志记录 <span id="auditCount" class="td-dim" style="font-weight:normal;"></span></span>
+      <span id="auditStatus" class="td-dim" style="font-size:12px;"></span>
+    </div>
+    <div id="auditLogTable" style="background:#0f172a;border:1px solid #1e293b;border-radius:6px;overflow-x:auto;max-height:600px;overflow-y:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr style="border-bottom:1px solid #1e293b;color:#94a3b8;">
+            <th style="padding:8px 12px;text-align:left;white-space:nowrap;">时间</th>
+            <th style="padding:8px 12px;text-align:left;white-space:nowrap;">类型</th>
+            <th style="padding:8px 12px;text-align:left;white-space:nowrap;">发送者</th>
+            <th style="padding:8px 12px;text-align:left;">内容</th>
+          </tr>
+        </thead>
+        <tbody id="auditLogBody"></tbody>
+      </table>
+      <div id="auditEmpty" style="padding:24px;text-align:center;color:#64748b;display:none;">暂无日志记录</div>
+    </div>
+    <div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center;">
+      <button class="btn btn-sm" id="auditPrevBtn" disabled>⬅ 上一页</button>
+      <span id="auditPageInfo" class="td-dim" style="font-size:13px;"></span>
+      <button class="btn btn-sm" id="auditNextBtn" disabled>下一页 ➡</button>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+<script src="/static/js/app.js"></script>
+<script src="/static/js/audit.js"></script>
+</body>
+</html>

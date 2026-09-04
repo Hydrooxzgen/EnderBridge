@@ -640,6 +640,12 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if path == "/api/bot/xbox-login-status":
             self._api_bot_xbox_login_status()
             return
+        if path == "/audit":
+            self._serve_page("audit.html")
+            return
+        if path == "/api/audit-logs":
+            self._api_audit_logs()
+            return
         self.send_response(404)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.end_headers()
@@ -1351,7 +1357,27 @@ class WebUIHandler(BaseHTTPRequestHandler):
         # 处理器在后台线程执行,这里先响应,保证浏览器能收到结果
         self._respond({"ok": True, "message": "服务器正在重启,请稍候..."})
 
+    # ---- 审计日志 API ----
 
+    def _api_audit_logs(self) -> None:
+        """读取审计日志(admin/guest 均可)"""
+        if not _require_any(self):
+            return
+        parsed = urllib.parse.urlparse(self.path)
+        qs = urllib.parse.parse_qs(parsed.query)
+        sender = qs.get("sender", [None])[0]
+        type_ = qs.get("type", [None])[0]
+        try:
+            limit = min(int(qs.get("limit", ["50"])[0]), 200)
+        except (ValueError, IndexError):
+            limit = 50
+        try:
+            offset = max(int(qs.get("offset", ["0"])[0]), 0)
+        except (ValueError, IndexError):
+            offset = 0
+        from lib.logger import audit_log
+        result = audit_log.query(sender=sender, type_=type_, limit=limit, offset=offset)
+        self._respond({"ok": True, **result})
 
 
 def _check_importable(mod_path: str) -> bool:

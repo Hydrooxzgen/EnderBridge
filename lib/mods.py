@@ -602,6 +602,11 @@ class ClientModManager:
             # 记录消息日志
             self.log(sender, msg, type_)
 
+            # 审计日志:记录玩家聊天
+            from lib.logger import audit_log
+            if type_ == "chat":
+                audit_log.append("chat", sender, msg)
+
             # 仅处理 chat 类型且长度小于 256 的消息
             if type_ != "chat" or len(msg) >= 256:
                 return
@@ -705,6 +710,12 @@ class ClientModManager:
                 result = cmd.execute(sender, msg)
 
                 if result:
+                    # 审计日志:记录命令执行(成功和失败都记录)
+                    from lib.logger import audit_log
+                    status = "OK" if result.get("status") else "FAIL"
+                    detail = result.get("message", "") if not result.get("status") else ""
+                    audit_log.append("command", sender, f"{msg} [{status}]{' ' + detail if detail else ''}")
+
                     # 命令执行出错时通知发送者
                     if not result.get("status") and result.get("message"):
                         self.client.tell(f"§cCommand | §fError > §i{result['message']}", sender)
