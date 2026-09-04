@@ -1,9 +1,12 @@
 """日志模块
 
 提供分级日志输出(控制台 + 文件),支持颜色高亮与日志文件自动创建。
+内置审计日志环形缓冲,供 WebUI 实时查看玩家聊天/命令/连接事件。
 """
 import os
 import sys
+import threading
+from collections import deque
 from datetime import datetime, timezone, timedelta
 
 # 日志输出目录
@@ -138,3 +141,49 @@ class Logger:
 
     def debug(self, message: str) -> None:
         self.log(message, "debug")
+
+
+# ===== 审计日志(环形缓冲) =====
+
+class _AuditLog:
+    """内存审计日志:环形缓冲最近 N 条玩家行为记录,线程安全。
+
+    每条记录格式:
+      {"ts": "2026-09-04T12:00:00.000+08:00",
+       "type": "chat"|"command"|"connect"|"disconnect"|"terminal",
+       "sender": "玩家名或Terminal",
+       "message": "原始文本"}
+    """
+
+    def __init__(self, max_size: int = 200):
+        self._buffer: deque = deque(maxlen=max_size)
+        self._lock = threading.Lock()
+
+    def append(self, type_: str, sender: str, message: str) -> None:
+        """追加一条审计记录"""
+        record = {
+            "ts": beijing_time(),
+            "type": type_,
+            "sender": sender,
+            "message": message,
+        }
+        with self._lock:
+            self._buffer.append(record)
+
+    def query(self, sender: str = None, type_: str = None,
+              limit: int = 50, offset: int = 0) -> list:
+        """查询审计记录(支持按玩家名/类型过滤,分页)"""
+        with self._lock:
+            items = list(self._buffer)
+        # 倒序(最新在前)
+        items.reverse()
+        if sender:
+            s = sender.lower()
+            items = [r for r in items if s in r["sender"].lower()]
+        if type_:
+            items = [r for r in items if r["type"] == type_]
+        total = len(items)
+        return {"records": items[offset:offset + limit], "total": total}
+
+
+audit_log = _AuditLog()

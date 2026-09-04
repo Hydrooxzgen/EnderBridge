@@ -14,7 +14,7 @@ from uuid import uuid4
 ROOT = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PY = os.path.join(ROOT, "config.py")
 CONFIG_EXAMPLE = os.path.join(ROOT, "config.example.py")
-VERSION = "b0.3.4"
+VERSION = "b0.3.5"
 DESCRIPTION = None # 仅当不为None时从Github拉取更新日志，反之则直接显示该变量内容。
 GITHUB_REPO = "Hydrooxzgen/EnderBridge"  # You can edit this to your own repository if you fork it :)
 WANT_RESET = "--reset-all" in sys.argv
@@ -854,6 +854,8 @@ async def connection_handler(ws):
     # 获取客户端 IP
     client_ip = ws.remote_address[0] if ws.remote_address else "unknown"
     shared.logger.info(f"客户端 {client_ip} 已连接")
+    from lib.logger import audit_log
+    audit_log.append("connect", client_ip, "客户端已连接")
 
     # 分配唯一 ID,用于客户端 Mod 存储和事件总线隔离
     conn = ClientConnection(ws)
@@ -940,6 +942,8 @@ async def connection_handler(ws):
     connections.discard(conn)
     _notified_ips.discard(client_ip)
     shared.logger.info(f"客户端 {client_ip} 连接已关闭")
+    from lib.logger import audit_log
+    audit_log.append("disconnect", client_ip, "客户端已断开")
 
     # 通知服务端 Mod 客户端已断开连接
     ServerModManager.on_client_disconnect(conn, conn is Current.client)
@@ -1168,6 +1172,10 @@ async def _dispatch_console_command(text):
     text = text.strip()
     if not text:
         return
+
+    # 审计日志:记录终端输入
+    from lib.logger import audit_log
+    audit_log.append("terminal", "Terminal", text)
 
     # Bot Shell 模式:所有输入转发给 bot
     bot_queue = getattr(shared, "bot_shell_queue", None)

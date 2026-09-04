@@ -329,44 +329,10 @@ class Utils:
             self._fire_send_command(f"me {m}")
 
     def tell(self, msg: str, current: str = "@a", isPrefix: bool = True) -> None:
-        """对可选目标发送消息（tellraw 优先,无 OP 时自动降级为 msg）
-
-        部分 Bedrock 服务器的 tellraw 需要 OP 权限。当 tellraw 命令失败时,
-        自动用 msg 命令重试（msg 任何玩家都能用,但会带 "From Server:" 前缀）。
-        """
-        # 构建前缀(用于计算分割字节数)
-        prefix_parts = (
-            [{"text": "* "}, {"translate": "commands.origin.external"}, {"text": " "}]
-            if isPrefix
-            else []
-        )
-
-        # 按最终命令的真实长度分割(含 JSON 转义),确保每条命令不超过 461 字节
-        max_cmd = 461
-        start = 0
-        text = msg
-        while start < len(text):
-            end = start + 1
-            while end <= len(text):
-                send_object = {"rawtext": [*prefix_parts, {"text": text[start:end]}]}
-                cmd = f"tellraw {current} {json.dumps(send_object, ensure_ascii=False, separators=(',', ':'))}"
-                if len(cmd.encode("utf-8")) > max_cmd:
-                    break
-                end += 1
-            # 单个字符就超限时强制推进,避免死循环
-            if end - 1 <= start:
-                end = start + 2
-            cut = end - 1
-            # 避免把代理对(emoji)截断
-            if cut > start and 0xD800 <= ord(text[cut - 1]) <= 0xDBFF:
-                cut -= 1
-            if cut <= start:
-                cut = start + 1
-            m = text[start:cut]
-            send_object = {"rawtext": [*prefix_parts, {"text": m}]}
-            cmd = f"tellraw {current} {json.dumps(send_object, ensure_ascii=False, separators=(',', ':'))}"
-            self._fire_send_command(cmd)
-            start = cut
+        """对可选目标发送消息（统一用 /me 广播，不需要 OP）"""
+        # 分割消息并遍历发送
+        for m in Utils.splitByBytes(msg, 420):
+            self._fire_send_command(f"me {m}")
 
     def _fire_send_command(self, command: str) -> None:
         """fire-and-forget 发送命令(内部吞错)"""

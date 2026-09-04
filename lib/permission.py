@@ -124,17 +124,20 @@ class PermissionManager:
 
         try:
             permission = await cls.get()
+            q = queried.lower()
 
-            if permission.get("owner") == queried:
+            # 大小写不敏感匹配
+            owner = permission.get("owner")
+            if owner and owner.lower() == q:
                 return 3
 
-            if queried in (permission.get("blocker") or []):
+            if q in (item.lower() for item in (permission.get("blocker") or [])):
                 return -1
 
-            if queried in (permission.get("op") or []):
+            if q in (item.lower() for item in (permission.get("op") or [])):
                 return 2
 
-            if queried in (permission.get("user") or []):
+            if q in (item.lower() for item in (permission.get("user") or [])):
                 return 1
 
             return 0
