@@ -314,6 +314,17 @@ def load_config() -> dict:
             "gmsg": sapi.get("gmsg", "gmsg"),
             "smsg": sapi.get("smsg", "smsg"),
         },
+        "messageConfig": {
+            "announcements": (ns.get("messageConfig", {}) or {}).get("announcements", {
+                "enabled": False,
+                "interval": 300,
+                "messages": [
+                    "欢迎来到本服务器！请遵守游戏规则。",
+                    "加入我们的 QQ 群：123456789",
+                    "服务器官网：https://example.com",
+                ],
+            }),
+        },
         "bot": {
             "enabled": ns.get("botConfig", {}).get("enabled", True),
             "mode": ns.get("botConfig", {}).get("mode", "server"),
@@ -415,6 +426,26 @@ def save_config(new: dict) -> None:
         "gmsg": str(sapi_form.get("gmsg") or "gmsg").strip(),
         "smsg": str(sapi_form.get("smsg") or "smsg").strip(),
     }, "# 消息通道配置")
+
+    # 消息通知与公告配置
+    message_form = new.get("messageConfig") or {}
+    announce_form = message_form.get("announcements") or {}
+    apply_block_or_append("messageConfig", {
+        "agreement": {
+            "enabled": True,
+            "title": "📋 服务器协议",
+            "text": "欢迎来到本服务器！\n\n请遵守以下规则：\n1. 尊重其他玩家\n2. 禁止作弊和破坏\n3. 禁止刷屏和骚扰\n\n输入 agree 同意协议后即可游戏。",
+        },
+        "announcements": {
+            "enabled": bool(announce_form.get("enabled", False)),
+            "interval": int(announce_form.get("interval", 300)),
+            "messages": announce_form.get("messages", [
+                "欢迎来到本服务器！请遵守游戏规则。",
+                "加入我们的 QQ 群：123456789",
+                "服务器官网：https://example.com",
+            ]),
+        },
+    }, "# 消息通知与公告配置")
 
     # 假人 Bot 配置
     bot_form = new.get("bot") or {}

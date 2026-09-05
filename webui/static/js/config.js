@@ -142,9 +142,15 @@ function loadConfig() {
 
     var sapi = data.config.sapi || {};
     var bot = data.config.bot || {};
+    var announce = (data.config.messageConfig || {}).announcements || {};
 
     $("cfg-gmsg").value = sapi.gmsg || "gmsg";
     $("cfg-smsg").value = sapi.smsg || "smsg";
+
+    $("cfg-announce-enabled").checked = !!announce.enabled;
+    $("cfg-announce-interval").value = announce.interval || 300;
+    $("cfg-announce-messages").value = (announce.messages || []).join("\n");
+    toggleSub("announceFields", $("cfg-announce-enabled").checked);
 
     $("cfg-bot-host").value = bot.host || "127.0.0.1";
     $("cfg-bot-port").value = bot.port || 19132;
@@ -186,10 +192,10 @@ function loadConfig() {
 }
 
 // Toggle 展开/收起
-["cfg-qq", "cfg-ratelimit", "cfg-webui"].forEach(function (id) {
+["cfg-qq", "cfg-ratelimit", "cfg-webui", "cfg-announce-enabled"].forEach(function (id) {
   var el = $(id);
   if (el) el.addEventListener("change", function () {
-    var subId = id === "cfg-qq" ? "qqFields" : id === "cfg-ratelimit" ? "rlFields" : "webuiFields";
+    var subId = id === "cfg-qq" ? "qqFields" : id === "cfg-ratelimit" ? "rlFields" : id === "cfg-webui" ? "webuiFields" : "announceFields";
     toggleSub(subId, this.checked);
   });
 });
@@ -408,6 +414,11 @@ function saveConfig() {
   };
   var utils = { tellAllToTell: $("cfg-tellall").checked, enablePolling: $("cfg-polling").checked };
   var sapi = { gmsg: $("cfg-gmsg").value.trim() || "gmsg", smsg: $("cfg-smsg").value.trim() || "smsg" };
+  var announce = {
+    enabled: $("cfg-announce-enabled").checked,
+    interval: parseInt($("cfg-announce-interval").value, 10) || 300,
+    messages: $("cfg-announce-messages").value.split(/\n+/).map(function (s) { return s.trim(); }).filter(Boolean),
+  };
 
   var mods = cfgData.mods || {}; mods.client = mods.client || {}; mods.server = mods.server || {};
   ["client", "server"].forEach(function (side) {
@@ -453,6 +464,7 @@ function saveConfig() {
       githubToken: $("cfg-github-token").value.trim(),
       features: f, rateLimit: rl, webui: webui, ai: ai,
       utils: utils, sapi: sapi, bot: bot, mods: mods, spam: spam, basePath: basePath,
+      messageConfig: { announcements: announce },
     }
   };
   api("/config", { method: "PUT", body: JSON.stringify(payload) })

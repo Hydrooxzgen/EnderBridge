@@ -352,6 +352,26 @@
             </div>
           </div>
         </div>
+
+        <div class="cfg-section" id="cfgCardAnnouncements">
+          <h3>📢 定时公告</h3>
+          <div class="cfg-switch">
+            <label class="switch"><input type="checkbox" id="cfg-announce-enabled"><span class="track"></span></label>
+            <span class="switch-label">启用定时公告 (messageConfig.announcements.enabled)</span>
+          </div>
+          <div class="cfg-sub-box show" id="announceFields">
+            <div class="cfg-grid">
+              <div class="cfg-field">
+                <label>间隔 (秒)</label>
+                <input id="cfg-announce-interval" class="cfg-input" type="number" min="10" />
+              </div>
+            </div>
+            <div class="cfg-field cfg-grid-full">
+              <label>公告内容（每行一条，支持多行）</label>
+              <textarea id="cfg-announce-messages" class="cfg-input" rows="6" placeholder="欢迎来到本服务器！&#10;加入我们的 QQ 群：123456789&#10;服务器官网：https://example.com"></textarea>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- ===== 系统管理 ===== -->
