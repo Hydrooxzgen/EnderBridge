@@ -188,6 +188,7 @@ function loadConfig() {
 
     renderModSwitches();
     syncConfigCards();
+    renderAliasList();
   }).catch(function () {});
 }
 
@@ -199,6 +200,50 @@ function loadConfig() {
     toggleSub(subId, this.checked);
   });
 });
+
+// ===== 命令别名管理 =====
+function renderAliasList() {
+  var container = $("aliasList");
+  if (!container) return;
+  var aliases = (cfgData.commandAliases || {});
+  var html = "";
+  for (var cmd in aliases) {
+    var aliasList = aliases[cmd].join(", ");
+    html += '<div class="alias-item" style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;margin-bottom:8px;">' +
+      '<span style="font-weight:600;min-width:120px;">' + escapeHtml(cmd) + '</span>' +
+      '<span style="flex:1;color:var(--text-dim);">' + escapeHtml(aliasList) + '</span>' +
+      '<button class="btn btn-sm btn-ghost remove-alias" data-cmd="' + escapeHtml(cmd) + '">🗑️ 删除</button>' +
+      '</div>';
+  }
+  if (!html) html = '<p class="hint" style="text-align:center;padding:16px;">暂无自定义别名，点击上方按钮添加</p>';
+  container.innerHTML = html;
+  // 绑定删除事件
+  container.querySelectorAll(".remove-alias").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var cmd = this.getAttribute("data-cmd");
+      if (confirm("确定要删除 " + cmd + " 的所有别名吗？")) {
+        delete cfgData.commandAliases[cmd];
+        renderAliasList();
+      }
+    });
+  });
+}
+
+function showAddAliasModal() {
+  var cmd = prompt("请输入主命令名（如 message, bot, function 等）：");
+  if (!cmd) return;
+  var aliases = prompt("请输入别名，多个用逗号分隔（如 msg, m）：");
+  if (!aliases) return;
+  var aliasArr = aliases.split(",").map(function (s) { return s.trim(); }).filter(Boolean);
+  if (!aliasArr.length) return;
+  cfgData.commandAliases = cfgData.commandAliases || {};
+  cfgData.commandAliases[cmd] = aliasArr;
+  renderAliasList();
+  toast("已添加别名: " + cmd + " → " + aliasArr.join(", "), "ok");
+}
+
+var addAliasBtn = $("addAliasBtn");
+if (addAliasBtn) addAliasBtn.addEventListener("click", showAddAliasModal);
 
 function toggleBotMode() {
   var mode = $("cfg-bot-mode-server").checked ? "server" : "realm";
@@ -465,6 +510,7 @@ function saveConfig() {
       features: f, rateLimit: rl, webui: webui, ai: ai,
       utils: utils, sapi: sapi, bot: bot, mods: mods, spam: spam, basePath: basePath,
       messageConfig: { announcements: announce },
+      commandAliases: cfgData.commandAliases || {},
     }
   };
   api("/config", { method: "PUT", body: JSON.stringify(payload) })

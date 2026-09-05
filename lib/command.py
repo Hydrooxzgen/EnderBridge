@@ -6,35 +6,26 @@ import asyncio
 import re
 import time
 
+# 使用新的配置加载器
+from lib.config_loader import get_config
+
 
 def _load_config():
-    """从 config.py 读取命令前缀与限流配置(强制重新加载,确保 WebUI 保存后生效)
-
-    使用 importlib.reload 强制重新执行 config.py,绕过 Python 模块缓存。
-    """
-    import importlib
-    try:
-        import config
-        importlib.reload(config)
-        command_prefix = getattr(config, "commandPrefix", None) or getattr(config, "command_prefix", "$")
-        rate_limit = getattr(config, "rateLimit", None) or getattr(config, "rate_limit", None)
-        return command_prefix, rate_limit
-    except Exception:
-        return "$", None
+    """读取命令前缀与限流配置"""
+    config = get_config()
+    command_prefix = config.get("commandPrefix") or config.get("command_prefix") or "$"
+    rate_limit = config.get("rateLimit") or config.get("rate_limit")
+    return command_prefix, rate_limit
 
 
 def _load_command_aliases() -> dict:
-    """从 config.py 读取用户自定义命令别名
+    """读取用户自定义命令别名
 
     Returns:
         dict: {主命令名: [别名1, 别名2, ...]}
     """
-    try:
-        import config
-        importlib.reload(config)
-        return getattr(config, "commandAliases", {}) or {}
-    except Exception:
-        return {}
+    config = get_config()
+    return config.get("commandAliases", {}) or {}
 
 
 def apply_config_aliases(cmd: "Command") -> "Command":

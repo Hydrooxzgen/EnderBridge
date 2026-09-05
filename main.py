@@ -13,9 +13,11 @@ from uuid import uuid4
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PY = os.path.join(ROOT, "config.py")
+CONFIG_JSON = os.path.join(ROOT, "config.json")
 CONFIG_EXAMPLE = os.path.join(ROOT, "config.example.py")
-VERSION = "b0.3.6 feat2 dev2"
-DESCRIPTION = "新增支持用户自定义的别名系统" # 仅当不为None时从Github拉取更新日志，反之则直接显示该变量内容。
+CONFIG_EXAMPLE_JSON = os.path.join(ROOT, "config.example.json")
+VERSION = "b0.3.6 feat3 dev1"
+DESCRIPTION = "updated EBC to version b0.3.6" # 仅当不为None时从Github拉取更新日志，反之则直接显示该变量内容。
 GITHUB_REPO = "Hydrooxzgen/EnderBridge"  # You can edit this to your own repository if you fork it :)
 WANT_RESET = "--reset-all" in sys.argv
 WANT_EXPORT = "export" in sys.argv
@@ -54,22 +56,28 @@ if not WANT_RESET and not WANT_EXPORT and not _dependencies_ok():
 # ===== 引导阶段(必须早于任何依赖 config.py 的模块加载) =====
 # 依赖 config.py 的模块(lib/logger.py、lib/utils.py、lib/mods.py 等)均为延迟加载,
 # 因此 config.py 缺失时(如 --reset-all 之后)可先在此根据模板自动补全,保证程序可启动。
-if not WANT_RESET and not os.path.exists(CONFIG_PY):
-    with open(CONFIG_EXAMPLE, "r", encoding="utf-8") as f:
-        tpl = f.read()
-    if WANT_LOAD_WITHOUT_CONFIG:
-        # --load-without-config:直接使用模板全部内容(含 is_first_run),后续跳过向导
-        cfg = tpl
-    else:
-        # config.py 只存真实配置:剔除模板携带的 isFirstRun 标记块
-        cfg = re.sub(
-            r"# ===== 首次运行 =====[\s\S]*?is_first_run = (True|False)\r?\n(\r?\n)?",
-            "",
-            tpl,
-        )
-    with open(CONFIG_PY, "w", encoding="utf-8") as f:
-        f.write(cfg)
-    print("未找到 config.py，已根据模板自动生成默认配置（可在向导中修改）")
+if not WANT_RESET and not os.path.exists(CONFIG_PY) and not os.path.exists(CONFIG_JSON):
+    # 优先生成 config.json，若无模板则回退到 config.py
+    if os.path.exists(CONFIG_EXAMPLE_JSON):
+        import shutil as _shutil_cfg
+        _shutil_cfg.copy2(CONFIG_EXAMPLE_JSON, CONFIG_JSON)
+        print("未找到 config.json，已根据模板自动生成默认配置（可在向导中修改）")
+    elif os.path.exists(CONFIG_EXAMPLE):
+        with open(CONFIG_EXAMPLE, "r", encoding="utf-8") as f:
+            tpl = f.read()
+        if WANT_LOAD_WITHOUT_CONFIG:
+            # --load-without-config:直接使用模板全部内容(含 is_first_run),后续跳过向导
+            cfg = tpl
+        else:
+            # config.py 只存真实配置:剔除模板携带的 isFirstRun 标记块
+            cfg = re.sub(
+                r"# ===== 首次运行 =====[\s\S]*?is_first_run = (True|False)\r?\n(\r?\n)?",
+                "",
+                tpl,
+            )
+        with open(CONFIG_PY, "w", encoding="utf-8") as f:
+            f.write(cfg)
+        print("未找到 config.py，已根据模板自动生成默认配置（可在向导中修改）")
 
 # permission.json 缺失时从模板复制(权限系统依赖该文件)
 PERMISSION_JSON = os.path.join(ROOT, "permission.json")
@@ -84,7 +92,7 @@ if not WANT_RESET and not os.path.exists(PERMISSION_JSON) and os.path.exists(PER
 # ===== 一键重置:python main.py --reset-all =====
 # 清除所有配置文件(不启动服务器),并将模板 config.example.py 的 is_first_run 复位为 True
 if WANT_RESET:
-    files = ["config.py", "config.py.bak", "permission.json", "permission.json.bak"]
+    files = ["config.py", "config.py.bak", "config.json", "config.json.bak", "permission.json", "permission.json.bak"]
     removed = []
     for name in files:
         p = os.path.join(ROOT, name)
@@ -92,16 +100,21 @@ if WANT_RESET:
             os.remove(p)
             removed.append(name)
     # 复位模板标记,下次启动自动进入向导重新配置
-    try:
-        with open(CONFIG_EXAMPLE, "r", encoding="utf-8") as f:
-            src = f.read()
-        next_ = re.sub(r"is_first_run = (True|False)", "is_first_run = True", src)
-        if next_ != src:
-            with open(CONFIG_EXAMPLE, "w", encoding="utf-8") as f:
-                f.write(next_)
-    except Exception:
-        # 模板不可写时静默忽略
-        pass
+    for tpl_path, tpl_pattern, tpl_repl in [
+        (CONFIG_EXAMPLE_JSON, r'"is_first_run"\s*:\s*(true|false)', '"is_first_run": true'),
+        (CONFIG_EXAMPLE, r"is_first_run = (True|False)", "is_first_run = True"),
+    ]:
+        try:
+            if not os.path.exists(tpl_path):
+                continue
+            with open(tpl_path, "r", encoding="utf-8") as f:
+                src = f.read()
+            next_ = re.sub(tpl_pattern, tpl_repl, src)
+            if next_ != src:
+                with open(tpl_path, "w", encoding="utf-8") as f:
+                    f.write(next_)
+        except Exception:
+            pass
     print("========================================")
     print("  配置已重置")
     print("========================================")
@@ -800,6 +813,15 @@ if ROOT not in sys.path:
 # basePath(music/mcfunc/ezmatic/image)与 ezmatic 导出目录 structures
 # 缺失时自动创建,避免首次运行找不到目录(如投影目录 resources/ezmatic)。
 try:
+    from lib.config_loader import get_config as _get_cfg
+    _cfg = _get_cfg()
+    _cfg_format = _cfg.get("_config_format", "json")
+except Exception:
+    _cfg = {}
+    _cfg_format = "py"
+
+# 兼容路径适配函数:JSON 格式下 basePath/resolvePath 不存在,直接使用相对路径
+try:
     from config import basePath, resolvePath
     _resource_dirs = [resolvePath(d) for d in list(basePath.values())]
 except Exception:
@@ -818,20 +840,68 @@ for _d in _resource_dirs:
     except OSError:
         pass
 
-# ===== 动态加载依赖 config.py 的本地模块(此时 config.py 必然已存在) =====
+# ===== 动态加载依赖 config 的本地模块 =====
 from lib import shared
 from lib.logger import close_log_streams
 from lib.utils import ClientConnection, Utils
 from lib.current import Current
 from lib.mods import ClientModManager, ServerModManager
-from config import wsConfig
 
-# 根目录同时存在 config.py 时,config 会被当作普通模块而非包,无法用
-# "from config.example import ..." 导入,这里改为读取模板文件提取标记。
-with open(CONFIG_EXAMPLE, "r", encoding="utf-8") as f:
-    _example_src = f.read()
-_m = re.search(r"is_first_run = (True|False)", _example_src)
-is_first_run = _m is not None and _m.group(1) == "True"
+# 从 config_loader 获取 wsConfig(JSON 优先,Python 回退)
+wsConfig = _cfg.get("wsConfig", {})
+if not wsConfig:
+    try:
+        from config import wsConfig as _py_wsConfig
+        wsConfig = _py_wsConfig
+    except Exception:
+        wsConfig = {}
+
+# is_first_run 检测:JSON 优先,Python 回退
+is_first_run = _cfg.get("is_first_run", None)
+if is_first_run is None:
+    if os.path.exists(CONFIG_JSON):
+        try:
+            with open(CONFIG_JSON, "r", encoding="utf-8") as f:
+                _j = json.load(f)
+            is_first_run = _j.get("is_first_run", False)
+        except Exception:
+            is_first_run = False
+    else:
+        try:
+            with open(CONFIG_EXAMPLE, "r", encoding="utf-8") as f:
+                _example_src = f.read()
+            _m = re.search(r"is_first_run = (True|False)", _example_src)
+            is_first_run = _m is not None and _m.group(1) == "True"
+        except Exception:
+            is_first_run = False
+
+# 旧版本配置迁移提醒
+if _cfg.get("_is_legacy", False) and _cfg.get("_config_format") == "py":
+    _ver = _cfg.get("_version", "unknown")
+    print("========================================")
+    print(f"  当前配置为旧版本格式 (v{_ver})")
+    print("  建议迁移到 config.json 格式以获得更好支持")
+    print("  运行 py main.py --migrate-config 可自动迁移")
+    print("  运行 py main.py --downgrade-config 可降级回 Python 格式")
+    print("========================================")
+
+# --migrate-config: 将 config.py 迁移到 config.json
+if "--migrate-config" in sys.argv:
+    from lib.config_loader import migrate_py_to_json
+    if migrate_py_to_json():
+        print("迁移完成，请重启服务器")
+    else:
+        print("迁移失败: 未找到 config.py 或迁移出错")
+    sys.exit(0)
+
+# --downgrade-config: 将 config.json 降级为 config.py
+if "--downgrade-config" in sys.argv:
+    from lib.config_loader import migrate_json_to_py
+    if migrate_json_to_py():
+        print("降级完成，请重启服务器")
+    else:
+        print("降级失败: 未找到 config.json 或降级出错")
+    sys.exit(0)
 
 # ===== WebSocket 服务器 =====
 import websockets

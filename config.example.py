@@ -1,4 +1,5 @@
 # 模板配置文件
+# EBC0.1.0标准格式配置文件
 # ===== 首次运行 =====
 # True：启动图形化配置向导（浏览器访问 http://127.0.0.1:18888 完成配置）
 # 保存后自动生成 config.py 与 permission.json，并将本标记写为 False
@@ -56,7 +57,7 @@ commandPrefix = "$"
 
 # GitHub API Token（可选，用于减少 API 速率限制）
 # 在 https://github.com/settings/tokens 创建，只需 public_repo 读取权限
-# ⚠️ 请勿泄露此 Token，不要提交到公开仓库
+# **请勿泄露此 Token，不要提交到公开仓库**
 githubToken = ""
 
 sapiConfig = {
