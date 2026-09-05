@@ -180,6 +180,7 @@ All built-in mods share a **single-entry command** format: `<prefix><entry> <met
 | AI 对话 / AI | `ai` | `$ai chat 你好` |
 | 终端 / 聊天 / Terminal | `chat` | `$chat list`（终端与游戏内均可用） |
 | 刷屏 / Spam | `spam` | `$spam stop`（终端与游戏内均可用） |
+| 消息通知 / Message | `message` | `$message <消息内容>`（仅终端可用） |
 | Ezmatic 建筑 / Ezmatic | `ezmatic` | `$ezmatic preview <文件>` |
 | 假人 / Bot | `bot` | `$bot spawn Steve`（需要 Node.js + 启用 Bot Mod） |
 
@@ -260,6 +261,7 @@ EnderBridge/
 └── mod/                     # 模组目录 / Mods directory
     ├── ai.py                # AI 对话模组 / AI chat mod
     ├── mcfunc.py            # .mcfunction 执行（嵌套、定时循环）/ .mcfunction executor
+    ├── message.py            # 消息通知 Mod / Message notification mod
     ├── morews.py            # 扩展 WebSocket 双向转发 / Extra WebSocket forwarder
     ├── music.py             # MIDI 音乐播放 / MIDI music player
     ├── permission.py        # 游戏内权限命令 / In-game permission commands
@@ -269,8 +271,8 @@ EnderBridge/
     ├── tool.py              # 工具 / 命令帮助 / 管理 / Tools & command help
     ├── image/               # 图片转像素画 / Image to pixel art
     ├── ezmatic/             # Ezmatic 建筑导入 / Ezmatic build import
-│   ├── qq/                  # QQ 群互通（NapCat）/ QQ bridge (NapCat)
-│   └── bot/                 # 假人 Bot（Node.js bedrock-protocol）/ Fake player bot
+    ├── qq/                   # QQ 群互通（NapCat）/ QQ bridge (NapCat)
+    └── bot/                  # 假人 Bot（Node.js bedrock-protocol）/ Fake player bot
 ```
 
 ---
@@ -289,6 +291,7 @@ EnderBridge/
 | `MoreWS` | 客户端 / Client | 同时连接多个外部 WebSocket 服务端并双向转发 / Multi-WebSocket forwarding |
 | `Ezmatic` | 客户端 / Client | `.litematic` 建筑导入、预览、修复、导出 `.mcstructure` / Build import & export |
 | `ImageMod` | 客户端 / Client | 图片转 MC 像素画（HSV/LAB 颜色匹配）/ Image to pixel art |
+| `Message` | 客户端 / Client | 消息通知：管理员从终端向全体玩家发送聊天广播（仅终端可用）/ Admin broadcast from the terminal to all players |
 | `QQ` | 客户端 / Client | QQ 群消息与游戏内消息互通 / QQ ↔ in-game chat bridge |
 | `chat` | 服务端 / Server | 终端交互与聊天命令：重载 Mod、列出连接、测试、换行发言等 / Terminal & chat commands: reload, list, test, line. 终端无权限限制;游戏内 line 方法需 op 权限 |
 | `spam` | 服务端 / Server | 刷屏命令：attack/count/crash/clear/ad/repeat/stop / Spam commands: attack/count/crash/clear/ad/repeat/stop. 终端无权限限制;游戏内方法均需 op 权限 |
