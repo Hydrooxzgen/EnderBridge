@@ -14,8 +14,8 @@ from uuid import uuid4
 ROOT = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PY = os.path.join(ROOT, "config.py")
 CONFIG_EXAMPLE = os.path.join(ROOT, "config.example.py")
-VERSION = "b0.3.6 feat1 dev1"
-DESCRIPTION = "新增定时公告系统" # 仅当不为None时从Github拉取更新日志，反之则直接显示该变量内容。
+VERSION = "b0.3.6 feat2 dev2"
+DESCRIPTION = "新增支持用户自定义的别名系统" # 仅当不为None时从Github拉取更新日志，反之则直接显示该变量内容。
 GITHUB_REPO = "Hydrooxzgen/EnderBridge"  # You can edit this to your own repository if you fork it :)
 WANT_RESET = "--reset-all" in sys.argv
 WANT_EXPORT = "export" in sys.argv
@@ -1111,6 +1111,7 @@ def _console_help():
     cp = Command.command_prefix
     console_out("可用命令:")
     console_out(f"  {cp}help       - 显示此帮助")
+    console_out(f"  {cp}help <feature> - 显示特定功能帮助(如 {cp}help bot, {cp}help message)")
     console_out(f"  {cp}status     - 显示服务器状态")
     console_out(f"  {cp}list       - 列出所有客户端连接")
     console_out(f"  {cp}say <msg>  - 向主客户端发送消息")
@@ -1121,6 +1122,123 @@ def _console_help():
     console_out(f"  {cp}chat ...   - Mod 命令(如 {cp}chat help)")
     console_out(f"  {cp}bot ...    - 假人管理(如 {cp}bot start)")
     console_out(f"  {cp}message .. - 全体通知(如 {cp}message 服务器即将重启)")
+
+
+def _console_help_feature(feature: str):
+    """显示特定功能的帮助信息"""
+    from lib.command import Command
+    cp = Command.command_prefix
+    
+    feature_help = {
+        "bot": [
+            f"{cp}bot start          - 启动假人",
+            f"{cp}bot stop           - 停止假人",
+            f"{cp}bot spawn <name>   - 生成假人",
+            f"{cp}bot remove <name>  - 移除假人",
+            f"{cp}bot move <name>    - 移动假人",
+            f"{cp}bot chat <msg>     - 假人发送聊天",
+            f"{cp}bot list           - 列出假人",
+            f"{cp}bot shell          - 进入假人交互模式",
+        ],
+        "message": [
+            f"{cp}message <内容>     - 发送全体通知",
+            f"{cp}message reload     - 重载定时公告配置",
+        ],
+        "chat": [
+            f"{cp}chat <内容>        - AI 对话",
+            f"{cp}chat reset         - 重置对话历史",
+            f"{cp}chat cmd <内容>    - AI 命令模式",
+        ],
+        "music": [
+            f"{cp}music join         - 加入收听",
+            f"{cp}music exit         - 退出收听",
+            f"{cp}music list         - 列出音乐",
+            f"{cp}music search <词>  - 搜索音乐",
+            f"{cp}music run <文件>   - 播放音乐",
+            f"{cp}music next         - 下一首",
+            f"{cp}music random       - 随机播放",
+            f"{cp}music loop <模式>  - 循环模式",
+            f"{cp}music stop         - 停止播放",
+            f"{cp}music percussion <on|off> - 打击乐开关",
+        ],
+        "function": [
+            f"{cp}function function <路径> - 执行函数文件",
+            f"{cp}function loop <路径> <名称> <间隔> - 循环执行",
+            f"{cp}function stop <名称> - 停止循环",
+            f"{cp}function list        - 列出循环",
+            f"{cp}function search <词> - 搜索函数",
+        ],
+        "tool": [
+            f"{cp}tool search <词> [页码] - 搜索命令",
+            f"{cp}tool send <内容>       - 发送消息",
+            f"{cp}tool tellall <true|false> - 切换 tellAll 转发",
+            f"{cp}tool cmd <命令>        - 执行游戏命令",
+            f"{cp}tool ping              - 测试延迟",
+            f"{cp}tool time              - 显示时间",
+            f"{cp}tool start             - 显示启动信息",
+            f"{cp}tool move              - 移动相关",
+            f"{cp}tool reload            - 重载模组",
+            f"{cp}tool mod <名称>        - 模组管理",
+            f"{cp}tool exec <命令>       - 执行系统命令",
+        ],
+        "perm": [
+            f"{cp}perm query [玩家]   - 查询权限",
+            f"{cp}perm add <类型> <玩家> - 添加权限",
+            f"{cp}perm remove <类型> <玩家> - 移除权限",
+        ],
+        "pos": [
+            f"{cp}pos a [x y z]       - 设置 A 点",
+            f"{cp}pos b [x y z]       - 设置 B 点",
+            f"{cp}pos distance        - 计算距离",
+            f"{cp}pos offset <x> <y> <z> - 偏移坐标",
+            f"{cp}pos fill <方块> [替换] - 填充区域",
+            f"{cp}pos copy            - 复制区域",
+            f"{cp}pos paste           - 粘贴区域",
+            f"{cp}pos cut             - 剪切区域",
+            f"{cp}pos cancel          - 取消操作",
+            f"{cp}pos status          - 显示状态",
+            f"{cp}pos show            - 显示坐标",
+        ],
+        "ws": [
+            f"{cp}ws connect <地址>   - 连接 WebSocket",
+        ],
+        "ezmatic": [
+            f"{cp}ezmatic create <名称> - 创建结构",
+            f"{cp}ezmatic preview      - 预览",
+            f"{cp}ezmatic export       - 导出",
+            f"{cp}ezmatic list        - 列出结构",
+            f"{cp}ezmatic search <词>  - 搜索",
+        ],
+        "image": [
+            f"{cp}image create <文件> - 生成像素画",
+            f"{cp}image raw <文件>    - 原始模式",
+            f"{cp}image list          - 列出",
+            f"{cp}image search <词>   - 搜索",
+        ],
+        "morews": [
+            f"{cp}morews connect <地址> - 连接",
+        ],
+        "spam": [
+            f"{cp}spam attack         - 启动攻击",
+            f"{cp}spam ad <内容>      - 设置广告",
+            f"{cp}spam interval <秒>  - 设置间隔",
+        ],
+        "qq": [
+            f"{cp}qq send <内容>      - 发送 QQ 消息",
+            f"{cp}qq check            - 检查状态",
+            f"{cp}qq toggle           - 切换开关",
+        ],
+    }
+    
+    feature = feature.lower()
+    if feature not in feature_help:
+        console_out(f"§c未知功能: {feature}")
+        console_out(f"§7可用功能: {', '.join(sorted(feature_help.keys()))}")
+        return
+    
+    console_out(f"§e=== {feature} 帮助 (前缀: {cp}) ===")
+    for line in feature_help[feature]:
+        console_out(f"  {line}")
 
 
 def _console_status():
@@ -1214,6 +1332,9 @@ async def _dispatch_console_command(text):
 
         if cmd in ("help", "h", "?"):
             _console_help()
+        elif cmd.startswith("help "):
+            feature = cmd[5:].strip()
+            _console_help_feature(feature)
         elif cmd in ("status", "info"):
             _console_status()
         elif cmd == "list":

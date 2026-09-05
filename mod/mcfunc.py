@@ -25,6 +25,8 @@ class Mod:
         return {
             "op": [
                 Command.create("function", "Function 执行命令（方法: function/loop/stop/list/search）")
+                .add_alias("func")
+                .add_alias("fn")
                 .add_string("方法", False)
                 .add_optional_string("参数1")
                 .add_optional_string("参数2")

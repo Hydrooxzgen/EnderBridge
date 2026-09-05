@@ -18,6 +18,7 @@ class Mod:
             # 普通命令:权限查询
             "normal": [
                 Command.create("perm", "权限管理命令（方法: query/add/remove）")
+                .add_alias("p")
                 .add_string("方法", False)
                 .add_optional_string("参数1")
                 .add_optional_string("参数2")

@@ -152,6 +152,7 @@ class Mod:
     commands = {
         "normal": [
             Command.create("chat", "终端命令（方法: test/list/reload/mod/bye/testx/line）")
+                .add_alias("c")
             .add_string("方法", False)
             .add_optional_string("参数1")
             .add_optional_string("参数2")

@@ -553,6 +553,7 @@ class Mod:
         return {
             "op": [
                 Command.create("bot", "假人管理（start/stop/spawn/remove/move/chat/list）")
+                .add_alias("b")
                 .add_string("方法", False)
                 .add_optional_string("参数1")
                 .add_optional_string("参数2")

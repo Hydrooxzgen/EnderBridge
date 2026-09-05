@@ -146,6 +146,7 @@ class Mod:
         return {
             "normal": [
                 Command.create("ai", "AI 对话命令（方法: chat/reset/cmd）")
+                .add_alias("a")
                 .add_string("方法", False)
                 .add_optional_string("参数1")
                 .add_optional_string("参数2")

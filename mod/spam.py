@@ -178,6 +178,7 @@ class Mod:
     commands = {
         "normal": [
             Command.create("spam", "刷屏命令（方法: attack/count/crash/clear/ad/repeat/stop）")
+                .add_alias("s")
             .add_string("方法", False)
             .add_optional_string("参数1")
             .add_optional_string("参数2")

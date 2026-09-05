@@ -294,6 +294,7 @@ class Mod:
         return {
             "op": [
                 Command.create("image", "图片像素画命令（方法: create/raw/y/n/status/list/search）")
+                .add_alias("img")
                 .add_string("方法", False)
                 .add_optional_string("参数1")
                 .add_optional_string("参数2")

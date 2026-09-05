@@ -28,6 +28,7 @@ class Mod:
         return {
             "op": [
                 Command.create("ws", "扩展 WebSocket 连接命令（方法: connect）")
+                .add_alias("w")
                 .add_string("方法", False)
                 .add_optional_string("参数1")
                 .add_optional_string("参数2")

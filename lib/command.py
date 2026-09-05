@@ -23,6 +23,36 @@ def _load_config():
         return "$", None
 
 
+def _load_command_aliases() -> dict:
+    """从 config.py 读取用户自定义命令别名
+
+    Returns:
+        dict: {主命令名: [别名1, 别名2, ...]}
+    """
+    try:
+        import config
+        importlib.reload(config)
+        return getattr(config, "commandAliases", {}) or {}
+    except Exception:
+        return {}
+
+
+def apply_config_aliases(cmd: "Command") -> "Command":
+    """将配置中的别名应用到命令实例
+
+    Args:
+        cmd: Command 实例
+
+    Returns:
+        同一实例,支持链式调用
+    """
+    aliases = _load_command_aliases()
+    if cmd.name in aliases:
+        for alias in aliases[cmd.name]:
+            cmd.add_alias(alias)
+    return cmd
+
+
 _PREFIX, _RATE_LIMIT = _load_config()
 
 
@@ -115,6 +145,8 @@ class Command:
         self.func = None
         # 异步执行出错时的回调(由调用方注入,用于向用户反馈错误)
         self.on_error = None
+        # 命令别名列表(不含前缀,如 "msg" 对应 $msg)
+        self.aliases: list[str] = []
 
     # ---- 参数添加(链式) ----
 
@@ -175,6 +207,21 @@ class Command:
         self.func = func
         return self
 
+    def add_alias(self, alias: str) -> "Command":
+        """添加命令别名(不含前缀,如 "msg" 使 $msg 也能触发此命令)
+
+        Args:
+            alias: 别名字符串,不含命令前缀
+
+        Returns:
+            self, 支持链式调用
+        """
+        if not alias or " " in alias:
+            return self
+        if alias not in self.aliases:
+            self.aliases.append(alias)
+        return self
+
     # ---- 执行 ----
 
     def execute(self, commander: str, text: str):
@@ -194,8 +241,11 @@ class Command:
         except ValueError as e:
             return {"status": False, "message": str(e)}
 
-        # 校验命令名称是否匹配
-        if text_list[0] != f"{Command.command_prefix}{self.name}":
+        # 校验命令名称是否匹配(支持主名和别名)
+        cmd_token = text_list[0]
+        expected_main = f"{Command.command_prefix}{self.name}"
+        expected_aliases = [f"{Command.command_prefix}{a}" for a in self.aliases]
+        if cmd_token != expected_main and cmd_token not in expected_aliases:
             return False
 
         # 计算必选参数和可选参数数量

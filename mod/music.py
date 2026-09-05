@@ -170,6 +170,7 @@ class Mod:
         return {
             "normal": [
                 Command.create("music", "音乐播放命令（方法: join/exit/status/list/search/percussion/run/next/random/loop/stop）")
+                .add_alias("m")
                 .add_string("方法", False)
                 .add_optional_string("参数1")
                 .add_optional_string("参数2")

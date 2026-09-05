@@ -10,7 +10,7 @@
 import asyncio
 import os
 
-from lib.command import Command
+from lib.command import Command, apply_config_aliases
 from lib.current import Current
 
 
@@ -63,7 +63,7 @@ class Mod:
                         continue
                     msg = messages[self._announce_index % len(messages)]
                     self._announce_index += 1
-                    Current.client.tellAll(f"§e📢 公告 | §f{msg}")
+                    Current.client.tellAll(f"§e[公告] §f{msg}")
             except asyncio.CancelledError:
                 pass
             except Exception as e:
@@ -80,10 +80,13 @@ class Mod:
     def onCommand(self):
         return {
             "normal": [
-                Command.create("message", "向全体玩家发送聊天通知 / 管理定时公告")
-                .add_string("消息内容或子命令", True)
-                .add_optional_string("参数")
-                .set_func(self._cmd_message),
+                apply_config_aliases(
+                    Command.create("message", "向全体玩家发送聊天通知 / 管理定时公告")
+                    .add_alias("msg")
+                    .add_string("消息内容或子命令", True)
+                    .add_optional_string("参数")
+                    .set_func(self._cmd_message)
+                ),
             ],
             "op": [],
             "owner": [],
