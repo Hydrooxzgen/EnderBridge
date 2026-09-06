@@ -188,6 +188,12 @@ function loadConfig() {
 
     renderModSwitches();
     syncConfigCards();
+    // 别名开关状态同步
+    var aliasToggle = $("cfg-aliases-enabled");
+    var hasAliases = data.config.commandAliases && Object.keys(data.config.commandAliases).length > 0;
+    if (aliasToggle) aliasToggle.checked = hasAliases;
+    // 始终显示别名 tab,不再因为空所以hide
+    _syncAliasTabVisibility(true);
     renderAliasList();
   }).catch(function () {});
 }
@@ -210,13 +216,22 @@ function renderAliasList() {
   for (var cmd in aliases) {
     var aliasList = aliases[cmd].join(", ");
     html += '<div class="alias-item" style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;margin-bottom:8px;">' +
-      '<span style="font-weight:600;min-width:120px;">' + escapeHtml(cmd) + '</span>' +
-      '<span style="flex:1;color:var(--text-dim);">' + escapeHtml(aliasList) + '</span>' +
-      '<button class="btn btn-sm btn-ghost remove-alias" data-cmd="' + escapeHtml(cmd) + '">🗑️ 删除</button>' +
+      '<span style="font-weight:600;min-width:100px;">' + escapeHtml(cmd) + '</span>' +
+      '<span style="flex:1;color:var(--text-dim);font-size:13px;">' + escapeHtml(aliasList) + '</span>' +
+      '<button class="btn btn-sm btn-ghost edit-alias" data-cmd="' + escapeHtml(cmd) + '" data-aliases="' + escapeHtml(aliases[cmd].join(",")) + '">✏️ 编辑</button>' +
+      '<button class="btn btn-sm btn-ghost remove-alias" data-cmd="' + escapeHtml(cmd) + '">🗑️</button>' +
       '</div>';
   }
   if (!html) html = '<p class="hint" style="text-align:center;padding:16px;">暂无自定义别名，点击上方按钮添加</p>';
   container.innerHTML = html;
+  // 绑定编辑事件
+  container.querySelectorAll(".edit-alias").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var cmd = this.getAttribute("data-cmd");
+      var currentAliases = this.getAttribute("data-aliases");
+      showEditAliasModal(cmd, currentAliases);
+    });
+  });
   // 绑定删除事件
   container.querySelectorAll(".remove-alias").forEach(function (btn) {
     btn.addEventListener("click", function () {
@@ -224,6 +239,7 @@ function renderAliasList() {
       if (confirm("确定要删除 " + cmd + " 的所有别名吗？")) {
         delete cfgData.commandAliases[cmd];
         renderAliasList();
+        toast("已删除 " + cmd + " 的别名", "ok");
       }
     });
   });
@@ -242,8 +258,72 @@ function showAddAliasModal() {
   toast("已添加别名: " + cmd + " → " + aliasArr.join(", "), "ok");
 }
 
+function showEditAliasModal(cmd, currentAliases) {
+  var newAliases = prompt("编辑 " + cmd + " 的别名（多个用逗号分隔）：", currentAliases);
+  if (newAliases === null) return; // 用户取消
+  var aliasArr = newAliases.split(",").map(function (s) { return s.trim(); }).filter(Boolean);
+  if (!aliasArr.length) {
+    // 别名清空则删除该命令
+    if (confirm("别名为空，确定要删除 " + cmd + " 的所有别名吗？")) {
+      delete cfgData.commandAliases[cmd];
+    }
+    renderAliasList();
+    return;
+  }
+  cfgData.commandAliases = cfgData.commandAliases || {};
+  cfgData.commandAliases[cmd] = aliasArr;
+  renderAliasList();
+  toast("已更新别名: " + cmd + " → " + aliasArr.join(", "), "ok");
+}
+
 var addAliasBtn = $("addAliasBtn");
 if (addAliasBtn) addAliasBtn.addEventListener("click", showAddAliasModal);
+
+// 命令别名开关 — 控制侧边栏「命令别名」tab 的显示/隐藏
+function _syncAliasTabVisibility(enabled) {
+  var sidebarItem = document.querySelector('.cfg-sidebar-item[data-cfg-cat="aliases"]');
+  if (sidebarItem) sidebarItem.style.display = enabled ? "" : "none";
+  // 若当前在别名tab但被隐藏了，跳回功能开关tab
+  if (!enabled) {
+    var activeCat = document.querySelector('.cfg-sidebar-item.active[data-cfg-cat="aliases"]');
+    if (activeCat) {
+      var featuresItem = document.querySelector('.cfg-sidebar-item[data-cfg-cat="features"]');
+      if (featuresItem) featuresItem.click();
+    }
+  }
+}
+var DEFAULT_COMMAND_ALIASES = {
+  "message": ["msg", "m"],
+  "bot": ["b"],
+  "function": ["func", "fn"],
+  "music": ["m"],
+  "tool": ["t"],
+  "spam": ["s"],
+  "ws": ["w"],
+  "ai": ["a"],
+  "chat": ["c"],
+  "ezmatic": ["ez"],
+  "image": ["img"],
+  "help": ["h", "?"],
+  "perm": ["p"],
+};
+
+var aliasToggle = $("cfg-aliases-enabled");
+if (aliasToggle) {
+  aliasToggle.addEventListener("change", function () {
+    _syncAliasTabVisibility(this.checked);
+    if (this.checked) {
+      // 开启别名:若当前为空则填充默认值
+      if (!cfgData.commandAliases || Object.keys(cfgData.commandAliases).length === 0) {
+        cfgData.commandAliases = JSON.parse(JSON.stringify(DEFAULT_COMMAND_ALIASES));
+        toast("已加载默认别名配置", "ok");
+      }
+    } else {
+      cfgData.commandAliases = {};
+    }
+    renderAliasList();
+  });
+}
 
 function toggleBotMode() {
   var mode = $("cfg-bot-mode-server").checked ? "server" : "realm";

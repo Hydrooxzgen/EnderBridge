@@ -28,8 +28,16 @@ def _load_command_aliases() -> dict:
     return config.get("commandAliases", {}) or {}
 
 
+# 命令注册表:跟踪所有 Command 实例,用于别名热重载
+_COMMAND_REGISTRY: list["Command"] = []
+
+
 def apply_config_aliases(cmd: "Command") -> "Command":
     """将配置中的别名应用到命令实例
+
+    config.json 中的 commandAliases 是别名的唯一来源。
+    首次运行时 config.json 从 config.example.json 复制,已包含全部默认别名。
+    用户在 WebUI 增删别名后无需重启,保存即时生效。
 
     Args:
         cmd: Command 实例
@@ -41,7 +49,24 @@ def apply_config_aliases(cmd: "Command") -> "Command":
     if cmd.name in aliases:
         for alias in aliases[cmd.name]:
             cmd.add_alias(alias)
+    # 注册到全局表(用于热重载)
+    if cmd not in _COMMAND_REGISTRY:
+        _COMMAND_REGISTRY.append(cmd)
     return cmd
+
+
+def reload_all_aliases() -> None:
+    """热重载所有命令的别名(从 config.json 重新读取)
+
+    调用时机: WebUI 保存 commandAliases 后,
+    无需重启服务器即可生效。
+    """
+    aliases = _load_command_aliases()
+    for cmd in _COMMAND_REGISTRY:
+        cmd.aliases.clear()
+        if cmd.name in aliases:
+            for alias in aliases[cmd.name]:
+                cmd.add_alias(alias)
 
 
 _PREFIX, _RATE_LIMIT = _load_config()

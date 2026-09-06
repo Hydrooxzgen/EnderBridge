@@ -13,6 +13,7 @@ import mido
 
 from config import basePath, features
 from lib.command import Command
+from lib.command import apply_config_aliases
 
 # MIDI 解析工具函数
 
@@ -169,15 +170,16 @@ class Mod:
     def onCommand(self):
         return {
             "normal": [
-                Command.create("music", "音乐播放命令（方法: join/exit/status/list/search/percussion/run/next/random/loop/stop）")
-                .add_alias("m")
-                .add_string("方法", False)
-                .add_optional_string("参数1")
-                .add_optional_string("参数2")
-                .add_optional_string("参数3")
-                .add_optional_string("参数4")
-                .add_optional_string("参数5")
-                .set_func(self._cmd_music),
+                apply_config_aliases(
+                    Command.create("music", "音乐播放命令（方法: join/exit/status/list/search/percussion/run/next/random/loop/stop）")
+                    .add_string("方法", False)
+                    .add_optional_string("参数1")
+                    .add_optional_string("参数2")
+                    .add_optional_string("参数3")
+                    .add_optional_string("参数4")
+                    .add_optional_string("参数5")
+                    .set_func(self._cmd_music)
+                ),
             ],
         }
 

@@ -158,7 +158,15 @@ def _read_config_src() -> str:
 
 
 def _load_config_module() -> dict:
-    """以模块方式加载 config.py,返回其命名空间(失败时返回空 dict)"""
+    """加载配置，优先读取 config.json (b0.3.6)，回退到 config.py (b0.1.0)"""
+    # 优先读取 JSON 配置
+    if os.path.exists(CONFIG_JSON):
+        try:
+            with open(CONFIG_JSON, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    # 回退：读取 Python 配置
     ns = {}
     try:
         import importlib.util
@@ -531,6 +539,15 @@ def save_config(new: dict) -> None:
         os.replace(CONFIG_JSON, CONFIG_JSON + ".bak")
     with open(CONFIG_JSON, "w", encoding="utf-8") as f:
         json.dump(config, f, ensure_ascii=False, indent=2)
+
+    # 别名热重载:保存后立即生效,无需重启 (必须在写入 JSON 之后,否则读到旧缓存)
+    try:
+        from lib.config_loader import reload_config
+        from lib.command import reload_all_aliases
+        reload_config()  # 清除配置缓存
+        reload_all_aliases()
+    except Exception:
+        pass
 
     # 兼容：如果存在旧的 config.py，提示可删除
     if os.path.exists(CONFIG_PY):

@@ -83,6 +83,9 @@ def _merge_configs(json_config: dict, py_config: dict) -> dict:
 
 def load_config() -> dict:
     """加载配置，支持双格式自动检测和迁移"""
+    # 启动时自动迁移（删除旧格式配置文件）
+    auto_migrate_if_needed()
+
     version = _get_current_version()
     is_legacy = _is_legacy_version(version)
 
@@ -137,6 +140,55 @@ def save_config(config: dict) -> bool:
         return False
 
 
+def auto_migrate_if_needed() -> bool:
+    """启动时自动检测并迁移配置格式
+
+    升级: config.py 存在且 config.json 不存在 -> 迁移到 JSON 并删除 config.py
+    降级: config.json 存在且 config.py 不存在且 config.json._version <= b0.3.5 -> 降级到 Python 并删除 config.json
+
+    Returns:
+        是否发生了迁移
+    """
+    has_json = CONFIG_JSON.exists()
+    has_py = CONFIG_PY.exists()
+
+    # 都存在或都不存在，无需迁移
+    if has_json == has_py:
+        return False
+
+    # 升级: 只有 config.py，迁移到 JSON
+    if has_py and not has_json:
+        print(f"[Config] 检测到旧版本配置，自动迁移到 config.json...")
+        from version_manager import migrate
+        if migrate("py", "json"):
+            print("[Config] 自动迁移完成，旧 config.py 已删除")
+            return True
+        else:
+            print("[Config] 自动迁移失败")
+            return False
+
+    # 降级: 只有 config.json，检查其 _version 字段是否为旧版本
+    if has_json and not has_py:
+        try:
+            with open(CONFIG_JSON, "r", encoding="utf-8") as f:
+                json_config = json.load(f)
+            json_version = json_config.get("_version", "")
+            from version_manager.detector import is_at_or_below
+            if is_at_or_below(json_version, LEGACY_VERSION_THRESHOLD):
+                print(f"[Config] 检测到旧版本 JSON 配置 (v{json_version})，自动降级到 config.py...")
+                from version_manager import migrate
+                if migrate("json", "py"):
+                    print("[Config] 自动降级完成，旧 config.json 已删除")
+                    return True
+                else:
+                    print("[Config] 自动降级失败")
+                    return False
+        except Exception as e:
+            print(f"[Config] 读取 config.json 版本失败: {e}")
+
+    return False
+
+
 def migrate_py_to_json() -> bool:
     """将 Python 配置迁移到 JSON（委托 version_manager）"""
     try:
@@ -167,7 +219,7 @@ def migrate_py_to_json() -> bool:
 
 
 def migrate_json_to_py() -> bool:
-    """将 JSON 配置降级为 Python（委托 version_manager）"""
+    """将 JSON(b0.3.6) 配置降级为 Python(b0.1.0)（委托 version_manager）"""
     try:
         from version_manager import migrate
         return migrate("json", "py", src=CONFIG_JSON, dst=CONFIG_PY)
@@ -199,10 +251,20 @@ def reload_config() -> dict:
 class ConfigProxy:
     """配置代理，兼容旧的 `from config import xxx` 用法"""
 
+    # 缺失键的默认值,防止 `from config import xxx` 在 config.json 不完整时崩溃
+    _DEFAULTS = {
+        "basePath": {},
+        "spam": {},
+        "rateLimit": {},
+        "commandAliases": {},
+    }
+
     def __getattr__(self, name):
         config = get_config()
         if name in config:
             return config[name]
+        if name in self._DEFAULTS:
+            return self._DEFAULTS[name]
         raise AttributeError(f"配置项不存在: {name}")
 
     def __setattr__(self, name, value):
@@ -220,9 +282,25 @@ class ConfigProxy:
 # 创建全局代理实例，兼容 `import config`
 config = ConfigProxy()
 
+
+# resolvePath: 兼容 config.py 中的 resolvePath 函数
+# 所有平台统一返回相对路径写法
+def resolvePath(relPath):
+    """路径适配函数(兼容 config.py 旧代码(技术债:((()))))"""
+    p = str(relPath)
+    if p.startswith("/") or (len(p) >= 2 and p[1] == ":"):
+        return p
+    return p
+
+
 # 为了兼容 `from config import xxx`，动态设置模块属性
 import sys
 this_module = sys.modules[__name__]
 for key, value in get_config().items():
     if not key.startswith("_"):
         setattr(this_module, key, value)
+
+# 将本模块注册为 `config`，使 `from config import xxx` 在无 config.py 时也能工作
+# Mod 文件大量使用 `from config import basePath, features` 等
+if "config" not in sys.modules:
+    sys.modules["config"] = this_module

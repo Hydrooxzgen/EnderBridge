@@ -11,6 +11,7 @@ import time
 
 from config import AIConfig
 from lib.command import Command
+from lib.command import apply_config_aliases
 from lib.current import Current
 from lib.utils import Utils
 
@@ -145,15 +146,16 @@ class Mod:
     def onCommand(self):
         return {
             "normal": [
-                Command.create("ai", "AI 对话命令（方法: chat/reset/cmd）")
-                .add_alias("a")
-                .add_string("方法", False)
-                .add_optional_string("参数1")
-                .add_optional_string("参数2")
-                .add_optional_string("参数3")
-                .add_optional_string("参数4")
-                .add_optional_string("参数5")
-                .set_func(self._cmd_ai),
+                apply_config_aliases(
+                    Command.create("ai", "AI 对话命令（方法: chat/reset/cmd）")
+                    .add_string("方法", False)
+                    .add_optional_string("参数1")
+                    .add_optional_string("参数2")
+                    .add_optional_string("参数3")
+                    .add_optional_string("参数4")
+                    .add_optional_string("参数5")
+                    .set_func(self._cmd_ai)
+                ),
             ],
         }
 

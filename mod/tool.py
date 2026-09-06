@@ -81,7 +81,6 @@ class Mod:
             "normal": [
                 apply_config_aliases(
                     Command.create("tool", "工具命令（方法: search/send/tellall/cmd/ping/time/start/move/reload/mod/exec）")
-                    .add_alias("t")
                     .add_string("方法", False)
                     .add_optional_string("参数1")
                     .add_optional_string("参数2")
@@ -93,8 +92,6 @@ class Mod:
 
                 apply_config_aliases(
                     Command.create("help", "命令帮助（分页）")
-                    .add_alias("h")
-                    .add_alias("?")
                     .add_optional_string("页码")
                     .set_func(self._cmd_help)
                 ),

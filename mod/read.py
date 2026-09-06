@@ -8,6 +8,7 @@ import asyncio
 import sys
 
 from lib.command import Command
+from lib.command import apply_config_aliases
 from lib.current import Current
 from lib.mods import ClientModManager, ServerModManager
 
@@ -151,15 +152,16 @@ class Mod:
     # 命令定义(单一入口 $chat,方法见 READ_METHODS)
     commands = {
         "normal": [
-            Command.create("chat", "终端命令（方法: test/list/reload/mod/bye/testx/line）")
-                .add_alias("c")
-            .add_string("方法", False)
-            .add_optional_string("参数1")
-            .add_optional_string("参数2")
-            .add_optional_string("参数3")
-            .add_optional_string("参数4")
-            .add_optional_string("参数5")
-            .set_func(_cmd_read),
+            apply_config_aliases(
+                Command.create("chat", "终端命令（方法: test/list/reload/mod/bye/testx/line）")
+                .add_string("方法", False)
+                .add_optional_string("参数1")
+                .add_optional_string("参数2")
+                .add_optional_string("参数3")
+                .add_optional_string("参数4")
+                .add_optional_string("参数5")
+                .set_func(_cmd_read)
+            ),
         ],
     }
 

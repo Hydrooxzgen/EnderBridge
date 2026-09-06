@@ -12,6 +12,7 @@ import threading
 import websocket
 
 from lib.command import Command
+from lib.command import apply_config_aliases
 
 
 class Mod:
@@ -27,15 +28,16 @@ class Mod:
     def onCommand(self):
         return {
             "op": [
-                Command.create("ws", "扩展 WebSocket 连接命令（方法: connect）")
-                .add_alias("w")
-                .add_string("方法", False)
-                .add_optional_string("参数1")
-                .add_optional_string("参数2")
-                .add_optional_string("参数3")
-                .add_optional_string("参数4")
-                .add_optional_string("参数5")
-                .set_func(self._cmd_ws),
+                apply_config_aliases(
+                    Command.create("ws", "扩展 WebSocket 连接命令（方法: connect）")
+                    .add_string("方法", False)
+                    .add_optional_string("参数1")
+                    .add_optional_string("参数2")
+                    .add_optional_string("参数3")
+                    .add_optional_string("参数4")
+                    .add_optional_string("参数5")
+                    .set_func(self._cmd_ws)
+                ),
             ],
         }
 

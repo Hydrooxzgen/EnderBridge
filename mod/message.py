@@ -82,7 +82,6 @@ class Mod:
             "normal": [
                 apply_config_aliases(
                     Command.create("message", "向全体玩家发送聊天通知 / 管理定时公告")
-                    .add_alias("msg")
                     .add_string("消息内容或子命令", True)
                     .add_optional_string("参数")
                     .set_func(self._cmd_message)

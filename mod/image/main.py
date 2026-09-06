@@ -14,6 +14,7 @@ from PIL import Image
 
 from config import basePath
 from lib.command import Command
+from lib.command import apply_config_aliases
 
 MAX_IMAGE_DIM = 256
 MAX_CHUNKS = 100
@@ -293,15 +294,16 @@ class Mod:
     def onCommand(self):
         return {
             "op": [
-                Command.create("image", "图片像素画命令（方法: create/raw/y/n/status/list/search）")
-                .add_alias("img")
-                .add_string("方法", False)
-                .add_optional_string("参数1")
-                .add_optional_string("参数2")
-                .add_optional_string("参数3")
-                .add_optional_string("参数4")
-                .add_optional_string("参数5")
-                .set_func(self._cmd_image),
+                apply_config_aliases(
+                    Command.create("image", "图片像素画命令（方法: create/raw/y/n/status/list/search）")
+                    .add_string("方法", False)
+                    .add_optional_string("参数1")
+                    .add_optional_string("参数2")
+                    .add_optional_string("参数3")
+                    .add_optional_string("参数4")
+                    .add_optional_string("参数5")
+                    .set_func(self._cmd_image)
+                ),
             ],
         }
 

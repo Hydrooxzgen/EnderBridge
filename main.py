@@ -1,6 +1,7 @@
 # Author: Hydrooxzgen
 # Github: https://github.com/Hydrooxzgen
 # This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
+# The EBC config format version is b0.3.6
 import asyncio
 import json
 import os
@@ -16,15 +17,15 @@ CONFIG_PY = os.path.join(ROOT, "config.py")
 CONFIG_JSON = os.path.join(ROOT, "config.json")
 CONFIG_EXAMPLE = os.path.join(ROOT, "config.example.py")
 CONFIG_EXAMPLE_JSON = os.path.join(ROOT, "config.example.json")
-VERSION = "b0.3.6 feat3 dev1"
-DESCRIPTION = "updated EBC to version b0.3.6" # 仅当不为None时从Github拉取更新日志，反之则直接显示该变量内容。
+VERSION = "b0.3.6"
+DESCRIPTION = None # 仅当不为None时从Github拉取更新日志，反之则直接显示该变量内容。
 GITHUB_REPO = "Hydrooxzgen/EnderBridge"  # You can edit this to your own repository if you fork it :)
 WANT_RESET = "--reset-all" in sys.argv
 WANT_EXPORT = "export" in sys.argv
 WANT_EXPORT_CLEAR = WANT_EXPORT and "-clear" in sys.argv
 WANT_LOAD_WITHOUT_CONFIG = "--load-without-config" in sys.argv
 
-# ===== 依赖检测(必须早于任何第三方模块使用) =====
+# ===== 依赖检测(必须早于任何第三方mod使用) =====
 # websockets 使用动态导入:缺失时自动运行 setup.py 安装,成功后继续启动。
 def _dependencies_ok() -> bool:
     try:
@@ -61,6 +62,18 @@ if not WANT_RESET and not os.path.exists(CONFIG_PY) and not os.path.exists(CONFI
     if os.path.exists(CONFIG_EXAMPLE_JSON):
         import shutil as _shutil_cfg
         _shutil_cfg.copy2(CONFIG_EXAMPLE_JSON, CONFIG_JSON)
+        # --load-without-config 跳过向导,必须清除 is_first_run,
+        # 否则下次正常启动会误触发向导
+        if WANT_LOAD_WITHOUT_CONFIG:
+            try:
+                with open(CONFIG_JSON, "r", encoding="utf-8") as _f:
+                    _j = json.load(_f)
+                if _j.get("is_first_run", False):
+                    _j["is_first_run"] = False
+                    with open(CONFIG_JSON, "w", encoding="utf-8") as _f:
+                        json.dump(_j, _f, ensure_ascii=False, indent=2)
+            except Exception:
+                pass
         print("未找到 config.json，已根据模板自动生成默认配置（可在向导中修改）")
     elif os.path.exists(CONFIG_EXAMPLE):
         with open(CONFIG_EXAMPLE, "r", encoding="utf-8") as f:
@@ -1167,12 +1180,18 @@ _restarting = False  # 重启/更新中,抑制提示符输出
 _prompt_visible = False  # 提示符是否已在终端显示(防重复)
 
 
+def _strip_mc_colors(text: str) -> str:
+    """去除 Minecraft 颜色/格式代码(§0-§9, §a-§f, §k-§r 等)用于终端显示"""
+    import re
+    return re.sub(r"§.", "", text)
+
+
 def console_out(msg):
-    """终端输出消息"""
+    """终端输出消息(自动去除 MC 颜色代码)"""
     global _prompt_visible
     _prompt_visible = False  # console_out 清除了当前行,提示符不再可见
     sys.stdout.write("\r\x1b[K")
-    print(msg)
+    print(_strip_mc_colors(str(msg)))
 
 
 def _console_help():
@@ -1429,7 +1448,7 @@ async def _dispatch_console_command(text):
             mod_cmd = f"{cp}{cmd}"
             handled = await ServerModManager.execute_terminal(mod_cmd)
             if not handled:
-                # 再尝试客户端 Mod(如 $bot)
+                # 再尝试支持终端执行的客户端 Mod(如 $bot)
                 handled = await ClientModManager.execute_terminal(mod_cmd)
             if not handled:
                 console_out(f"§c未知命令: §f{cmd}，输入 {cp}help 查看帮助")

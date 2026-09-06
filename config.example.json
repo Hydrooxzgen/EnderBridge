@@ -2,39 +2,30 @@
   "_comment": "EnderBridge 配置文件模板 - 首次运行时复制为 config.json 并修改",
   "_version": "EBC0.3.6",
   "_migration_note": "version <= b0.3.5使用b0.1.0标准python格式, 本文件是b0.3.6标准格式",
-
   "is_first_run": true,
-
   "platform": {
     "isWindows": true,
     "isAndroid": false,
     "isLinux": false,
     "isUnixLike": false
   },
-
   "wsConfig": {
     "name": "EnderBridge",
     "port": 8800
   },
-
   "webuiConfig": {
     "enabled": true,
     "port": 18888,
     "token": "",
     "localOnly": false
   },
-
   "logLevel": "info",
-
   "commandPrefix": "$",
-
   "githubToken": "",
-
   "sapiConfig": {
     "gmsg": "gmsg",
     "smsg": "smsg"
   },
-
   "botConfig": {
     "enabled": true,
     "mode": "server",
@@ -50,7 +41,6 @@
     "xboxAccounts": [],
     "activeXboxAccount": null
   },
-
   "features": {
     "music": {
       "playPercussion": true
@@ -63,7 +53,6 @@
       "accessToken": ""
     }
   },
-
   "mods": {
     "client": {
       "AI": "mod.ai",
@@ -83,22 +72,50 @@
       "spam": "mod.spam"
     }
   },
-
   "commandAliases": {
-    "message": ["msg", "m"],
-    "bot": ["b"],
-    "function": ["func", "fn"],
-    "music": ["m"],
-    "tool": ["t"],
-    "spam": ["s"],
-    "ws": ["w"],
-    "ai": ["a"],
-    "chat": ["c"],
-    "ezmatic": ["ez"],
-    "image": ["img"],
-    "help": ["h", "?"]
+    "message": [
+      "msg",
+      "m"
+    ],
+    "bot": [
+      "b"
+    ],
+    "function": [
+      "func",
+      "fn"
+    ],
+    "music": [
+      "m"
+    ],
+    "tool": [
+      "t"
+    ],
+    "spam": [
+      "s"
+    ],
+    "ws": [
+      "w"
+    ],
+    "ai": [
+      "a"
+    ],
+    "chat": [
+      "c"
+    ],
+    "ezmatic": [
+      "ez"
+    ],
+    "image": [
+      "img"
+    ],
+    "help": [
+      "h",
+      "?"
+    ],
+    "perm": [
+      "p"
+    ]
   },
-
   "messageConfig": {
     "agreement": {
       "enabled": true,
@@ -115,12 +132,31 @@
       ]
     }
   },
-
   "utilsConfig": {
     "tellAllToTell": false,
     "enablePolling": true
   },
-
+  "basePath": {
+    "music": "resources/midi",
+    "mcfunc": "resources/mcfunc",
+    "ezmatic": "resources/ezmatic",
+    "image": "resources/pictures"
+  },
+  "rateLimit": {
+    "command": {
+      "enabled": false,
+      "windowMs": 1000,
+      "maxPerWindow": 20
+    }
+  },
+  "spam": {
+    "attack": "§c[示例] 刷屏文本",
+    "ad": [
+      "§u示例广告 1 §7| §bexample.com",
+      "§u示例广告 2 §7| §bdiscord.gg/example"
+    ],
+    "adInterval": 1000
+  },
   "AIConfig": {
     "options": {
       "baseURL": "https://api.deepseek.com",
@@ -135,7 +171,9 @@
           }
         ],
         "model": "deepseek-chat",
-        "thinking": {"type": "disabled"},
+        "thinking": {
+          "type": "disabled"
+        },
         "max_tokens": 512,
         "stream": false
       },
@@ -147,7 +185,9 @@
           }
         ],
         "model": "deepseek-chat",
-        "thinking": {"type": "disabled"},
+        "thinking": {
+          "type": "disabled"
+        },
         "max_tokens": 1024,
         "stream": false
       }

@@ -9,6 +9,7 @@ import re
 
 from config import basePath
 from lib.command import Command
+from lib.command import apply_config_aliases
 
 
 class Mod:
@@ -24,16 +25,16 @@ class Mod:
     def onCommand(self):
         return {
             "op": [
-                Command.create("function", "Function 执行命令（方法: function/loop/stop/list/search）")
-                .add_alias("func")
-                .add_alias("fn")
-                .add_string("方法", False)
-                .add_optional_string("参数1")
-                .add_optional_string("参数2")
-                .add_optional_string("参数3")
-                .add_optional_string("参数4")
-                .add_optional_string("参数5")
-                .set_func(self._cmd_function),
+                apply_config_aliases(
+                    Command.create("function", "Function 执行命令（方法: function/loop/stop/list/search）")
+                    .add_string("方法", False)
+                    .add_optional_string("参数1")
+                    .add_optional_string("参数2")
+                    .add_optional_string("参数3")
+                    .add_optional_string("参数4")
+                    .add_optional_string("参数5")
+                    .set_func(self._cmd_function)
+                ),
             ],
         }
 

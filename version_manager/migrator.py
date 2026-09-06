@@ -56,7 +56,7 @@ def migrate_py_to_json(src: Path = None, dst: Path = None, **kwargs) -> bool:
     dst = dst or ROOT / "config.json"
 
     if not src.exists():
-        print("[VersionManager] 未找到 config.py，无法迁移")
+        print("[VersionManager] 未找到 config.py, 无法迁移")
         return False
 
     # 动态加载 Python 配置
@@ -102,15 +102,13 @@ def migrate_py_to_json(src: Path = None, dst: Path = None, **kwargs) -> bool:
         print(f"[VersionManager] 写入 config.json 失败: {e}")
         return False
 
-    # 备份原 config.py
+    # 删除原 config.py
     try:
-        backup = src.with_suffix(".py.bak")
-        if backup.exists():
-            backup.unlink()
-        src.rename(backup)
-        print(f"[VersionManager] config.py 已备份为 config.py.bak")
+        if src.exists():
+            src.unlink()
+            print(f"[VersionManager] 已删除旧配置文件 config.py")
     except Exception as e:
-        print(f"[VersionManager] 备份 config.py 失败: {e}")
+        print(f"[VersionManager] 删除 config.py 失败: {e}")
 
     print(f"[VersionManager] 迁移完成: config.py -> config.json")
     print(f"[VersionManager] 共迁移 {len(config)} 个配置项")
@@ -218,15 +216,13 @@ def migrate_json_to_py(src: Path = None, dst: Path = None, **kwargs) -> bool:
         print(f"[VersionManager] 写入 config.py 失败: {e}")
         return False
 
-    # 备份原 config.json
+    # 删除原 config.json
     try:
-        backup = src.with_suffix(".json.bak")
-        if backup.exists():
-            backup.unlink()
-        src.rename(backup)
-        print(f"[VersionManager] config.json 已备份为 config.json.bak")
+        if src.exists():
+            src.unlink()
+            print(f"[VersionManager] 已删除旧配置文件 config.json")
     except Exception as e:
-        print(f"[VersionManager] 备份 config.json 失败: {e}")
+        print(f"[VersionManager] 删除 config.json 失败: {e}")
 
     print(f"[VersionManager] 降级完成: config.json -> config.py")
     print(f"[VersionManager] 共迁移 {len(config)} 个配置项")

@@ -135,11 +135,20 @@ mods = {
 }
 
 # 命令别名配置(用户自定义,键为主命令名,值为别名列表)
-# 示例: "message": ["msg", "m"], "bot": ["b"]
 commandAliases = {
-    # "message": ["msg", "m"],
-    # "bot": ["b"],
-    # "function": ["func", "fn"],
+    "message": ["msg", "m"],
+    "bot": ["b"],
+    "function": ["func", "fn"],
+    "music": ["m"],
+    "tool": ["t"],
+    "spam": ["s"],
+    "ws": ["w"],
+    "ai": ["a"],
+    "chat": ["c"],
+    "ezmatic": ["ez"],
+    "image": ["img"],
+    "help": ["h", "?"],
+    "perm": ["p"],
 }
 
 # 消息通知与协议配置

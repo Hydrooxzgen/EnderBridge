@@ -14,6 +14,7 @@ import zlib
 
 from config import basePath, resolvePath
 from lib.command import Command
+from lib.command import apply_config_aliases
 from lib.utils import ClientConnection
 
 # ---- NBT 标签类型常量 ----
@@ -553,15 +554,16 @@ class Mod:
         # 统一入口命令:${prefix}ezmatic 方法 参数1 参数2 ...
         return {
             "op": [
-                Command.create("ezmatic", "Ezmatic 建筑投影命令（方法: create/preview/export/list/search/id/y/n/status/verify/fix/unpreview/author/help）")
-                .add_alias("ez")
-                .add_string("方法", False)
-                .add_optional_string("参数1")
-                .add_optional_string("参数2")
-                .add_optional_string("参数3")
-                .add_optional_string("参数4")
-                .add_optional_string("参数5")
-                .set_func(self._cmd_ezmatic),
+                apply_config_aliases(
+                    Command.create("ezmatic", "Ezmatic 建筑投影命令（方法: create/preview/export/list/search/id/y/n/status/verify/fix/unpreview/author/help）")
+                    .add_string("方法", False)
+                    .add_optional_string("参数1")
+                    .add_optional_string("参数2")
+                    .add_optional_string("参数3")
+                    .add_optional_string("参数4")
+                    .add_optional_string("参数5")
+                    .set_func(self._cmd_ezmatic)
+                ),
             ],
         }
 
