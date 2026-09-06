@@ -1,4 +1,5 @@
 # 模板配置文件
+# EBC0.1.0标准格式配置文件
 # ===== 首次运行 =====
 # True：启动图形化配置向导（浏览器访问 http://127.0.0.1:18888 完成配置）
 # 保存后自动生成 config.py 与 permission.json，并将本标记写为 False
@@ -56,7 +57,7 @@ commandPrefix = "$"
 
 # GitHub API Token（可选，用于减少 API 速率限制）
 # 在 https://github.com/settings/tokens 创建，只需 public_repo 读取权限
-# ⚠️ 请勿泄露此 Token，不要提交到公开仓库
+# **请勿泄露此 Token，不要提交到公开仓库**
 githubToken = ""
 
 sapiConfig = {
@@ -133,12 +134,38 @@ mods = {
     },
 }
 
+# 命令别名配置(用户自定义,键为主命令名,值为别名列表)
+commandAliases = {
+    "message": ["msg", "m"],
+    "bot": ["b"],
+    "function": ["func", "fn"],
+    "music": ["m"],
+    "tool": ["t"],
+    "spam": ["s"],
+    "ws": ["w"],
+    "ai": ["a"],
+    "chat": ["c"],
+    "ezmatic": ["ez"],
+    "image": ["img"],
+    "help": ["h", "?"],
+    "perm": ["p"],
+}
+
 # 消息通知与协议配置
 messageConfig = {
     "agreement": {
         "enabled": True,
         "title": "📋 服务器协议",
         "text": "欢迎来到本服务器！\n\n请遵守以下规则：\n1. 尊重其他玩家\n2. 禁止作弊和破坏\n3. 禁止刷屏和骚扰\n\n输入 agree 同意协议后即可游戏。",
+    },
+    "announcements": {
+        "enabled": False,
+        "interval": 300,
+        "messages": [
+            "欢迎来到本服务器！请遵守游戏规则。",
+            "加入我们的聊天群：123456789",
+            "服务器官网：https://github.com/Hydrooxzgen/EnderBridge",
+        ],
     },
 }
 

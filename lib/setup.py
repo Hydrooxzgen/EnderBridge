@@ -20,6 +20,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 CONFIG_EXAMPLE = os.path.join(ROOT, "config.example.py")
 CONFIG_PY = os.path.join(ROOT, "config.py")
+CONFIG_JSON = os.path.join(ROOT, "config.json")
+CONFIG_EXAMPLE_JSON = os.path.join(ROOT, "config.example.json")
 PERMISSION_EXAMPLE = os.path.join(ROOT, "permission.example.json")
 PERMISSION_JSON = os.path.join(ROOT, "permission.json")
 
@@ -435,7 +437,8 @@ def validate(f):
 
 
 def clear_first_run_flag() -> None:
-    """将模板 config.example.py 的 is_first_run 标记写为 False(保存成功后调用)"""
+    """将所有配置模板的 is_first_run 标记写为 False(保存成功后调用)"""
+    # 1. 清除 config.example.py 中的标记
     try:
         with open(CONFIG_EXAMPLE, "r", encoding="utf-8") as f:
             tpl = f.read()
@@ -444,7 +447,28 @@ def clear_first_run_flag() -> None:
             with open(CONFIG_EXAMPLE, "w", encoding="utf-8") as f:
                 f.write(next_)
     except Exception:
-        # 忽略:下次启动仍会进入向导,由用户手动处理
+        pass
+    # 2. 清除 config.example.json 中的标记(b0.3.6 模板)
+    try:
+        if os.path.exists(CONFIG_EXAMPLE_JSON):
+            with open(CONFIG_EXAMPLE_JSON, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if data.get("is_first_run", False):
+                data["is_first_run"] = False
+                with open(CONFIG_EXAMPLE_JSON, "w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+    # 3. 清除 config.json 中的标记(运行时配置)
+    try:
+        if os.path.exists(CONFIG_JSON):
+            with open(CONFIG_JSON, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if data.get("is_first_run", False):
+                data["is_first_run"] = False
+                with open(CONFIG_JSON, "w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception:
         pass
 
 
@@ -475,6 +499,56 @@ def save_config(f) -> None:
         os.replace(CONFIG_PY, CONFIG_PY + ".bak")
     with open(CONFIG_PY, "w", encoding="utf-8") as fp:
         fp.write(src)
+
+    # 同时生成 config.json(b0.3.6 标准):向导生成 config.py 后立即迁移
+    # 这样 config_loader 会优先读取 config.json,commandAliases 等配置才能生效
+    try:
+        from lib.config_loader import migrate_py_to_json
+        migrate_py_to_json()
+    except Exception:
+        pass
+
+    # 迁移后补全:确保 config.json 包含模板中所有键(migrate 可能丢失 basePath/spam 等)
+    try:
+        if os.path.exists(CONFIG_JSON):
+            with open(CONFIG_JSON, "r", encoding="utf-8") as fp:
+                _cur = json.load(fp)
+            # 从模板 JSON 读取默认值补全(缺失或为空的键从模板补入)
+            _tpl_path = os.path.join(ROOT, "config.example.json")
+            if os.path.exists(_tpl_path):
+                with open(_tpl_path, "r", encoding="utf-8") as fp:
+                    _tpl = json.load(fp)
+                for _k, _v in _tpl.items():
+                    if _k not in _cur or not _cur[_k]:
+                        _cur[_k] = _v
+            # 从 config.example.py 补全向导无法序列化的键(如 basePath 使用 resolvePath)
+            if "basePath" not in _cur:
+                _cur["basePath"] = {
+                    "music": str(f.get("basePathMusic") or "./resources/midi"),
+                    "mcfunc": str(f.get("basePathMcfunc") or "./resources/mcfunc"),
+                    "ezmatic": str(f.get("basePathEzmatic") or "./resources/ezmatic"),
+                    "image": str(f.get("basePathImage") or "./resources/pictures"),
+                }
+            if "spam" not in _cur:
+                _cur["spam"] = {
+                    "attack": f.get("spamAttack", ""),
+                    "ad": split_lines(f.get("spamAd", "")),
+                    "adInterval": int(f.get("spamAdInterval") or 60000),
+                }
+            if "rateLimit" not in _cur:
+                _cur["rateLimit"] = {
+                    "command": {
+                        "enabled": bool(f.get("rateLimitEnabled")),
+                        "windowMs": int(f.get("rateLimitWindowMs") or 1000),
+                        "maxPerWindow": int(f.get("rateLimitMax") or 20),
+                    }
+                }
+            if "commandAliases" not in _cur:
+                _cur["commandAliases"] = _tpl.get("commandAliases", {})
+            with open(CONFIG_JSON, "w", encoding="utf-8") as fp:
+                json.dump(_cur, fp, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
 
     # 保存成功后把模板中的 is_first_run 写为 False,下次启动正常进入服务
     clear_first_run_flag()

@@ -8,7 +8,7 @@ import re
 import time
 from datetime import datetime, timedelta, timezone
 
-from lib.command import Command
+from lib.command import Command, apply_config_aliases
 from lib.current import Current
 from lib.mods import ClientModManager, ServerModManager
 from lib.permission import PermissionManager
@@ -79,18 +79,22 @@ class Mod:
     def onCommand(self):
         return {
             "normal": [
-                Command.create("tool", "工具命令（方法: search/send/tellall/cmd/ping/time/start/move/reload/mod/exec）")
-                .add_string("方法", False)
-                .add_optional_string("参数1")
-                .add_optional_string("参数2")
-                .add_optional_string("参数3")
-                .add_optional_string("参数4")
-                .add_optional_string("参数5")
-                .set_func(self._cmd_tool),
+                apply_config_aliases(
+                    Command.create("tool", "工具命令（方法: search/send/tellall/cmd/ping/time/start/move/reload/mod/exec）")
+                    .add_string("方法", False)
+                    .add_optional_string("参数1")
+                    .add_optional_string("参数2")
+                    .add_optional_string("参数3")
+                    .add_optional_string("参数4")
+                    .add_optional_string("参数5")
+                    .set_func(self._cmd_tool)
+                ),
 
-                Command.create("help", "命令帮助（分页）")
-                .add_optional_string("页码")
-                .set_func(self._cmd_help),
+                apply_config_aliases(
+                    Command.create("help", "命令帮助（分页）")
+                    .add_optional_string("页码")
+                    .set_func(self._cmd_help)
+                ),
             ],
         }
 

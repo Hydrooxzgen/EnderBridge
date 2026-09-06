@@ -6,21 +6,67 @@ import asyncio
 import re
 import time
 
+# 使用新的配置加载器
+from lib.config_loader import get_config
+
 
 def _load_config():
-    """从 config.py 读取命令前缀与限流配置(强制重新加载,确保 WebUI 保存后生效)
+    """读取命令前缀与限流配置"""
+    config = get_config()
+    command_prefix = config.get("commandPrefix") or config.get("command_prefix") or "$"
+    rate_limit = config.get("rateLimit") or config.get("rate_limit")
+    return command_prefix, rate_limit
 
-    使用 importlib.reload 强制重新执行 config.py,绕过 Python 模块缓存。
+
+def _load_command_aliases() -> dict:
+    """读取用户自定义命令别名
+
+    Returns:
+        dict: {主命令名: [别名1, 别名2, ...]}
     """
-    import importlib
-    try:
-        import config
-        importlib.reload(config)
-        command_prefix = getattr(config, "commandPrefix", None) or getattr(config, "command_prefix", "$")
-        rate_limit = getattr(config, "rateLimit", None) or getattr(config, "rate_limit", None)
-        return command_prefix, rate_limit
-    except Exception:
-        return "$", None
+    config = get_config()
+    return config.get("commandAliases", {}) or {}
+
+
+# 命令注册表:跟踪所有 Command 实例,用于别名热重载
+_COMMAND_REGISTRY: list["Command"] = []
+
+
+def apply_config_aliases(cmd: "Command") -> "Command":
+    """将配置中的别名应用到命令实例
+
+    config.json 中的 commandAliases 是别名的唯一来源。
+    首次运行时 config.json 从 config.example.json 复制,已包含全部默认别名。
+    用户在 WebUI 增删别名后无需重启,保存即时生效。
+
+    Args:
+        cmd: Command 实例
+
+    Returns:
+        同一实例,支持链式调用
+    """
+    aliases = _load_command_aliases()
+    if cmd.name in aliases:
+        for alias in aliases[cmd.name]:
+            cmd.add_alias(alias)
+    # 注册到全局表(用于热重载)
+    if cmd not in _COMMAND_REGISTRY:
+        _COMMAND_REGISTRY.append(cmd)
+    return cmd
+
+
+def reload_all_aliases() -> None:
+    """热重载所有命令的别名(从 config.json 重新读取)
+
+    调用时机: WebUI 保存 commandAliases 后,
+    无需重启服务器即可生效。
+    """
+    aliases = _load_command_aliases()
+    for cmd in _COMMAND_REGISTRY:
+        cmd.aliases.clear()
+        if cmd.name in aliases:
+            for alias in aliases[cmd.name]:
+                cmd.add_alias(alias)
 
 
 _PREFIX, _RATE_LIMIT = _load_config()
@@ -115,6 +161,8 @@ class Command:
         self.func = None
         # 异步执行出错时的回调(由调用方注入,用于向用户反馈错误)
         self.on_error = None
+        # 命令别名列表(不含前缀,如 "msg" 对应 $msg)
+        self.aliases: list[str] = []
 
     # ---- 参数添加(链式) ----
 
@@ -175,6 +223,21 @@ class Command:
         self.func = func
         return self
 
+    def add_alias(self, alias: str) -> "Command":
+        """添加命令别名(不含前缀,如 "msg" 使 $msg 也能触发此命令)
+
+        Args:
+            alias: 别名字符串,不含命令前缀
+
+        Returns:
+            self, 支持链式调用
+        """
+        if not alias or " " in alias:
+            return self
+        if alias not in self.aliases:
+            self.aliases.append(alias)
+        return self
+
     # ---- 执行 ----
 
     def execute(self, commander: str, text: str):
@@ -194,8 +257,11 @@ class Command:
         except ValueError as e:
             return {"status": False, "message": str(e)}
 
-        # 校验命令名称是否匹配
-        if text_list[0] != f"{Command.command_prefix}{self.name}":
+        # 校验命令名称是否匹配(支持主名和别名)
+        cmd_token = text_list[0]
+        expected_main = f"{Command.command_prefix}{self.name}"
+        expected_aliases = [f"{Command.command_prefix}{a}" for a in self.aliases]
+        if cmd_token != expected_main and cmd_token not in expected_aliases:
             return False
 
         # 计算必选参数和可选参数数量

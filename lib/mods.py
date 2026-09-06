@@ -494,6 +494,7 @@ class ClientModManager:
     async def execute_terminal(msg: str) -> bool:
         """终端命令转发给客户端 Mod 执行
 
+        仅执行标记了 terminal_compatible = True 的 Mod(如 bot)。
         用终端虚拟客户端替代真实游戏客户端,将输出重定向到终端。
         返回 True 表示已处理。
 
@@ -525,6 +526,10 @@ class ClientModManager:
             manager.client = terminal_client
             original_mod_clients = {}
             for mod_name, mod_instance in manager.mod_instances.items():
+                # 仅执行标记了 terminal_compatible 的 Mod
+                mod_class = ClientModManager.loaded_mod.get(mod_name)
+                if mod_class and not getattr(mod_class, "terminal_compatible", False):
+                    continue
                 original_mod_clients[mod_name] = getattr(mod_instance, "client", None)
                 mod_instance.client = terminal_client
 
@@ -547,6 +552,9 @@ class ClientModManager:
 
         # 策略2: 无客户端连接或未匹配时,临时实例化已加载的 Mod 类
         for name, mod_class in ClientModManager.loaded_mod.items():
+            # 仅执行标记了 terminal_compatible 的 Mod
+            if not getattr(mod_class, "terminal_compatible", False):
+                continue
             try:
                 instance = mod_class(terminal_client)
                 instance.modName = name

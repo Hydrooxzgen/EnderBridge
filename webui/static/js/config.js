@@ -142,9 +142,15 @@ function loadConfig() {
 
     var sapi = data.config.sapi || {};
     var bot = data.config.bot || {};
+    var announce = (data.config.messageConfig || {}).announcements || {};
 
     $("cfg-gmsg").value = sapi.gmsg || "gmsg";
     $("cfg-smsg").value = sapi.smsg || "smsg";
+
+    $("cfg-announce-enabled").checked = !!announce.enabled;
+    $("cfg-announce-interval").value = announce.interval || 300;
+    $("cfg-announce-messages").value = (announce.messages || []).join("\n");
+    toggleSub("announceFields", $("cfg-announce-enabled").checked);
 
     $("cfg-bot-host").value = bot.host || "127.0.0.1";
     $("cfg-bot-port").value = bot.port || 19132;
@@ -182,17 +188,142 @@ function loadConfig() {
 
     renderModSwitches();
     syncConfigCards();
+    // 别名开关状态同步
+    var aliasToggle = $("cfg-aliases-enabled");
+    var hasAliases = data.config.commandAliases && Object.keys(data.config.commandAliases).length > 0;
+    if (aliasToggle) aliasToggle.checked = hasAliases;
+    // 始终显示别名 tab,不再因为空所以hide
+    _syncAliasTabVisibility(true);
+    renderAliasList();
   }).catch(function () {});
 }
 
 // Toggle 展开/收起
-["cfg-qq", "cfg-ratelimit", "cfg-webui"].forEach(function (id) {
+["cfg-qq", "cfg-ratelimit", "cfg-webui", "cfg-announce-enabled"].forEach(function (id) {
   var el = $(id);
   if (el) el.addEventListener("change", function () {
-    var subId = id === "cfg-qq" ? "qqFields" : id === "cfg-ratelimit" ? "rlFields" : "webuiFields";
+    var subId = id === "cfg-qq" ? "qqFields" : id === "cfg-ratelimit" ? "rlFields" : id === "cfg-webui" ? "webuiFields" : "announceFields";
     toggleSub(subId, this.checked);
   });
 });
+
+// ===== 命令别名管理 =====
+function renderAliasList() {
+  var container = $("aliasList");
+  if (!container) return;
+  var aliases = (cfgData.commandAliases || {});
+  var html = "";
+  for (var cmd in aliases) {
+    var aliasList = aliases[cmd].join(", ");
+    html += '<div class="alias-item" style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;margin-bottom:8px;">' +
+      '<span style="font-weight:600;min-width:100px;">' + escapeHtml(cmd) + '</span>' +
+      '<span style="flex:1;color:var(--text-dim);font-size:13px;">' + escapeHtml(aliasList) + '</span>' +
+      '<button class="btn btn-sm btn-ghost edit-alias" data-cmd="' + escapeHtml(cmd) + '" data-aliases="' + escapeHtml(aliases[cmd].join(",")) + '">✏️ 编辑</button>' +
+      '<button class="btn btn-sm btn-ghost remove-alias" data-cmd="' + escapeHtml(cmd) + '">🗑️</button>' +
+      '</div>';
+  }
+  if (!html) html = '<p class="hint" style="text-align:center;padding:16px;">暂无自定义别名，点击上方按钮添加</p>';
+  container.innerHTML = html;
+  // 绑定编辑事件
+  container.querySelectorAll(".edit-alias").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var cmd = this.getAttribute("data-cmd");
+      var currentAliases = this.getAttribute("data-aliases");
+      showEditAliasModal(cmd, currentAliases);
+    });
+  });
+  // 绑定删除事件
+  container.querySelectorAll(".remove-alias").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var cmd = this.getAttribute("data-cmd");
+      if (confirm("确定要删除 " + cmd + " 的所有别名吗？")) {
+        delete cfgData.commandAliases[cmd];
+        renderAliasList();
+        toast("已删除 " + cmd + " 的别名", "ok");
+      }
+    });
+  });
+}
+
+function showAddAliasModal() {
+  var cmd = prompt("请输入主命令名（如 message, bot, function 等）：");
+  if (!cmd) return;
+  var aliases = prompt("请输入别名，多个用逗号分隔（如 msg, m）：");
+  if (!aliases) return;
+  var aliasArr = aliases.split(",").map(function (s) { return s.trim(); }).filter(Boolean);
+  if (!aliasArr.length) return;
+  cfgData.commandAliases = cfgData.commandAliases || {};
+  cfgData.commandAliases[cmd] = aliasArr;
+  renderAliasList();
+  toast("已添加别名: " + cmd + " → " + aliasArr.join(", "), "ok");
+}
+
+function showEditAliasModal(cmd, currentAliases) {
+  var newAliases = prompt("编辑 " + cmd + " 的别名（多个用逗号分隔）：", currentAliases);
+  if (newAliases === null) return; // 用户取消
+  var aliasArr = newAliases.split(",").map(function (s) { return s.trim(); }).filter(Boolean);
+  if (!aliasArr.length) {
+    // 别名清空则删除该命令
+    if (confirm("别名为空，确定要删除 " + cmd + " 的所有别名吗？")) {
+      delete cfgData.commandAliases[cmd];
+    }
+    renderAliasList();
+    return;
+  }
+  cfgData.commandAliases = cfgData.commandAliases || {};
+  cfgData.commandAliases[cmd] = aliasArr;
+  renderAliasList();
+  toast("已更新别名: " + cmd + " → " + aliasArr.join(", "), "ok");
+}
+
+var addAliasBtn = $("addAliasBtn");
+if (addAliasBtn) addAliasBtn.addEventListener("click", showAddAliasModal);
+
+// 命令别名开关 — 控制侧边栏「命令别名」tab 的显示/隐藏
+function _syncAliasTabVisibility(enabled) {
+  var sidebarItem = document.querySelector('.cfg-sidebar-item[data-cfg-cat="aliases"]');
+  if (sidebarItem) sidebarItem.style.display = enabled ? "" : "none";
+  // 若当前在别名tab但被隐藏了，跳回功能开关tab
+  if (!enabled) {
+    var activeCat = document.querySelector('.cfg-sidebar-item.active[data-cfg-cat="aliases"]');
+    if (activeCat) {
+      var featuresItem = document.querySelector('.cfg-sidebar-item[data-cfg-cat="features"]');
+      if (featuresItem) featuresItem.click();
+    }
+  }
+}
+var DEFAULT_COMMAND_ALIASES = {
+  "message": ["msg", "m"],
+  "bot": ["b"],
+  "function": ["func", "fn"],
+  "music": ["m"],
+  "tool": ["t"],
+  "spam": ["s"],
+  "ws": ["w"],
+  "ai": ["a"],
+  "chat": ["c"],
+  "ezmatic": ["ez"],
+  "image": ["img"],
+  "help": ["h", "?"],
+  "perm": ["p"],
+};
+
+var aliasToggle = $("cfg-aliases-enabled");
+if (aliasToggle) {
+  aliasToggle.addEventListener("change", function () {
+    _syncAliasTabVisibility(this.checked);
+    if (this.checked) {
+      // 开启别名:若当前为空则填充默认值
+      if (!cfgData.commandAliases || Object.keys(cfgData.commandAliases).length === 0) {
+        cfgData.commandAliases = JSON.parse(JSON.stringify(DEFAULT_COMMAND_ALIASES));
+        toast("已加载默认别名配置", "ok");
+      }
+    } else {
+      cfgData.commandAliases = {};
+    }
+    renderAliasList();
+  });
+}
 
 function toggleBotMode() {
   var mode = $("cfg-bot-mode-server").checked ? "server" : "realm";
@@ -408,6 +539,11 @@ function saveConfig() {
   };
   var utils = { tellAllToTell: $("cfg-tellall").checked, enablePolling: $("cfg-polling").checked };
   var sapi = { gmsg: $("cfg-gmsg").value.trim() || "gmsg", smsg: $("cfg-smsg").value.trim() || "smsg" };
+  var announce = {
+    enabled: $("cfg-announce-enabled").checked,
+    interval: parseInt($("cfg-announce-interval").value, 10) || 300,
+    messages: $("cfg-announce-messages").value.split(/\n+/).map(function (s) { return s.trim(); }).filter(Boolean),
+  };
 
   var mods = cfgData.mods || {}; mods.client = mods.client || {}; mods.server = mods.server || {};
   ["client", "server"].forEach(function (side) {
@@ -453,6 +589,8 @@ function saveConfig() {
       githubToken: $("cfg-github-token").value.trim(),
       features: f, rateLimit: rl, webui: webui, ai: ai,
       utils: utils, sapi: sapi, bot: bot, mods: mods, spam: spam, basePath: basePath,
+      messageConfig: { announcements: announce },
+      commandAliases: cfgData.commandAliases || {},
     }
   };
   api("/config", { method: "PUT", body: JSON.stringify(payload) })

@@ -3,6 +3,7 @@
 提供游戏内权限查询、添加、删除的命令接口
 """
 from lib.command import Command
+from lib.command import apply_config_aliases
 from lib.permission import PermissionManager
 
 
@@ -17,14 +18,16 @@ class Mod:
         return {
             # 普通命令:权限查询
             "normal": [
-                Command.create("perm", "权限管理命令（方法: query/add/remove）")
-                .add_string("方法", False)
-                .add_optional_string("参数1")
-                .add_optional_string("参数2")
-                .add_optional_string("参数3")
-                .add_optional_string("参数4")
-                .add_optional_string("参数5")
-                .set_func(self._cmd_perm),
+                apply_config_aliases(
+                    Command.create("perm", "权限管理命令（方法: query/add/remove）")
+                    .add_string("方法", False)
+                    .add_optional_string("参数1")
+                    .add_optional_string("参数2")
+                    .add_optional_string("参数3")
+                    .add_optional_string("参数4")
+                    .add_optional_string("参数5")
+                    .set_func(self._cmd_perm)
+                ),
             ],
         }
 

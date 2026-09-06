@@ -47,6 +47,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WEBUI_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(WEBUI_DIR, "static")
+CONFIG_JSON = os.path.join(ROOT, "config.json")
 CONFIG_PY = os.path.join(ROOT, "config.py")
 CONFIG_PY_BAK = os.path.join(ROOT, "config.py.bak")
 PERMISSION_JSON = os.path.join(ROOT, "permission.json")
@@ -123,7 +124,7 @@ def set_app_info(github_repo: str, version: str, description=None) -> None:
 
 
 def _github_headers() -> dict:
-    """返回 GitHub API 请求头,若配置了 Token 则附带认证以提升速率限制"""
+    """返回 GitHub API request head,若配置了 token 则附带认证以提升速率限制"""
     headers = {
         "Accept": "application/vnd.github.v3+json",
         "User-Agent": f"EnderBridge/{_app_version}",
@@ -157,7 +158,15 @@ def _read_config_src() -> str:
 
 
 def _load_config_module() -> dict:
-    """以模块方式加载 config.py,返回其命名空间(失败时返回空 dict)"""
+    """加载配置，优先读取 config.json (b0.3.6)，回退到 config.py (b0.1.0)"""
+    # 优先读取 JSON 配置
+    if os.path.exists(CONFIG_JSON):
+        try:
+            with open(CONFIG_JSON, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    # 回退：读取 Python 配置
     ns = {}
     try:
         import importlib.util
@@ -270,26 +279,59 @@ def _set_system_prompt(messages, content: str) -> list:
 
 
 def load_config() -> dict:
-    """读取可管理配置(供前端表单使用)"""
-    ns = _load_config_module()
-    cfg = ns.get("wsConfig", {})
-    features = ns.get("features", {})
-    rate_limit = ns.get("rateLimit", {})
-    webui = ns.get("webuiConfig", {})
-    ai = ns.get("AIConfig", {})
+    """读取可管理配置(供前端表单使用)，优先读取 JSON，兼容旧版 Python"""
+    # 优先尝试读取 JSON 配置
+    json_config = {}
+    if os.path.exists(CONFIG_JSON):
+        try:
+            with open(CONFIG_JSON, "r", encoding="utf-8") as f:
+                json_config = json.load(f)
+        except Exception:
+            pass
+
+    # 兼容旧版 Python 配置
+    py_config = {}
+    if not json_config and os.path.exists(CONFIG_PY):
+        ns = _load_config_module()
+        # 只提取配置变量，不包含模块对象
+        for name in dir(ns):
+            if not name.startswith("_"):
+                try:
+                    val = getattr(ns, name)
+                    # 跳过模块、函数等不可序列化对象
+                    if not callable(val) and not hasattr(val, '__loader__'):
+                        py_config[name] = val
+                except Exception:
+                    pass
+
+    # 合并配置，JSON 优先
+    config = {**py_config, **json_config}
+
+    cfg = config.get("wsConfig", {})
+    features = config.get("features", {})
+    rate_limit = config.get("rateLimit", {})
+    webui = config.get("webuiConfig", {})
+    ai = config.get("AIConfig", {})
     ai_models = ai.get("models", {})
-    utils = ns.get("utilsConfig", {})
-    sapi = ns.get("sapiConfig", {})
+    utils = config.get("utilsConfig", {})
+    sapi = config.get("sapiConfig", {})
+    bot = config.get("botConfig", {})
+    message_cfg = config.get("messageConfig", {})
+    spam = config.get("spam", {})
+    base_path = config.get("basePath", {})
+    mods = config.get("mods", {"client": {}, "server": {}})
+    command_aliases = config.get("commandAliases", {})
+
     return {
         "name": cfg.get("name", "EnderBridge"),
         "port": cfg.get("port", 8800),
-        "commandPrefix": ns.get("commandPrefix", "!"),
-        "logLevel": ns.get("logLevel", "info"),
+        "commandPrefix": config.get("commandPrefix", "!"),
+        "logLevel": config.get("logLevel", "info"),
         "features": features,
         "rateLimit": rate_limit,
-        "mods": ns.get("mods", {"client": {}, "server": {}}),
-        "spam": ns.get("spam", {}),
-        "basePath": ns.get("basePath", {}),
+        "mods": mods,
+        "spam": spam,
+        "basePath": base_path,
         "webui": {
             "enabled": webui.get("enabled", True),
             "port": webui.get("port", 18888),
@@ -314,83 +356,94 @@ def load_config() -> dict:
             "gmsg": sapi.get("gmsg", "gmsg"),
             "smsg": sapi.get("smsg", "smsg"),
         },
-        "bot": {
-            "enabled": ns.get("botConfig", {}).get("enabled", True),
-            "mode": ns.get("botConfig", {}).get("mode", "server"),
-            "host": ns.get("botConfig", {}).get("host", "127.0.0.1"),
-            "port": ns.get("botConfig", {}).get("port", 19132),
-            "username": ns.get("botConfig", {}).get("username", "FakeBot"),
-            "offline": ns.get("botConfig", {}).get("offline", True),
-            "version": ns.get("botConfig", {}).get("version", None),
-            "authTitle": ns.get("botConfig", {}).get("authTitle", None),
-            "profilesFolder": ns.get("botConfig", {}).get("profilesFolder", None),
-            "realmId": ns.get("botConfig", {}).get("realmId", None),
-            "realmInvite": ns.get("botConfig", {}).get("realmInvite", None),
-            "xboxAccounts": ns.get("botConfig", {}).get("xboxAccounts", []),
-            "activeXboxAccount": ns.get("botConfig", {}).get("activeXboxAccount", None),
+        "messageConfig": {
+            "announcements": (message_cfg or {}).get("announcements", {
+                "enabled": False,
+                "interval": 300,
+                "messages": [
+                    "欢迎来到本服务器！请遵守游戏规则。",
+                    "加入我们的 QQ 群：123456789",
+                    "服务器官网：https://example.com",
+                ],
+            }),
         },
-        "githubToken": ns.get("githubToken", ""),
+        "bot": {
+            "enabled": bot.get("enabled", True),
+            "mode": bot.get("mode", "server"),
+            "host": bot.get("host", "127.0.0.1"),
+            "port": bot.get("port", 19132),
+            "username": bot.get("username", "FakeBot"),
+            "offline": bot.get("offline", True),
+            "version": bot.get("version", None),
+            "authTitle": bot.get("authTitle", None),
+            "profilesFolder": bot.get("profilesFolder", None),
+            "realmId": bot.get("realmId", None),
+            "realmInvite": bot.get("realmInvite", None),
+            "xboxAccounts": bot.get("xboxAccounts", []),
+            "activeXboxAccount": bot.get("activeXboxAccount", None),
+        },
+        "githubToken": config.get("githubToken", ""),
+        "commandAliases": command_aliases,
     }
 
 
 def save_config(new: dict) -> None:
-    """将表单配置写回 config.py(块替换,不触碰其他配置;写前备份 .bak)"""
-    src = _read_config_src()
-    orig = src
+    """将表单配置写回 config.json(优先 JSON，兼容旧版 Python)"""
+    # 读取现有配置（优先 JSON，兼容旧版 Python）
+    json_config = {}
+    if os.path.exists(CONFIG_JSON):
+        try:
+            with open(CONFIG_JSON, "r", encoding="utf-8") as f:
+                json_config = json.load(f)
+        except Exception:
+            pass
 
-    def apply_block(name, value):
-        nonlocal src
-        src, ok = _replace_block(src, name, value)
-        if not ok:
-            raise RuntimeError(f"config.py 中未找到 {name} 配置块")
+    py_config = {}
+    if not json_config and os.path.exists(CONFIG_PY):
+        ns = _load_config_module()
+        # 只提取配置变量，不包含模块对象
+        for name in dir(ns):
+            if not name.startswith("_"):
+                try:
+                    val = getattr(ns, name)
+                    # 跳过模块、函数等不可序列化对象
+                    if not callable(val) and not hasattr(val, '__loader__'):
+                        py_config[name] = val
+                except Exception:
+                    pass
 
-    def apply_block_or_append(name, value, comment=""):
-        """块替换;旧版 config.py 缺少该块时自动追加到文件末尾"""
-        nonlocal src
-        src, ok = _replace_block(src, name, value)
-        if ok:
-            return
-        text = _py_dump(value)
-        if not src.endswith("\n"):
-            src += "\n"
-        src += f"\n{comment}# {name}\n{name} = {text}\n"
+    # 合并现有配置，JSON 优先
+    config = {**py_config, **json_config}
 
-    def apply_line(name, value):
-        nonlocal src
-        src, ok = _replace_line(src, name, value)
-        if not ok:
-            raise RuntimeError(f"config.py 中未找到 {name} 配置")
-
-    # wsConfig:整体块替换(包含 name / port)
-    ws = {
+    # 更新配置
+    config["wsConfig"] = {
         "name": str(new.get("name") or "").strip() or "EnderBridge",
         "port": int(new.get("port") or 8800),
     }
-    apply_block("wsConfig", ws)
-    apply_line("commandPrefix", str(new.get("commandPrefix") or "!").strip() or "!")
-    apply_line("logLevel", str(new.get("logLevel") or "info").strip())
-    apply_block("features", new.get("features") or {})
-    apply_block("rateLimit", new.get("rateLimit") or {})
-    # Mod 开关 / 刷屏数据 / 资源路径:整块替换;缺失时自动追加
-    # Message 是核心 mod(通知),保存时强制注入,防止被 UI 误删
+    config["commandPrefix"] = str(new.get("commandPrefix") or "!").strip() or "!"
+    config["logLevel"] = str(new.get("logLevel") or "info").strip()
+    config["features"] = new.get("features") or {}
+    config["rateLimit"] = new.get("rateLimit") or {}
+
+    # Mods
     mods_form = new.get("mods") or {"client": {}, "server": {}}
     mods_form.setdefault("client", {})
     mods_form.setdefault("server", {})
     mods_form["client"].setdefault("Message", "mod.message")
-    apply_block_or_append("mods", mods_form, "# Mod 加载配置（模块名，相对项目根目录）")
-    apply_block_or_append("spam", new.get("spam") or {}, "# 刷屏数据配置")
-    apply_block_or_append("basePath", new.get("basePath") or {}, "# 文件路径配置（所有平台统一使用相对路径）")
+    config["mods"] = mods_form
 
-    # AI 对话配置:基于现有结构合并,保留 thinking / stream 等未暴露字段
-    ns = _load_config_module()
-    ai = dict(ns.get("AIConfig") or {})
+    config["spam"] = new.get("spam") or {}
+    config["basePath"] = new.get("basePath") or {}
+
+    # AI
+    ai = config.get("AIConfig", {})
     ai.setdefault("options", {})
     ai.setdefault("models", {})
     ai_form = new.get("ai") or {}
     ai["options"]["baseURL"] = str(ai_form.get("baseURL") or "").strip()
     ai["options"]["apiKey"] = str(ai_form.get("apiKey") or "").strip()
-    chat = dict(ai["models"].get("chat") or {})
-    cmd = dict(ai["models"].get("command") or {})
+    chat = dict(ai.get("models", {}).get("chat", {}))
+    cmd = dict(ai.get("models", {}).get("command", {}))
     chat["model"] = str(ai_form.get("chatModel") or "deepseek-chat").strip()
     chat["max_tokens"] = int(ai_form.get("chatMaxTokens") or 512)
     chat["messages"] = _set_system_prompt(chat.get("messages"), ai_form.get("chatPrompt"))
@@ -400,78 +453,105 @@ def save_config(new: dict) -> None:
     ai["models"]["chat"] = chat
     ai["models"]["command"] = cmd
     ai["chatCooldown"] = int(ai_form.get("chatCooldown") or 5000)
-    apply_block_or_append("AIConfig", ai, "# AI 对话配置")
+    config["AIConfig"] = ai
 
     # 工具配置
     utils_form = new.get("utils") or {}
-    apply_block_or_append("utilsConfig", {
+    config["utilsConfig"] = {
         "tellAllToTell": bool(utils_form.get("tellAllToTell", False)),
         "enablePolling": bool(utils_form.get("enablePolling", True)),
-    }, "# 工具配置")
+    }
 
-    # 消息通道配置
+    # SAPI
     sapi_form = new.get("sapi") or {}
-    apply_block_or_append("sapiConfig", {
+    config["sapiConfig"] = {
         "gmsg": str(sapi_form.get("gmsg") or "gmsg").strip(),
         "smsg": str(sapi_form.get("smsg") or "smsg").strip(),
-    }, "# 消息通道配置")
+    }
 
-    # 假人 Bot 配置
+    # 消息通知与公告
+    message_form = new.get("messageConfig") or {}
+    announce_form = message_form.get("announcements") or {}
+    config["messageConfig"] = {
+        "agreement": {
+            "enabled": True,
+            "title": "📋 服务器协议",
+            "text": "欢迎来到本服务器！\n\n请遵守以下规则：\n1. 尊重其他玩家\n2. 禁止作弊和破坏\n3. 禁止刷屏和骚扰\n\n输入 agree 同意协议后即可游戏。",
+        },
+        "announcements": {
+            "enabled": bool(announce_form.get("enabled", False)),
+            "interval": int(announce_form.get("interval", 300)),
+            "messages": announce_form.get("messages", [
+                "欢迎来到本服务器！请遵守游戏规则。",
+                "加入我们的 QQ 群：123456789",
+                "服务器官网：https://example.com",
+            ]),
+        },
+    }
+
+    # Bot
     bot_form = new.get("bot") or {}
-    # 保留已有的 xboxAccounts 和 activeXboxAccount(这些由登录 API 管理,不通过表单修改)
-    ns_cur = _load_config_module()
-    cur_bot = ns_cur.get("botConfig") or {}
-    active_xbox = cur_bot.get("activeXboxAccount") or None
-    apply_block_or_append("botConfig", {
+    config["botConfig"] = {
         "enabled": bool(bot_form.get("enabled", True)),
         "mode": str(bot_form.get("mode") or "server").strip(),
         "host": str(bot_form.get("host") or "127.0.0.1").strip(),
         "port": int(bot_form.get("port") or 19132),
-        "username": active_xbox or str(bot_form.get("username") or "FakeBot").strip(),
-        # offline 完全由用户开关控制,不再被 activeXboxAccount 强制覆盖
+        "username": str(bot_form.get("username") or "FakeBot").strip(),
         "offline": bool(bot_form.get("offline", True)),
         "version": bot_form.get("version") or None,
         "authTitle": bot_form.get("authTitle") or None,
         "profilesFolder": bot_form.get("profilesFolder") or None,
         "realmId": bot_form.get("realmId") or None,
         "realmInvite": bot_form.get("realmInvite") or None,
-        "xboxAccounts": cur_bot.get("xboxAccounts") or [],
-        "activeXboxAccount": cur_bot.get("activeXboxAccount") or None,
-    }, "# 假人 Bot 配置")
+        "xboxAccounts": [],  # 由登录 API 管理
+        "activeXboxAccount": None,
+    }
 
-    # webuiConfig:整体块替换;旧版 config.py 无该块时自动追加到文件末尾
+    # WebUI
     webui = new.get("webui") or {}
-    webui_value = {
+    config["webuiConfig"] = {
         "enabled": bool(webui.get("enabled", True)),
         "port": int(webui.get("port") or 18888),
         "token": str(webui.get("token") or "").strip(),
         "localOnly": bool(webui.get("localOnly", False)),
     }
-    apply_block_or_append("webuiConfig", webui_value, "# Web 管理界面配置（每次启动时监听该端口）")
 
-    # GitHub API Token:旧版 config.py 无该行时自动追加
-    github_token = str(new.get("githubToken") or "").strip()
-    src, ok = _replace_line(src, "githubToken", github_token)
-    if not ok:
-        # 旧版 config.py 没有 githubToken 行,追加到 webuiConfig 之后
-        marker = "# Web 管理界面配置"
-        idx = src.find(marker)
-        if idx >= 0:
-            # 找到 webuiConfig 块的结束位置(下一个空行或文件末尾)
-            end = src.find("\n\n", idx)
-            if end < 0:
-                end = len(src)
-            insert_pos = end + 1
-        else:
-            insert_pos = len(src)
-        src = src[:insert_pos] + f"\ngithubToken = {json.dumps(github_token, ensure_ascii=False)}\n" + src[insert_pos:]
+    # GitHub Token
+    config["githubToken"] = str(new.get("githubToken") or "").strip()
 
-    if src == orig:
-        return
+    # Mods
+    config["mods"] = new.get("mods") or {"client": {}, "server": {}}
+    config["mods"].setdefault("client", {})
+    config["mods"].setdefault("server", {})
+    config["mods"]["client"].setdefault("Message", "mod.message")
+
+    config["spam"] = new.get("spam") or {}
+    config["basePath"] = new.get("basePath") or {}
+
+    # 命令别名
+    config["commandAliases"] = new.get("commandAliases") or {}
+
+    # 版本信息
+    config["_version"] = "b0.3.6"
+
+    # 保存到 JSON
+    if os.path.exists(CONFIG_JSON):
+        os.replace(CONFIG_JSON, CONFIG_JSON + ".bak")
+    with open(CONFIG_JSON, "w", encoding="utf-8") as f:
+        json.dump(config, f, ensure_ascii=False, indent=2)
+
+    # 别名热重载:保存后立即生效,无需重启 (必须在写入 JSON 之后,否则读到旧缓存)
+    try:
+        from lib.config_loader import reload_config
+        from lib.command import reload_all_aliases
+        reload_config()  # 清除配置缓存
+        reload_all_aliases()
+    except Exception:
+        pass
+
+    # 兼容：如果存在旧的 config.py，提示可删除
     if os.path.exists(CONFIG_PY):
-        os.replace(CONFIG_PY, CONFIG_PY_BAK)
-    with open(CONFIG_PY, "w", encoding="utf-8") as f:
-        f.write(src)
+        print("[Config] 配置已保存到 config.json，旧的 config.py 可手动删除")
 
 
 # ===== 权限读写 =====

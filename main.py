@@ -1,6 +1,7 @@
 # Author: Hydrooxzgen
 # Github: https://github.com/Hydrooxzgen
 # This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
+# The EBC config format version is b0.3.6
 import asyncio
 import json
 import os
@@ -13,8 +14,10 @@ from uuid import uuid4
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PY = os.path.join(ROOT, "config.py")
+CONFIG_JSON = os.path.join(ROOT, "config.json")
 CONFIG_EXAMPLE = os.path.join(ROOT, "config.example.py")
-VERSION = "b0.3.5"
+CONFIG_EXAMPLE_JSON = os.path.join(ROOT, "config.example.json")
+VERSION = "b0.3.6"
 DESCRIPTION = None # 仅当不为None时从Github拉取更新日志，反之则直接显示该变量内容。
 GITHUB_REPO = "Hydrooxzgen/EnderBridge"  # You can edit this to your own repository if you fork it :)
 WANT_RESET = "--reset-all" in sys.argv
@@ -22,7 +25,7 @@ WANT_EXPORT = "export" in sys.argv
 WANT_EXPORT_CLEAR = WANT_EXPORT and "-clear" in sys.argv
 WANT_LOAD_WITHOUT_CONFIG = "--load-without-config" in sys.argv
 
-# ===== 依赖检测(必须早于任何第三方模块使用) =====
+# ===== 依赖检测(必须早于任何第三方mod使用) =====
 # websockets 使用动态导入:缺失时自动运行 setup.py 安装,成功后继续启动。
 def _dependencies_ok() -> bool:
     try:
@@ -54,22 +57,40 @@ if not WANT_RESET and not WANT_EXPORT and not _dependencies_ok():
 # ===== 引导阶段(必须早于任何依赖 config.py 的模块加载) =====
 # 依赖 config.py 的模块(lib/logger.py、lib/utils.py、lib/mods.py 等)均为延迟加载,
 # 因此 config.py 缺失时(如 --reset-all 之后)可先在此根据模板自动补全,保证程序可启动。
-if not WANT_RESET and not os.path.exists(CONFIG_PY):
-    with open(CONFIG_EXAMPLE, "r", encoding="utf-8") as f:
-        tpl = f.read()
-    if WANT_LOAD_WITHOUT_CONFIG:
-        # --load-without-config:直接使用模板全部内容(含 is_first_run),后续跳过向导
-        cfg = tpl
-    else:
-        # config.py 只存真实配置:剔除模板携带的 isFirstRun 标记块
-        cfg = re.sub(
-            r"# ===== 首次运行 =====[\s\S]*?is_first_run = (True|False)\r?\n(\r?\n)?",
-            "",
-            tpl,
-        )
-    with open(CONFIG_PY, "w", encoding="utf-8") as f:
-        f.write(cfg)
-    print("未找到 config.py，已根据模板自动生成默认配置（可在向导中修改）")
+if not WANT_RESET and not os.path.exists(CONFIG_PY) and not os.path.exists(CONFIG_JSON):
+    # 优先生成 config.json，若无模板则回退到 config.py
+    if os.path.exists(CONFIG_EXAMPLE_JSON):
+        import shutil as _shutil_cfg
+        _shutil_cfg.copy2(CONFIG_EXAMPLE_JSON, CONFIG_JSON)
+        # --load-without-config 跳过向导,必须清除 is_first_run,
+        # 否则下次正常启动会误触发向导
+        if WANT_LOAD_WITHOUT_CONFIG:
+            try:
+                with open(CONFIG_JSON, "r", encoding="utf-8") as _f:
+                    _j = json.load(_f)
+                if _j.get("is_first_run", False):
+                    _j["is_first_run"] = False
+                    with open(CONFIG_JSON, "w", encoding="utf-8") as _f:
+                        json.dump(_j, _f, ensure_ascii=False, indent=2)
+            except Exception:
+                pass
+        print("未找到 config.json，已根据模板自动生成默认配置（可在向导中修改）")
+    elif os.path.exists(CONFIG_EXAMPLE):
+        with open(CONFIG_EXAMPLE, "r", encoding="utf-8") as f:
+            tpl = f.read()
+        if WANT_LOAD_WITHOUT_CONFIG:
+            # --load-without-config:直接使用模板全部内容(含 is_first_run),后续跳过向导
+            cfg = tpl
+        else:
+            # config.py 只存真实配置:剔除模板携带的 isFirstRun 标记块
+            cfg = re.sub(
+                r"# ===== 首次运行 =====[\s\S]*?is_first_run = (True|False)\r?\n(\r?\n)?",
+                "",
+                tpl,
+            )
+        with open(CONFIG_PY, "w", encoding="utf-8") as f:
+            f.write(cfg)
+        print("未找到 config.py，已根据模板自动生成默认配置（可在向导中修改）")
 
 # permission.json 缺失时从模板复制(权限系统依赖该文件)
 PERMISSION_JSON = os.path.join(ROOT, "permission.json")
@@ -84,7 +105,7 @@ if not WANT_RESET and not os.path.exists(PERMISSION_JSON) and os.path.exists(PER
 # ===== 一键重置:python main.py --reset-all =====
 # 清除所有配置文件(不启动服务器),并将模板 config.example.py 的 is_first_run 复位为 True
 if WANT_RESET:
-    files = ["config.py", "config.py.bak", "permission.json", "permission.json.bak"]
+    files = ["config.py", "config.py.bak", "config.json", "config.json.bak", "permission.json", "permission.json.bak"]
     removed = []
     for name in files:
         p = os.path.join(ROOT, name)
@@ -92,16 +113,21 @@ if WANT_RESET:
             os.remove(p)
             removed.append(name)
     # 复位模板标记,下次启动自动进入向导重新配置
-    try:
-        with open(CONFIG_EXAMPLE, "r", encoding="utf-8") as f:
-            src = f.read()
-        next_ = re.sub(r"is_first_run = (True|False)", "is_first_run = True", src)
-        if next_ != src:
-            with open(CONFIG_EXAMPLE, "w", encoding="utf-8") as f:
-                f.write(next_)
-    except Exception:
-        # 模板不可写时静默忽略
-        pass
+    for tpl_path, tpl_pattern, tpl_repl in [
+        (CONFIG_EXAMPLE_JSON, r'"is_first_run"\s*:\s*(true|false)', '"is_first_run": true'),
+        (CONFIG_EXAMPLE, r"is_first_run = (True|False)", "is_first_run = True"),
+    ]:
+        try:
+            if not os.path.exists(tpl_path):
+                continue
+            with open(tpl_path, "r", encoding="utf-8") as f:
+                src = f.read()
+            next_ = re.sub(tpl_pattern, tpl_repl, src)
+            if next_ != src:
+                with open(tpl_path, "w", encoding="utf-8") as f:
+                    f.write(next_)
+        except Exception:
+            pass
     print("========================================")
     print("  配置已重置")
     print("========================================")
@@ -800,6 +826,15 @@ if ROOT not in sys.path:
 # basePath(music/mcfunc/ezmatic/image)与 ezmatic 导出目录 structures
 # 缺失时自动创建,避免首次运行找不到目录(如投影目录 resources/ezmatic)。
 try:
+    from lib.config_loader import get_config as _get_cfg
+    _cfg = _get_cfg()
+    _cfg_format = _cfg.get("_config_format", "json")
+except Exception:
+    _cfg = {}
+    _cfg_format = "py"
+
+# 兼容路径适配函数:JSON 格式下 basePath/resolvePath 不存在,直接使用相对路径
+try:
     from config import basePath, resolvePath
     _resource_dirs = [resolvePath(d) for d in list(basePath.values())]
 except Exception:
@@ -818,20 +853,68 @@ for _d in _resource_dirs:
     except OSError:
         pass
 
-# ===== 动态加载依赖 config.py 的本地模块(此时 config.py 必然已存在) =====
+# ===== 动态加载依赖 config 的本地模块 =====
 from lib import shared
 from lib.logger import close_log_streams
 from lib.utils import ClientConnection, Utils
 from lib.current import Current
 from lib.mods import ClientModManager, ServerModManager
-from config import wsConfig
 
-# 根目录同时存在 config.py 时,config 会被当作普通模块而非包,无法用
-# "from config.example import ..." 导入,这里改为读取模板文件提取标记。
-with open(CONFIG_EXAMPLE, "r", encoding="utf-8") as f:
-    _example_src = f.read()
-_m = re.search(r"is_first_run = (True|False)", _example_src)
-is_first_run = _m is not None and _m.group(1) == "True"
+# 从 config_loader 获取 wsConfig(JSON 优先,Python 回退)
+wsConfig = _cfg.get("wsConfig", {})
+if not wsConfig:
+    try:
+        from config import wsConfig as _py_wsConfig
+        wsConfig = _py_wsConfig
+    except Exception:
+        wsConfig = {}
+
+# is_first_run 检测:JSON 优先,Python 回退
+is_first_run = _cfg.get("is_first_run", None)
+if is_first_run is None:
+    if os.path.exists(CONFIG_JSON):
+        try:
+            with open(CONFIG_JSON, "r", encoding="utf-8") as f:
+                _j = json.load(f)
+            is_first_run = _j.get("is_first_run", False)
+        except Exception:
+            is_first_run = False
+    else:
+        try:
+            with open(CONFIG_EXAMPLE, "r", encoding="utf-8") as f:
+                _example_src = f.read()
+            _m = re.search(r"is_first_run = (True|False)", _example_src)
+            is_first_run = _m is not None and _m.group(1) == "True"
+        except Exception:
+            is_first_run = False
+
+# 旧版本配置迁移提醒
+if _cfg.get("_is_legacy", False) and _cfg.get("_config_format") == "py":
+    _ver = _cfg.get("_version", "unknown")
+    print("========================================")
+    print(f"  当前配置为旧版本格式 (v{_ver})")
+    print("  建议迁移到 config.json 格式以获得更好支持")
+    print("  运行 py main.py --migrate-config 可自动迁移")
+    print("  运行 py main.py --downgrade-config 可降级回 Python 格式")
+    print("========================================")
+
+# --migrate-config: 将 config.py 迁移到 config.json
+if "--migrate-config" in sys.argv:
+    from lib.config_loader import migrate_py_to_json
+    if migrate_py_to_json():
+        print("迁移完成，请重启服务器")
+    else:
+        print("迁移失败: 未找到 config.py 或迁移出错")
+    sys.exit(0)
+
+# --downgrade-config: 将 config.json 降级为 config.py
+if "--downgrade-config" in sys.argv:
+    from lib.config_loader import migrate_json_to_py
+    if migrate_json_to_py():
+        print("降级完成，请重启服务器")
+    else:
+        print("降级失败: 未找到 config.json 或降级出错")
+    sys.exit(0)
 
 # ===== WebSocket 服务器 =====
 import websockets
@@ -1097,12 +1180,18 @@ _restarting = False  # 重启/更新中,抑制提示符输出
 _prompt_visible = False  # 提示符是否已在终端显示(防重复)
 
 
+def _strip_mc_colors(text: str) -> str:
+    """去除 Minecraft 颜色/格式代码(§0-§9, §a-§f, §k-§r 等)用于终端显示"""
+    import re
+    return re.sub(r"§.", "", text)
+
+
 def console_out(msg):
-    """终端输出消息"""
+    """终端输出消息(自动去除 MC 颜色代码)"""
     global _prompt_visible
     _prompt_visible = False  # console_out 清除了当前行,提示符不再可见
     sys.stdout.write("\r\x1b[K")
-    print(msg)
+    print(_strip_mc_colors(str(msg)))
 
 
 def _console_help():
@@ -1111,6 +1200,7 @@ def _console_help():
     cp = Command.command_prefix
     console_out("可用命令:")
     console_out(f"  {cp}help       - 显示此帮助")
+    console_out(f"  {cp}help <feature> - 显示特定功能帮助(如 {cp}help bot, {cp}help message)")
     console_out(f"  {cp}status     - 显示服务器状态")
     console_out(f"  {cp}list       - 列出所有客户端连接")
     console_out(f"  {cp}say <msg>  - 向主客户端发送消息")
@@ -1121,6 +1211,123 @@ def _console_help():
     console_out(f"  {cp}chat ...   - Mod 命令(如 {cp}chat help)")
     console_out(f"  {cp}bot ...    - 假人管理(如 {cp}bot start)")
     console_out(f"  {cp}message .. - 全体通知(如 {cp}message 服务器即将重启)")
+
+
+def _console_help_feature(feature: str):
+    """显示特定功能的帮助信息"""
+    from lib.command import Command
+    cp = Command.command_prefix
+    
+    feature_help = {
+        "bot": [
+            f"{cp}bot start          - 启动假人",
+            f"{cp}bot stop           - 停止假人",
+            f"{cp}bot spawn <name>   - 生成假人",
+            f"{cp}bot remove <name>  - 移除假人",
+            f"{cp}bot move <name>    - 移动假人",
+            f"{cp}bot chat <msg>     - 假人发送聊天",
+            f"{cp}bot list           - 列出假人",
+            f"{cp}bot shell          - 进入假人交互模式",
+        ],
+        "message": [
+            f"{cp}message <内容>     - 发送全体通知",
+            f"{cp}message reload     - 重载定时公告配置",
+        ],
+        "chat": [
+            f"{cp}chat <内容>        - AI 对话",
+            f"{cp}chat reset         - 重置对话历史",
+            f"{cp}chat cmd <内容>    - AI 命令模式",
+        ],
+        "music": [
+            f"{cp}music join         - 加入收听",
+            f"{cp}music exit         - 退出收听",
+            f"{cp}music list         - 列出音乐",
+            f"{cp}music search <词>  - 搜索音乐",
+            f"{cp}music run <文件>   - 播放音乐",
+            f"{cp}music next         - 下一首",
+            f"{cp}music random       - 随机播放",
+            f"{cp}music loop <模式>  - 循环模式",
+            f"{cp}music stop         - 停止播放",
+            f"{cp}music percussion <on|off> - 打击乐开关",
+        ],
+        "function": [
+            f"{cp}function function <路径> - 执行函数文件",
+            f"{cp}function loop <路径> <名称> <间隔> - 循环执行",
+            f"{cp}function stop <名称> - 停止循环",
+            f"{cp}function list        - 列出循环",
+            f"{cp}function search <词> - 搜索函数",
+        ],
+        "tool": [
+            f"{cp}tool search <词> [页码] - 搜索命令",
+            f"{cp}tool send <内容>       - 发送消息",
+            f"{cp}tool tellall <true|false> - 切换 tellAll 转发",
+            f"{cp}tool cmd <命令>        - 执行游戏命令",
+            f"{cp}tool ping              - 测试延迟",
+            f"{cp}tool time              - 显示时间",
+            f"{cp}tool start             - 显示启动信息",
+            f"{cp}tool move              - 移动相关",
+            f"{cp}tool reload            - 重载模组",
+            f"{cp}tool mod <名称>        - 模组管理",
+            f"{cp}tool exec <命令>       - 执行系统命令",
+        ],
+        "perm": [
+            f"{cp}perm query [玩家]   - 查询权限",
+            f"{cp}perm add <类型> <玩家> - 添加权限",
+            f"{cp}perm remove <类型> <玩家> - 移除权限",
+        ],
+        "pos": [
+            f"{cp}pos a [x y z]       - 设置 A 点",
+            f"{cp}pos b [x y z]       - 设置 B 点",
+            f"{cp}pos distance        - 计算距离",
+            f"{cp}pos offset <x> <y> <z> - 偏移坐标",
+            f"{cp}pos fill <方块> [替换] - 填充区域",
+            f"{cp}pos copy            - 复制区域",
+            f"{cp}pos paste           - 粘贴区域",
+            f"{cp}pos cut             - 剪切区域",
+            f"{cp}pos cancel          - 取消操作",
+            f"{cp}pos status          - 显示状态",
+            f"{cp}pos show            - 显示坐标",
+        ],
+        "ws": [
+            f"{cp}ws connect <地址>   - 连接 WebSocket",
+        ],
+        "ezmatic": [
+            f"{cp}ezmatic create <名称> - 创建结构",
+            f"{cp}ezmatic preview      - 预览",
+            f"{cp}ezmatic export       - 导出",
+            f"{cp}ezmatic list        - 列出结构",
+            f"{cp}ezmatic search <词>  - 搜索",
+        ],
+        "image": [
+            f"{cp}image create <文件> - 生成像素画",
+            f"{cp}image raw <文件>    - 原始模式",
+            f"{cp}image list          - 列出",
+            f"{cp}image search <词>   - 搜索",
+        ],
+        "morews": [
+            f"{cp}morews connect <地址> - 连接",
+        ],
+        "spam": [
+            f"{cp}spam attack         - 启动攻击",
+            f"{cp}spam ad <内容>      - 设置广告",
+            f"{cp}spam interval <秒>  - 设置间隔",
+        ],
+        "qq": [
+            f"{cp}qq send <内容>      - 发送 QQ 消息",
+            f"{cp}qq check            - 检查状态",
+            f"{cp}qq toggle           - 切换开关",
+        ],
+    }
+    
+    feature = feature.lower()
+    if feature not in feature_help:
+        console_out(f"§c未知功能: {feature}")
+        console_out(f"§7可用功能: {', '.join(sorted(feature_help.keys()))}")
+        return
+    
+    console_out(f"§e=== {feature} 帮助 (前缀: {cp}) ===")
+    for line in feature_help[feature]:
+        console_out(f"  {line}")
 
 
 def _console_status():
@@ -1214,6 +1421,9 @@ async def _dispatch_console_command(text):
 
         if cmd in ("help", "h", "?"):
             _console_help()
+        elif cmd.startswith("help "):
+            feature = cmd[5:].strip()
+            _console_help_feature(feature)
         elif cmd in ("status", "info"):
             _console_status()
         elif cmd == "list":
@@ -1238,7 +1448,7 @@ async def _dispatch_console_command(text):
             mod_cmd = f"{cp}{cmd}"
             handled = await ServerModManager.execute_terminal(mod_cmd)
             if not handled:
-                # 再尝试客户端 Mod(如 $bot)
+                # 再尝试支持终端执行的客户端 Mod(如 $bot)
                 handled = await ClientModManager.execute_terminal(mod_cmd)
             if not handled:
                 console_out(f"§c未知命令: §f{cmd}，输入 {cp}help 查看帮助")

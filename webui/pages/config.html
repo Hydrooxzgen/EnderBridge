@@ -46,6 +46,9 @@
       <div class="cfg-sidebar-item" data-cfg-cat="integration">
         <span class="icon">🔗</span><span class="label-text">集成 / 服务</span>
       </div>
+      <div class="cfg-sidebar-item" data-cfg-cat="aliases">
+        <span class="icon">🔧</span><span class="label-text">命令别名</span>
+      </div>
       <div class="cfg-sidebar-item" data-cfg-cat="system">
         <span class="icon">⚡</span><span class="label-text">系统管理</span>
       </div>
@@ -133,6 +136,15 @@
               <input id="cfg-spaminterval" class="cfg-input" type="number" placeholder="10000" />
             </div>
           </div>
+        </div>
+
+        <div class="cfg-section" id="cfgCardAliasesToggle">
+          <h3>🔧 命令别名</h3>
+          <div class="cfg-switch">
+            <label class="switch"><input type="checkbox" id="cfg-aliases-enabled"><span class="track"></span></label>
+            <span class="switch-label">启用命令别名 (commandAliases)</span>
+          </div>
+          <p class="hint">启用后可在「命令别名」tab 中管理别名。为命令设置简短别名，如 <code>message → msg</code> 则 <code>$msg</code> 等同 <code>$message</code>。</p>
         </div>
       </div>
 
@@ -351,6 +363,36 @@
               <input id="cfg-smsg" class="cfg-input" />
             </div>
           </div>
+        </div>
+
+        <div class="cfg-section" id="cfgCardAnnouncements">
+          <h3>📢 定时公告</h3>
+          <div class="cfg-switch">
+            <label class="switch"><input type="checkbox" id="cfg-announce-enabled"><span class="track"></span></label>
+            <span class="switch-label">启用定时公告 (messageConfig.announcements.enabled)</span>
+          </div>
+          <div class="cfg-sub-box show" id="announceFields">
+            <div class="cfg-grid">
+              <div class="cfg-field">
+                <label>间隔 (秒)</label>
+                <input id="cfg-announce-interval" class="cfg-input" type="number" min="10" />
+              </div>
+            </div>
+            <div class="cfg-field cfg-grid-full">
+              <label>公告内容（每行一条，支持多行）</label>
+              <textarea id="cfg-announce-messages" class="cfg-input" rows="6" placeholder="欢迎来到本服务器！&#10;加入我们的 QQ 群：123456789&#10;服务器官网：https://example.com"></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== 命令别名 ===== -->
+      <div class="cfg-category" data-cfg-cat="aliases">
+        <div class="cfg-section" id="cfgCardAliases">
+          <h3>🔧 命令别名管理</h3>
+          <p class="hint">为命令设置简短别名，如 <code>message → msg</code> 则 <code>$msg</code> 等同 <code>$message</code>。修改后无需重启，保存即时生效。</p>
+          <div id="aliasList" style="margin-top:12px;"></div>
+          <button class="btn btn-sm" id="addAliasBtn" style="margin-top:8px;">➕ 添加别名</button>
         </div>
       </div>
 

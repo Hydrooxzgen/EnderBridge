@@ -20,6 +20,7 @@ import sys
 
 from lib import shared
 from lib.command import Command
+from lib.command import apply_config_aliases
 
 # bot.js 路径
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -546,17 +547,21 @@ class XboxLoginManager:
 class Mod:
     """假人 Mod（客户端）"""
 
+    terminal_compatible = True
+
     def __init__(self, client):
         self.client = client
 
     def onCommand(self):
         return {
             "op": [
-                Command.create("bot", "假人管理（start/stop/spawn/remove/move/chat/list）")
-                .add_string("方法", False)
-                .add_optional_string("参数1")
-                .add_optional_string("参数2")
-                .set_func(self._cmd_bot),
+                apply_config_aliases(
+                    Command.create("bot", "假人管理（start/stop/spawn/remove/move/chat/list）")
+                    .add_string("方法", False)
+                    .add_optional_string("参数1")
+                    .add_optional_string("参数2")
+                    .set_func(self._cmd_bot),
+                ),
             ],
         }
 

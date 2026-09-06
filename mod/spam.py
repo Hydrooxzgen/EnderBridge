@@ -9,6 +9,7 @@ import re
 
 from config import spam
 from lib.command import Command
+from lib.command import apply_config_aliases
 from lib.current import Current
 
 # 清屏文本
@@ -177,14 +178,16 @@ class Mod:
     # 命令定义(单一入口 $spam,方法见 SPAM_METHODS)
     commands = {
         "normal": [
-            Command.create("spam", "刷屏命令（方法: attack/count/crash/clear/ad/repeat/stop）")
-            .add_string("方法", False)
-            .add_optional_string("参数1")
-            .add_optional_string("参数2")
-            .add_optional_string("参数3")
-            .add_optional_string("参数4")
-            .add_optional_string("参数5")
-            .set_func(_cmd_spam),
+            apply_config_aliases(
+                Command.create("spam", "刷屏命令（方法: attack/count/crash/clear/ad/repeat/stop）")
+                .add_string("方法", False)
+                .add_optional_string("参数1")
+                .add_optional_string("参数2")
+                .add_optional_string("参数3")
+                .add_optional_string("参数4")
+                .add_optional_string("参数5")
+                .set_func(_cmd_spam)
+            ),
         ],
     }
 
