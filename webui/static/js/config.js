@@ -117,6 +117,11 @@ function loadConfig() {
     $("cfg-rlmax").value = rlCmd.maxPerWindow || "";
     toggleSub("rlFields", $("cfg-ratelimit").checked);
 
+    var plp = data.config.playerListPolling || {};
+    $("cfg-playerlistpolling").checked = !!plp.enabled;
+    $("cfg-plpinterval").value = plp.intervalSeconds || 30;
+    toggleSub("plpFields", $("cfg-playerlistpolling").checked);
+
     $("cfg-webui").checked = webui.enabled !== false;
     $("cfg-webport").value = webui.port || 18888;
     $("cfg-webtoken").value = webui.token || "";
@@ -199,10 +204,10 @@ function loadConfig() {
 }
 
 // Toggle 展开/收起
-["cfg-qq", "cfg-ratelimit", "cfg-webui", "cfg-announce-enabled"].forEach(function (id) {
+["cfg-qq", "cfg-ratelimit", "cfg-webui", "cfg-announce-enabled", "cfg-playerlistpolling"].forEach(function (id) {
   var el = $(id);
   if (el) el.addEventListener("change", function () {
-    var subId = id === "cfg-qq" ? "qqFields" : id === "cfg-ratelimit" ? "rlFields" : id === "cfg-webui" ? "webuiFields" : "announceFields";
+    var subId = id === "cfg-qq" ? "qqFields" : id === "cfg-ratelimit" ? "rlFields" : id === "cfg-webui" ? "webuiFields" : id === "cfg-announce-enabled" ? "announceFields" : "plpFields";
     toggleSub(subId, this.checked);
   });
 });
@@ -522,6 +527,10 @@ function saveConfig() {
   rl.command.windowMs = parseInt($("cfg-rlwindow").value, 10) || 1000;
   rl.command.maxPerWindow = parseInt($("cfg-rlmax").value, 10) || 20;
 
+  var plp = cfgData.playerListPolling || {};
+  plp.enabled = $("cfg-playerlistpolling").checked;
+  plp.intervalSeconds = parseInt($("cfg-plpinterval").value, 10) || 30;
+
   var webui = cfgData.webui || {};
   webui.enabled = $("cfg-webui").checked;
     webui.port = parseInt($("cfg-webport").value, 10) || 18888;
@@ -591,6 +600,7 @@ function saveConfig() {
       utils: utils, sapi: sapi, bot: bot, mods: mods, spam: spam, basePath: basePath,
       messageConfig: { announcements: announce },
       commandAliases: cfgData.commandAliases || {},
+      playerListPolling: plp,
     }
   };
   api("/config", { method: "PUT", body: JSON.stringify(payload) })

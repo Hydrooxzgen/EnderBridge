@@ -384,6 +384,7 @@ def load_config() -> dict:
         },
         "githubToken": config.get("githubToken", ""),
         "commandAliases": command_aliases,
+        "playerListPolling": config.get("playerListPolling", {"enabled": False, "intervalSeconds": 30}),
     }
 
 
@@ -530,6 +531,13 @@ def save_config(new: dict) -> None:
 
     # 命令别名
     config["commandAliases"] = new.get("commandAliases") or {}
+
+    # 玩家列表轮询
+    plp = new.get("playerListPolling") or {}
+    config["playerListPolling"] = {
+        "enabled": bool(plp.get("enabled", False)),
+        "intervalSeconds": int(plp.get("intervalSeconds", 30)),
+    }
 
     # 版本信息
     config["_version"] = "b0.3.6"
@@ -1073,6 +1081,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
             "webTokenSet": bool(str(webui.get("token", "") or "").strip()),
             "clients": extra.get("clients", 0),
             "uptime": extra.get("uptime", 0),
+            "players": extra.get("players", []),
             "version": _app_version or "EnderBridge",
         })
 

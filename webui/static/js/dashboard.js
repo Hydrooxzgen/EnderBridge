@@ -6,6 +6,35 @@ requireAuth(function (role) {
   loadReleaseNotes();
 });
 
+function formatDuration(seconds) {
+  var h = Math.floor(seconds / 3600),
+      m = Math.floor((seconds % 3600) / 60),
+      s = Math.floor(seconds % 60);
+  if (h > 0) return h + "时 " + m + "分";
+  if (m > 0) return m + "分 " + s + "秒";
+  return s + "秒";
+}
+
+function renderPlayers(players) {
+  var el = $("playersList");
+  if (!el) return;
+  if (!players || !players.length) {
+    el.innerHTML = '<div class="td-dim" style="padding:12px 0;">暂无客户端连接</div>';
+    return;
+  }
+  var now = Date.now() / 1000;
+  el.innerHTML = players.map(function (p) {
+    var dur = p.connectedAt ? formatDuration(now - p.connectedAt) : "未知";
+    var badge = p.isMain ? '<span class="badge badge-main">主客户端</span>' : '<span class="badge">副客户端</span>';
+    var display = p.name ? escapeHtml(p.name) + ' <span class="player-ip">(' + escapeHtml(p.ip) + ')</span>' : escapeHtml(p.ip);
+    return '<div class="player-row">'
+      + display
+      + badge
+      + '<span class="player-dur">⏱ ' + dur + '</span>'
+      + '</div>';
+  }).join("");
+}
+
 function refreshStatus() {
   api("/status").then(function (data) {
     if (!data.ok) return;
@@ -20,6 +49,7 @@ function refreshStatus() {
       statCard("👥", data.clients, "在线客户端") +
       statCard("⏱️", uptimeText, "运行时间") +
       statCard("🔑", data.webTokenSet ? "已设置" : "未设置", "管理令牌");
+    renderPlayers(data.players || []);
   }).catch(function () {});
 }
 function statCard(icon, val, label) {

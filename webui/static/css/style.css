@@ -210,6 +210,42 @@ button { font-family: inherit; }
 .stat .val { font-size: 26px; font-weight: 700; margin-bottom: 4px; }
 .stat .label { font-size: 12px; color: var(--text-dim); }
 
+/* 在线玩家列表 */
+.player-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  transition: background 0.2s ease;
+}
+.player-row:hover { background: var(--hover-bg); }
+.player-ip {
+  font-family: "Cascadia Code", "Fira Code", "Consolas", monospace;
+  font-size: 14px;
+  font-weight: 600;
+}
+.player-dur {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.badge {
+  display: inline-block;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--chip-bg);
+  border: 1px solid var(--chip-border);
+  color: var(--accent);
+  white-space: nowrap;
+}
+.badge-main {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.3);
+  color: var(--ok);
+}
+
 /* 表单 */
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .form-group label { display: block; font-size: 13px; color: var(--text-dim); margin-bottom: 6px; }

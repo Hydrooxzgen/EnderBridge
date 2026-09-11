@@ -17,7 +17,10 @@ CONFIG_PY = os.path.join(ROOT, "config.py")
 CONFIG_JSON = os.path.join(ROOT, "config.json")
 CONFIG_EXAMPLE = os.path.join(ROOT, "config.example.py")
 CONFIG_EXAMPLE_JSON = os.path.join(ROOT, "config.example.json")
-VERSION = "b0.3.6"
+VERSION = "b0.3.7 feat1 stable safefix1"
+"""
+feat1: 在线玩家列表
+"""
 DESCRIPTION = None # 仅当不为None时从Github拉取更新日志，反之则直接显示该变量内容。
 GITHUB_REPO = "Hydrooxzgen/EnderBridge"  # You can edit this to your own repository if you fork it :)
 WANT_RESET = "--reset-all" in sys.argv
@@ -43,12 +46,9 @@ def _run_setup() -> None:
     if res.returncode != 0:
         print("依赖安装失败，请手动运行 python setup.py 排查")
         sys.exit(1)
-    # 安装成功后重新尝试导入
-    try:
-        import websockets  # noqa: F401
-    except ImportError as e:
-        print(f"依赖安装后仍无法加载: {e}")
-        sys.exit(1)
+    # 安装成功后重启进程，使新安装的包生效
+    print("依赖安装完成，重启进程...")
+    os.execv(sys.executable, [sys.executable] + sys.argv)
 
 
 if not WANT_RESET and not WANT_EXPORT and not _dependencies_ok():
@@ -1050,12 +1050,114 @@ async def connection_handler(ws):
 # 启动时刻(供 Web 仪表盘展示运行时间)
 _start_time = time.time()
 
+# 玩家名缓存: IP -> 玩家名
+_player_names: dict[str, str] = {}
+
+
+def _parse_list_output(text: str) -> list[str]:
+    """解析 /list 命令输出，提取玩家名列表
+
+    典型输出: "There are 2 of a max of 20 players online: Player1, Player2"
+    或中文: "目前有 1/8 个玩家在线：\nENTROCRAFT"
+    """
+    if not text:
+        return []
+    import re
+    # 英文格式: "players online: name1, name2"
+    m = re.search(r"players? online:\s*(.+)$", text, re.IGNORECASE)
+    if not m:
+        # 中文格式: "玩家在线：" 或 "玩家在线:" 后面可能跟换行
+        m = re.search(r"玩家在线[：:]\s*(.+)$", text, re.MULTILINE)
+    if not m:
+        return []
+    names_str = m.group(1).strip()
+    if not names_str:
+        return []
+    # 分割：支持逗号、中文逗号、换行
+    names = re.split(r"[,，\n]+", names_str)
+    return [n.strip() for n in names if n.strip()]
+
+
+async def _player_list_polling_task() -> None:
+    """后台任务：定期执行 /list 获取玩家名"""
+    global _player_names
+    shared.logger.info("玩家列表轮询任务已启动")
+    while True:
+        try:
+            # 读取配置
+            from lib.config_loader import get_config
+            config = get_config()
+            polling = config.get("playerListPolling", {})
+            if not polling.get("enabled", False):
+                shared.logger.info("轮询未启用，等待 10 秒")
+                await asyncio.sleep(10)
+                continue
+            interval = polling.get("intervalSeconds", 30)
+            if interval < 5:
+                interval = 5
+
+            # 只有主客户端连接时才轮询
+            client = Current.client
+            if client and client.is_open:
+                try:
+                    data = await client.runCommand("/list")
+                    body = data.get("body", {}) if isinstance(data, dict) else {}
+                    status_msg = body.get("statusMessage", "")
+                    names = _parse_list_output(status_msg)
+                    if names:
+                        # 简单映射：假设主客户端 IP 对应第一个玩家名
+                        # 实际场景下可能需要更复杂的映射逻辑
+                        ip = "unknown"
+                        try:
+                            ip = client.ws.remote_address[0] if client.ws.remote_address else "unknown"
+                        except Exception:
+                            pass
+                        if ip != "unknown":
+                            _player_names[ip] = names[0]  # 取第一个作为主客户端名
+                        # 如果有多个连接，可以尝试按顺序映射
+                        for i, conn in enumerate(connections):
+                            if i < len(names):
+                                try:
+                                    cip = conn.ws.remote_address[0] if conn.ws.remote_address else "unknown"
+                                except Exception:
+                                    cip = "unknown"
+                                if cip != "unknown":
+                                    _player_names[cip] = names[i]
+                except Exception as e:
+                    shared.logger.debug(f"玩家列表轮询失败: {e}")
+
+            await asyncio.sleep(interval)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            shared.logger.debug(f"玩家列表轮询任务异常: {e}")
+            await asyncio.sleep(10)
+
 
 def _webui_status() -> dict:
     """为 Web 仪表盘提供实时状态"""
+    # 收集在线玩家详情
+    players = []
+    for conn in connections:
+        ip = "unknown"
+        try:
+            ip = conn.ws.remote_address[0] if conn.ws.remote_address else "unknown"
+        except Exception:
+            pass
+        role = "主客户端" if conn is Current.client else "副客户端"
+        connected_at = getattr(conn, "connect_time", 0)
+        player_name = _player_names.get(ip, "")
+        players.append({
+            "ip": ip,
+            "name": player_name,
+            "role": role,
+            "connectedAt": connected_at,
+            "isMain": conn is Current.client,
+        })
     return {
         "clients": len(connections),
         "uptime": int(time.time() - _start_time),
+        "players": players,
     }
 
 
@@ -1483,6 +1585,9 @@ async def main():
     await ServerModManager.load()
     await ClientModManager.load()
     shared.logger.info("服务器已启动")
+
+    # 启动玩家列表轮询任务(如果配置启用)
+    asyncio.create_task(_player_list_polling_task())
 
     # 注入状态引用供游戏内命令(如 $help/$status/$list)使用
     shared.start_time = _start_time

@@ -229,6 +229,12 @@ rateLimit = {
     },
 }
 
+# 玩家列表轮询配置（定期执行 /list 获取在线玩家名）
+playerListPolling = {
+    "enabled": False,
+    "intervalSeconds": 30,
+}
+
 # 刷屏数据配置
 spam = {
     "attack": "§c[示例] 刷屏文本",

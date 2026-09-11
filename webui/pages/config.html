@@ -418,6 +418,23 @@
           </div>
         </div>
 
+        <div class="cfg-section" id="cfgCardPlayerListPolling">
+          <h3>👥 玩家列表轮询</h3>
+          <div class="cfg-switch">
+            <label class="switch"><input type="checkbox" id="cfg-playerlistpolling"><span class="track"></span></label>
+            <span class="switch-label">启用定期 /list 获取玩家名 (playerListPolling.enabled)</span>
+          </div>
+          <div class="cfg-sub-box show" id="plpFields">
+            <div class="cfg-grid">
+              <div class="cfg-field">
+                <label>轮询间隔 (秒)</label>
+                <input id="cfg-plpinterval" class="cfg-input" type="number" min="5" />
+              </div>
+            </div>
+            <p class="cfg-hint">通过定期执行 /list 命令解析在线玩家名，在仪表盘显示玩家名称而非 IP。需主客户端已连接。</p>
+          </div>
+        </div>
+
         <div class="cfg-section" id="cfgCardWebui">
           <h3>🌐 Web 管理端</h3>
           <div class="cfg-switch">
