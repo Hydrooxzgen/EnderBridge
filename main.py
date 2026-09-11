@@ -17,11 +17,13 @@ CONFIG_PY = os.path.join(ROOT, "config.py")
 CONFIG_JSON = os.path.join(ROOT, "config.json")
 CONFIG_EXAMPLE = os.path.join(ROOT, "config.example.py")
 CONFIG_EXAMPLE_JSON = os.path.join(ROOT, "config.example.json")
-VERSION = "b0.3.7 feat1 stable safefix1"
+VERSION = "b0.3.7 feat2 dev1"
 """
-feat1: 在线玩家列表
+feat1: 在线玩家列表--OK
+safefix1: 修复安全漏洞
+feat2: 日志实时查看器--deving
 """
-DESCRIPTION = None # 仅当不为None时从Github拉取更新日志，反之则直接显示该变量内容。
+DESCRIPTION = "新增webui日志实时查看器" # 仅当不为None时从Github拉取更新日志，反之则直接显示该变量内容。
 GITHUB_REPO = "Hydrooxzgen/EnderBridge"  # You can edit this to your own repository if you fork it :)
 WANT_RESET = "--reset-all" in sys.argv
 WANT_EXPORT = "export" in sys.argv
@@ -262,7 +264,7 @@ if WANT_UPDATE:
         except Exception as e:
             _update_err(f"读取压缩包失败: {e}")
         if "main.py" not in members:
-            _update_err("压缩包内未找到 main.py,不是 EnderBridge 压缩包")
+            _update_err("无法识别此更新包, 请确保你选择的是EnderBridge压缩包")
 
         # 2. 解压到临时目录(跳过数据区)
         tmp = tempfile.mkdtemp(prefix="enderbridge_update_")
@@ -1089,7 +1091,6 @@ async def _player_list_polling_task() -> None:
             config = get_config()
             polling = config.get("playerListPolling", {})
             if not polling.get("enabled", False):
-                shared.logger.info("轮询未启用，等待 10 秒")
                 await asyncio.sleep(10)
                 continue
             interval = polling.get("intervalSeconds", 30)

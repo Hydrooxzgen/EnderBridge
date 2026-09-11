@@ -611,14 +611,26 @@ def _auth_role(handler) -> str:
     """返回请求身份: "admin"(令牌正确) / "guest"(访客) / ""(未授权)
 
     token 未设置时直接开放全部权限(本机使用)。
+    支持通过查询参数传递 token/guest(EventSource 无法设置自定义请求头)。
     """
     token = _webui_token()
     if not token:
         return "admin"
+    # 检查请求头
     if handler.headers.get("X-Auth-Guest", "") == "1":
         return "guest"
     provided = handler.headers.get("X-Auth-Token", "")
-    return "admin" if provided == token else ""
+    if provided == token:
+        return "admin"
+    # 检查查询参数(兼容 EventSource 等无法设置自定义头的场景)
+    parsed = urllib.parse.urlparse(handler.path)
+    qs = urllib.parse.parse_qs(parsed.query)
+    if qs.get("guest", [None])[0] is not None:
+        return "guest"
+    provided_qs = qs.get("token", [None])[0]
+    if provided_qs == token:
+        return "admin"
+    return ""
 
 
 def _require_admin(handler) -> bool:
@@ -647,6 +659,14 @@ class WebUIHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         # 静默日志,避免刷屏
         pass
+
+    def log_error(self, fmt, *args):
+        """静默连接断开类错误,避免 Ctrl+C / SSE 断开时刷 traceback"""
+        msg = str(fmt) % args if args else str(fmt)
+        if any(s in msg for s in ("ConnectionAbortedError", "BrokenPipeError",
+                                   "ConnectionResetError", "10053", "10054")):
+            return
+        super().log_error(fmt, *args)
 
     def _respond(self, obj, status=200) -> None:
         data = json.dumps(obj, ensure_ascii=False).encode("utf-8")
@@ -733,6 +753,12 @@ class WebUIHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/audit-logs":
             self._api_audit_logs()
+            return
+        if path == "/api/logs/recent":
+            self._api_logs_recent()
+            return
+        if path == "/api/logs/stream":
+            self._api_logs_stream()
             return
         self.send_response(404)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
@@ -1468,6 +1494,82 @@ class WebUIHandler(BaseHTTPRequestHandler):
         result = audit_log.query(sender=sender, type_=type_, limit=limit, offset=offset)
         self._respond({"ok": True, **result})
 
+    # ---- 实时日志流(SSE) ----
+
+    def _api_logs_recent(self) -> None:
+        """获取最近 N 条日志(admin/guest 均可,用于 SSE 初始加载)"""
+        if not _require_any(self):
+            return
+        parsed = urllib.parse.urlparse(self.path)
+        qs = urllib.parse.parse_qs(parsed.query)
+        try:
+            limit = min(int(qs.get("limit", ["200"])[0]), 500)
+        except (ValueError, IndexError):
+            limit = 200
+        from lib.logger import _live_log
+        logs = _live_log.get_recent(limit)
+        self._respond({"ok": True, "logs": logs})
+
+    def _api_logs_stream(self) -> None:
+        """SSE 实时日志流(admin/guest 均可)
+
+        首次连接时发送最近 50 条日志作为历史,
+        之后持续推送新日志直到客户端断开。
+        """
+        if not _require_any(self):
+            return
+        from lib.logger import _live_log
+        try:
+            # 发送 SSE 响应头
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "keep-alive")
+            self.send_header("X-Accel-Buffering", "no")
+            self.end_headers()
+
+            # 发送最近 50 条历史日志
+            recent = _live_log.get_recent(50)
+            for record in recent:
+                data = json.dumps(record, ensure_ascii=False)
+                self.wfile.write(f"data: {data}\n\n".encode("utf-8"))
+            self.wfile.flush()
+
+            # 订阅新日志
+            _queue = []
+            _queue_lock = threading.Lock()
+            _event = threading.Event()
+
+            def _on_log(record):
+                with _queue_lock:
+                    _queue.append(record)
+                _event.set()
+
+            _live_log.subscribe(_on_log)
+
+            try:
+                while True:
+                    # 心跳:每 15 秒发送一次,检测客户端是否断开
+                    _event.wait(timeout=15)
+                    _event.clear()
+
+                    # 取出并发送所有排队的日志
+                    with _queue_lock:
+                        batch = list(_queue)
+                        _queue.clear()
+                    for record in batch:
+                        data = json.dumps(record, ensure_ascii=False)
+                        self.wfile.write(f"data: {data}\n\n".encode("utf-8"))
+                    # 空闲时发心跳注释保持连接
+                    self.wfile.write(b": heartbeat\n\n")
+                    self.wfile.flush()
+            except (ConnectionAbortedError, BrokenPipeError, OSError):
+                pass  # 客户端已断开
+            finally:
+                _live_log.unsubscribe(_on_log)
+        except (ConnectionAbortedError, BrokenPipeError, OSError):
+            pass
+
 
 def _check_importable(mod_path: str) -> bool:
     """检测 mod 模块能否导入(轻量检查,不真正实例化)"""
@@ -1498,6 +1600,14 @@ class _FastHTTPServer(ThreadingHTTPServer):
         host, port = self.server_address[:2]
         self.server_name = socket.gethostname()
         self.server_port = port
+
+    def handle_error(self, request, client_address):
+        """静默连接断开类错误,避免 Ctrl+C / SSE 断开时打印 traceback"""
+        import traceback as _tb
+        _, exc, _ = sys.exc_info()
+        if exc in (ConnectionAbortedError, BrokenPipeError, ConnectionResetError, OSError):
+            return
+        super().handle_error(request, client_address)
 
 
 class WebUIServer:

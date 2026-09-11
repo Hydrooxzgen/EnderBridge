@@ -616,3 +616,107 @@ a.nav-item { text-decoration: none; }
   .cfg-sidebar-item .label-text { display: none; }
   .cfg-grid { grid-template-columns: 1fr; }
 }
+
+/* ===== 实时日志查看器 ===== */
+.log-viewer {
+  background: #0a0e1a;
+  border: 1px solid #1e293b;
+  border-radius: 8px;
+  padding: 8px 12px;
+  min-height: 300px;
+  max-height: 500px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  scroll-behavior: smooth;
+}
+[data-theme="light"] .log-viewer {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+.log-line {
+  padding: 1px 0;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.05);
+}
+.log-line:hover { background: rgba(148, 163, 184, 0.06); }
+.log-ts {
+  color: #64748b;
+  flex-shrink: 0;
+  font-size: 11px;
+}
+.log-level {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 0 5px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  min-width: 48px;
+  text-align: center;
+}
+.log-src {
+  color: #818cf8;
+  flex-shrink: 0;
+  font-size: 11px;
+}
+.log-msg {
+  color: #cbd5e1;
+  word-break: break-all;
+  flex: 1;
+  min-width: 0;
+}
+[data-theme="light"] .log-msg { color: #334155; }
+[data-theme="light"] .log-ts { color: #94a3b8; }
+[data-theme="light"] .log-src { color: #6366f1; }
+
+/* 日志级别颜色 */
+.log-debug .log-level { background: rgba(168, 85, 247, 0.15); color: #a855f7; }
+.log-debug .log-msg { color: #a78bfa; }
+.log-info .log-level { background: rgba(59, 130, 246, 0.15); color: #3b82f6; }
+.log-warning .log-level { background: rgba(234, 179, 8, 0.15); color: #eab308; }
+.log-warning .log-msg { color: #fbbf24; }
+.log-error .log-level { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+.log-error .log-msg { color: #fca5a5; }
+[data-theme="light"] .log-warning .log-msg { color: #92400e; }
+[data-theme="light"] .log-error .log-msg { color: #991b1b; }
+
+/* 命令输出行(在统一终端中) */
+.log-cmd { background: rgba(99, 102, 241, 0.08); }
+.log-cmd .log-ts { color: #818cf8; }
+.log-cmd .log-msg { color: #e2e8f0; font-weight: 600; }
+.log-cmd-ok .log-level { background: rgba(16, 185, 129, 0.15); color: #10b981; }
+.log-cmd-ok .log-msg { color: #34d399; }
+.log-cmd-err .log-level { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+.log-cmd-err .log-msg { color: #f87171; }
+[data-theme="light"] .log-cmd { background: rgba(99, 102, 241, 0.05); }
+[data-theme="light"] .log-cmd .log-msg { color: #1e293b; }
+[data-theme="light"] .log-cmd-ok .log-msg { color: #065f46; }
+[data-theme="light"] .log-cmd-err .log-msg { color: #991b1b; }
+
+/* 控制台输入框与控件 */
+#consoleInput {
+  flex: 1; padding: 8px 12px;
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
+  background: var(--input-bg); color: var(--text);
+  font-family: "Cascadia Code", "Fira Code", Consolas, monospace;
+  font-size: 14px;
+}
+#consoleInput:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.12);
+  outline: none;
+}
+#logLevelFilter {
+  padding: 4px 8px;
+  border: 1px solid var(--input-border);
+  border-radius: 4px;
+  background: var(--input-bg); color: var(--text);
+  font-size: 12px;
+}

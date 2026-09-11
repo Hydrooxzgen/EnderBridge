@@ -33,19 +33,40 @@
   <h2>💻 控制台</h2>
 
   <div class="card" id="consoleCmdCard">
-    <div style="font-weight:600;margin-bottom:8px;">发送命令</div>
-    <p class="desc" style="margin-bottom:8px;">直接向 MCBE 服务器发送命令。以 <code>/</code> 开头为游戏命令(如 <code>/list</code>)，否则作为聊天消息发送。</p>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+      <span style="font-weight:600;">发送命令</span>
+      <span style="font-size:12px;color:var(--text-faint);">以 <code>/</code> 开头为游戏命令，否则作为聊天消息</span>
+    </div>
     <div class="row gap-10" style="align-items:stretch">
-      <input type="text" id="consoleInput" placeholder="输入命令，如 /list 或 say hello" style="flex:1;padding:8px 12px;border:1px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-family:monospace;font-size:14px;" autocomplete="off" />
+      <input type="text" id="consoleInput" placeholder="输入命令，如 /list 或 say hello" autocomplete="off" />
       <button class="btn btn-primary btn-sm" id="consoleExecBtn">▶ 执行</button>
     </div>
   </div>
 
   <div class="card" style="margin-top:12px;">
-    <div style="font-weight:600;margin-bottom:8px;">命令输出</div>
-    <div id="consoleOutput" style="background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:12px;min-height:200px;max-height:500px;overflow-y:auto;font-family:monospace;font-size:13px;color:#94a3b8;white-space:pre-wrap;word-break:break-all;"></div>
-    <div style="margin-top:8px;">
-      <button class="btn btn-sm" id="consoleClearBtn">🗑️ 清空</button>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="font-weight:600;">🖥 终端输出</span>
+        <span id="logStatus" style="font-size:11px;color:#4ade80;">● 已连接</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <select id="logLevelFilter">
+          <option value="all">全部</option>
+          <option value="debug">Debug</option>
+          <option value="info" selected>Info</option>
+          <option value="warning">Warning</option>
+          <option value="error">Error</option>
+        </select>
+        <label style="font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:4px;cursor:pointer;">
+          <input type="checkbox" id="logAutoScroll" checked /> 自动滚动
+        </label>
+        <button class="btn btn-sm" id="logPauseBtn">⏸ 暂停</button>
+        <button class="btn btn-sm" id="logClearBtn">🗑️ 清空</button>
+      </div>
+    </div>
+    <div class="log-viewer" id="logViewer"></div>
+    <div style="margin-top:6px;display:flex;align-items:center;gap:8px;">
+      <span id="logCount" style="font-size:11px;color:var(--text-faint);">0 条</span>
     </div>
   </div>
 </div>
