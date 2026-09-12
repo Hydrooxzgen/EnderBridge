@@ -49,7 +49,7 @@ python main.py
 ```
 EnderBridge/
 ├── main.py              # 入口：连接 MCBE 服务器、加载 Mod
-├── config.example.py    # 配置模板（首次运行时自动生成 config.py）
+├── config.example.json    # 配置模板（首次运行时自动生成 config.json）
 ├── setup.py             # 依赖安装器（空包主机用）
 ├── requirements.txt     # Python 依赖清单
 ├── permission.json      # 权限配置（gitignore）
@@ -205,7 +205,7 @@ python -m pytest tests/ -v
 - **不要修改 `H:\Projects\EnderBridge_useful`**（维护者的个人使用目录）
 - `permission.json` 和 `config.py` 在 `.gitignore` 中，不要提交
 - 新增 Mod 需要在 `lib/setup.py` 的 `MOD_REGISTRY` 中注册
-- 新增资源目录需在 `config.example.py` 的 `basePath` 中声明
+- 新增资源目录需在 `config.example.json` 的 `basePath` 中声明
 
 ---
 

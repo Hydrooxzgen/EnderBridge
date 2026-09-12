@@ -9,18 +9,12 @@
 </head>
 <body>
 
-<!-- 登录页 -->
+<!-- 登录页:重定向到 /login(新版用户名+密码登录) -->
 <div id="loginView">
   <div class="login-card">
     <div class="logo">⛏️</div>
     <h1>EnderBridge Web 管理</h1>
-    <p class="sub">请输入管理令牌以继续</p>
-    <label for="tokenInput">管理令牌</label>
-    <input id="tokenInput" type="password" placeholder="请输入令牌" autocomplete="off">
-    <button id="loginBtn" type="button">登 录</button>
-    <button id="guestBtn" type="button" class="guest-btn">以访客身份浏览 (Guest)</button>
-    <div class="login-msg" id="loginMsg"></div>
-    <div class="login-hint">令牌在 config.json 的 webuiConfig.token 中设置。<br>令牌正确:开放全部管理权限;令牌错误:提示密码错误;或点击下方按钮以访客身份浏览(仅仪表盘 / Mod 列表)。</div>
+    <p class="sub">正在跳转到登录页...</p>
   </div>
 </div>
 
@@ -354,5 +348,13 @@
 <div id="toast"></div>
 
 <script src="/static/js/app.js"></script>
+<script>
+(function() {
+  // 未登录时自动跳转到新版登录页
+  var role = sessionStorage.getItem(ROLE_KEY) || "";
+  if (!role) { location.href = "/login"; return; }
+  if (role !== "guest" && !sessionStorage.getItem(TOKEN_KEY)) { location.href = "/login"; return; }
+})();
+</script>
 </body>
 </html>

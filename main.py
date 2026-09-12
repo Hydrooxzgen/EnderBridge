@@ -15,23 +15,25 @@ from uuid import uuid4
 ROOT = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PY = os.path.join(ROOT, "config.py")
 CONFIG_JSON = os.path.join(ROOT, "config.json")
-CONFIG_EXAMPLE = os.path.join(ROOT, "config.example.py")
 CONFIG_EXAMPLE_JSON = os.path.join(ROOT, "config.example.json")
-VERSION = "b0.3.7 feat3"
+VERSION = "b0.3.7 feat4 dev2"
 """
 feat1: 在线玩家列表--OK
 safefix1: 修复安全漏洞
-feat2: 日志实时查看器--deving
+fix2: 完全使用EBC0.3.6格式配置文件, 丢弃0.1.0标准配置文件
+feat2: 日志实时查看器
 feat3: webui mod 管理页热重载按钮
+feat4: webui 权限精细化(用户名+bcrypt+角色权限)
 """
-DESCRIPTION = "新增webui日志实时查看器" # 仅当不为None时从Github拉取更新日志，反之则直接显示该变量内容。
+DESCRIPTION = "新增webui用户权限系统:用户名登录/bcrypt密码/角色权限管理" # 仅当不为None时从Github拉取更新日志, 反之则直接显示该变量内容。
 GITHUB_REPO = "Hydrooxzgen/EnderBridge"  # You can edit this to your own repository if you fork it :)
 WANT_RESET = "--reset-all" in sys.argv
 WANT_EXPORT = "export" in sys.argv
 WANT_EXPORT_CLEAR = WANT_EXPORT and "-clear" in sys.argv
 WANT_LOAD_WITHOUT_CONFIG = "--load-without-config" in sys.argv
+WANT_VIEW_VERSION = "--version" in sys.argv or "-v" in sys.argv
 
-# ===== 依赖检测(必须早于任何第三方mod使用) =====
+# ===== 依赖检测(必须早于任何第三方mod使用) ===== 
 # websockets 使用动态导入:缺失时自动运行 setup.py 安装,成功后继续启动。
 def _dependencies_ok() -> bool:
     try:
@@ -43,14 +45,14 @@ def _dependencies_ok() -> bool:
 
 def _run_setup() -> None:
     print("========================================")
-    print("  检测到缺少依赖，正在安装依赖...")
+    print("  检测到缺少依赖, 正在安装依赖...")
     print("========================================")
     res = subprocess.run([sys.executable, "setup.py"], cwd=ROOT)
     if res.returncode != 0:
-        print("依赖安装失败，请手动运行 python setup.py 排查")
+        print("依赖安装失败, 请手动运行 python setup.py 排查")
         sys.exit(1)
-    # 安装成功后重启进程，使新安装的包生效
-    print("依赖安装完成，重启进程...")
+    # 安装成功后重启进程, 使新安装的包生效
+    print("依赖安装完成, 重启进程...")
     os.execv(sys.executable, [sys.executable] + sys.argv)
 
 
@@ -60,8 +62,8 @@ if not WANT_RESET and not WANT_EXPORT and not _dependencies_ok():
 # ===== 引导阶段(必须早于任何依赖 config.py 的模块加载) =====
 # 依赖 config.py 的模块(lib/logger.py、lib/utils.py、lib/mods.py 等)均为延迟加载,
 # 因此 config.py 缺失时(如 --reset-all 之后)可先在此根据模板自动补全,保证程序可启动。
-if not WANT_RESET and not os.path.exists(CONFIG_PY) and not os.path.exists(CONFIG_JSON):
-    # 优先生成 config.json，若无模板则回退到 config.py
+if not WANT_RESET and not os.path.exists(CONFIG_PY) and not os.path.exists(CONFIG_JSON) and not WANT_VIEW_VERSION and not WANT_EXPORT:
+    # 优先生成 config.json, 若无模板则回退到 config.py
     if os.path.exists(CONFIG_EXAMPLE_JSON):
         import shutil as _shutil_cfg
         _shutil_cfg.copy2(CONFIG_EXAMPLE_JSON, CONFIG_JSON)
@@ -77,38 +79,22 @@ if not WANT_RESET and not os.path.exists(CONFIG_PY) and not os.path.exists(CONFI
                         json.dump(_j, _f, ensure_ascii=False, indent=2)
             except Exception:
                 pass
-        print("未找到 config.json，已根据模板自动生成默认配置（可在向导中修改）")
-    elif os.path.exists(CONFIG_EXAMPLE):
-        with open(CONFIG_EXAMPLE, "r", encoding="utf-8") as f:
-            tpl = f.read()
-        if WANT_LOAD_WITHOUT_CONFIG:
-            # --load-without-config:直接使用模板全部内容(含 is_first_run),后续跳过向导
-            cfg = tpl
-        else:
-            # config.py 只存真实配置:剔除模板携带的 isFirstRun 标记块
-            cfg = re.sub(
-                r"# ===== 首次运行 =====[\s\S]*?is_first_run = (True|False)\r?\n(\r?\n)?",
-                "",
-                tpl,
-            )
-        with open(CONFIG_PY, "w", encoding="utf-8") as f:
-            f.write(cfg)
-        print("未找到 config.py，已根据模板自动生成默认配置（可在向导中修改）")
+        print("未找到 config.json, 已根据模板自动生成默认配置(可在向导中修改)")
 
 # permission.json 缺失时从模板复制(权限系统依赖该文件)
 PERMISSION_JSON = os.path.join(ROOT, "permission.json")
 PERMISSION_EXAMPLE = os.path.join(ROOT, "permission.example.json")
-if not WANT_RESET and not os.path.exists(PERMISSION_JSON) and os.path.exists(PERMISSION_EXAMPLE):
+if not WANT_RESET and not os.path.exists(PERMISSION_JSON) and os.path.exists(PERMISSION_EXAMPLE) and not WANT_VIEW_VERSION and not WANT_EXPORT:
     with open(PERMISSION_EXAMPLE, "r", encoding="utf-8") as f:
         content = f.read()
     with open(PERMISSION_JSON, "w", encoding="utf-8") as f:
         f.write(content)
-    print("未找到 permission.json，已根据模板自动生成默认权限配置")
+    print("未找到 permission.json, 已根据模板自动生成默认权限配置")
 
 # ===== 一键重置:python main.py --reset-all =====
-# 清除所有配置文件(不启动服务器),并将模板 config.example.py 的 is_first_run 复位为 True
+# 清除所有配置文件(不启动服务器),并将模板 config.example.json 的 is_first_run 复位为 True
 if WANT_RESET:
-    files = ["config.py", "config.py.bak", "config.json", "config.json.bak", "permission.json", "permission.json.bak"]
+    files = ["config.py", "config.py.bak", "config.json", "config.json.bak", "permission.json", "permission.json.bak", "users.json"]
     removed = []
     for name in files:
         p = os.path.join(ROOT, name)
@@ -118,7 +104,6 @@ if WANT_RESET:
     # 复位模板标记,下次启动自动进入向导重新配置
     for tpl_path, tpl_pattern, tpl_repl in [
         (CONFIG_EXAMPLE_JSON, r'"is_first_run"\s*:\s*(true|false)', '"is_first_run": true'),
-        (CONFIG_EXAMPLE, r"is_first_run = (True|False)", "is_first_run = True"),
     ]:
         try:
             if not os.path.exists(tpl_path):
@@ -134,6 +119,11 @@ if WANT_RESET:
     print("========================================")
     print("  配置已重置")
     print("========================================")
+    sys.exit(0)
+
+# 查看版本并退出
+if WANT_VIEW_VERSION:
+    print(f"EnderBridge {VERSION}")
     sys.exit(0)
 
 # ===== 一键升级:python main.py update <新版本压缩包> =====
@@ -154,8 +144,10 @@ if WANT_UPDATE:
         "structures",
         "config.py",
         "config.py.bak",
+        "config.json",
         "permission.json",
         "permission.json.bak",
+        "users.json",
     }
 
     def _load_github_token() -> str:
@@ -736,8 +728,10 @@ if WANT_EXPORT:
         "structures",
         "config.py",
         "config.py.bak",
+        "config.json",
         "permission.json",
         "permission.json.bak",
+        "users.json",
         "node_modules",  # Bot 的 npm 依赖(约 500MB),用户需自行 npm install
     }
     EXPORT_SKIP_DIRS = {"__pycache__"}
@@ -805,17 +799,19 @@ if WANT_EXPORT:
     # export -clear:导出后自动执行 reset-all
     if WANT_EXPORT_CLEAR:
         print("  正在执行 --reset-all ...")
-        for name in ["config.py", "config.py.bak", "permission.json", "permission.json.bak"]:
+        for name in ["config.py", "config.py.bak", "permission.json", "permission.json.bak", "users.json"]:
             p = os.path.join(ROOT, name)
             if os.path.exists(p):
                 os.remove(p)
+        # 复位 JSON 模板标记
         try:
-            with open(CONFIG_EXAMPLE, "r", encoding="utf-8") as f:
-                src = f.read()
-            next_ = re.sub(r"is_first_run = (True|False)", "is_first_run = True", src)
-            if next_ != src:
-                with open(CONFIG_EXAMPLE, "w", encoding="utf-8") as f:
-                    f.write(next_)
+            if os.path.exists(CONFIG_EXAMPLE_JSON):
+                with open(CONFIG_EXAMPLE_JSON, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if data.get("is_first_run", False):
+                    data["is_first_run"] = True
+                    with open(CONFIG_EXAMPLE_JSON, "w", encoding="utf-8") as f:
+                        json.dump(data, f, ensure_ascii=False, indent=2)
         except Exception:
             pass
         print("  配置已重置")
@@ -872,7 +868,7 @@ if not wsConfig:
     except Exception:
         wsConfig = {}
 
-# is_first_run 检测:JSON 优先,Python 回退
+# is_first_run 检测:JSON 优先
 is_first_run = _cfg.get("is_first_run", None)
 if is_first_run is None:
     if os.path.exists(CONFIG_JSON):
@@ -883,13 +879,7 @@ if is_first_run is None:
         except Exception:
             is_first_run = False
     else:
-        try:
-            with open(CONFIG_EXAMPLE, "r", encoding="utf-8") as f:
-                _example_src = f.read()
-            _m = re.search(r"is_first_run = (True|False)", _example_src)
-            is_first_run = _m is not None and _m.group(1) == "True"
-        except Exception:
-            is_first_run = False
+        is_first_run = False
 
 # 旧版本配置迁移提醒
 if _cfg.get("_is_legacy", False) and _cfg.get("_config_format") == "py":
@@ -905,7 +895,7 @@ if _cfg.get("_is_legacy", False) and _cfg.get("_config_format") == "py":
 if "--migrate-config" in sys.argv:
     from lib.config_loader import migrate_py_to_json
     if migrate_py_to_json():
-        print("迁移完成，请重启服务器")
+        print("迁移完成, 请重启服务器")
     else:
         print("迁移失败: 未找到 config.py 或迁移出错")
     sys.exit(0)
@@ -914,7 +904,7 @@ if "--migrate-config" in sys.argv:
 if "--downgrade-config" in sys.argv:
     from lib.config_loader import migrate_json_to_py
     if migrate_json_to_py():
-        print("降级完成，请重启服务器")
+        print("降级完成, 请重启服务器")
     else:
         print("降级失败: 未找到 config.json 或降级出错")
     sys.exit(0)
@@ -1058,7 +1048,7 @@ _player_names: dict[str, str] = {}
 
 
 def _parse_list_output(text: str) -> list[str]:
-    """解析 /list 命令输出，提取玩家名列表
+    """解析 /list 命令输出, 提取玩家名列表
 
     典型输出: "There are 2 of a max of 20 players online: Player1, Player2"
     或中文: "目前有 1/8 个玩家在线：\nENTROCRAFT"
@@ -1077,7 +1067,7 @@ def _parse_list_output(text: str) -> list[str]:
     if not names_str:
         return []
     # 分割：支持逗号、中文逗号、换行
-    names = re.split(r"[,，\n]+", names_str)
+    names = re.split(r"[,, \n]+", names_str)
     return [n.strip() for n in names if n.strip()]
 
 
@@ -1116,7 +1106,7 @@ async def _player_list_polling_task() -> None:
                             pass
                         if ip != "unknown":
                             _player_names[ip] = names[0]  # 取第一个作为主客户端名
-                        # 如果有多个连接，可以尝试按顺序映射
+                        # 如果有多个连接, 可以尝试按顺序映射
                         for i, conn in enumerate(connections):
                             if i < len(names):
                                 try:
@@ -1167,6 +1157,20 @@ def _start_webui() -> None:
     """启动 Web 管理界面(每次启动都监听配置的 Web 端口)"""
     try:
         from webui.server import set_app_info, set_event_loop, set_restart_handler, set_status_provider, start_webui
+        # 加载用户系统(首次运行/升级时自动创建 admin + guest)
+        from lib.users import user_manager
+        user_manager.load()
+        # 首次运行或升级:打印 admin 凭证到终端
+        if user_manager._first_run_password:
+            admin_pw = user_manager._first_run_password
+            user_manager._first_run_password = None  # 只打印一次
+            print("=" * 44)
+            print("  [EnderBridge] WebUI 用户系统已初始化")
+            print(f"  用户名: admin")
+            print(f"  密  码: {admin_pw}")
+            print(f"  访客:   guest (无需密码)")
+            print("  请牢记密码,可在 WebUI 用户管理中修改。")
+            print("=" * 44)
         set_status_provider(_webui_status)
         set_restart_handler(_request_restart)
         set_event_loop(asyncio.get_running_loop())
@@ -1555,7 +1559,7 @@ async def _dispatch_console_command(text):
                 # 再尝试支持终端执行的客户端 Mod(如 $bot)
                 handled = await ClientModManager.execute_terminal(mod_cmd)
             if not handled:
-                console_out(f"§c未知命令: §f{cmd}，输入 {cp}help 查看帮助")
+                console_out(f"§c未知命令: §f{cmd}, 输入 {cp}help 查看帮助")
         return
 
     # 非命令文本:作为聊天消息发送给主客户端
@@ -1689,7 +1693,7 @@ async def destroy():
             await asyncio.wait_for(server.wait_closed(), timeout=5)
         shared.logger.info("服务器已关闭")
     except Exception:
-        shared.logger.warning("服务器关闭异常，正在强制退出")
+        shared.logger.warning("服务器关闭异常, 正在强制退出")
 
 
 if __name__ == "__main__":
@@ -1697,11 +1701,11 @@ if __name__ == "__main__":
     # --load-without-config 模式跳过向导,直接使用默认配置运行
     # 放在 __main__ 块内:保证 import main 无副作用(CI 导入检查等场景可安全执行)
     if is_first_run and not WANT_LOAD_WITHOUT_CONFIG:
-        shared.logger.info("检测到首次运行或是被更新/改动，启动图形化配置向导...")
+        shared.logger.info("检测到首次运行或是被更新/改动, 启动图形化配置向导...")
         from lib.setup import start_setup_server
         try:
             asyncio.run(start_setup_server())
-            shared.logger.info("配置已保存，正在自动启动服务器...")
+            shared.logger.info("配置已保存, 正在自动启动服务器...")
         except Exception as error:
             shared.logger.error(f"配置向导异常: {error}")
             close_log_streams()

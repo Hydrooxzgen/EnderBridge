@@ -720,3 +720,67 @@ a.nav-item { text-decoration: none; }
   background: var(--input-bg); color: var(--text);
   font-size: 12px;
 }
+
+/* ===== 表格 ===== */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9em;
+}
+.table th, .table td {
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--card-border);
+}
+.table th {
+  font-weight: 600;
+  color: var(--text-dim);
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.table tr:hover td {
+  background: rgba(129, 140, 248, 0.04);
+}
+
+/* ===== 弹窗 ===== */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.modal-card {
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  padding: 24px;
+  min-width: 360px;
+  max-width: 90vw;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+.modal-card h3 {
+  margin: 0 0 16px 0;
+  font-size: 1.1em;
+}
+.modal-card label {
+  display: block;
+  margin: 10px 0 4px;
+  font-size: 0.85em;
+  color: var(--text-dim);
+}
+.modal-card .input {
+  width: 100%;
+  box-sizing: border-box;
+}
+.modal-card select.input {
+  padding: 8px 12px;
+  border: 1px solid var(--input-border);
+  border-radius: 6px;
+  background: var(--input-bg);
+  color: var(--text);
+}
