@@ -124,7 +124,6 @@ function loadConfig() {
 
     $("cfg-webui").checked = webui.enabled !== false;
     $("cfg-webport").value = webui.port || 18888;
-    $("cfg-webtoken").value = webui.token || "";
     $("cfg-weblockal").checked = webui.localOnly !== false;
     toggleSub("webuiFields", $("cfg-webui").checked);
 
@@ -534,7 +533,6 @@ function saveConfig() {
   var webui = cfgData.webui || {};
   webui.enabled = $("cfg-webui").checked;
     webui.port = parseInt($("cfg-webport").value, 10) || 18888;
-    webui.token = $("cfg-webtoken").value.trim();
     webui.localOnly = $("cfg-weblockal").checked;
   var ai = {
     baseURL: $("cfg-aibase").value.trim(), apiKey: $("cfg-aikey").value.trim(),

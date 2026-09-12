@@ -217,6 +217,7 @@ class UserManager:
                 "no_role_inherit": u.get("no_role_inherit", False),
                 "enabled": u.get("enabled", True),
                 "system": u.get("system", False),
+                "system_reserved": u.get("system_reserved", False),
             }
             for u in self._users
         ]
@@ -274,6 +275,8 @@ class UserManager:
                     user["permissions"] = cleaned
             if "no_role_inherit" in kwargs:
                 user["no_role_inherit"] = bool(kwargs["no_role_inherit"])
+            if "system_reserved" in kwargs:
+                user["system_reserved"] = bool(kwargs["system_reserved"])
             if "enabled" in kwargs:
                 user["enabled"] = bool(kwargs["enabled"])
         self.save()
@@ -297,6 +300,14 @@ class UserManager:
             self._users = [u for u in self._users if u["username"] != username]
         self.save()
         return {"ok": True, "message": f"用户 {username} 已删除"}
+
+    def verify_admin_password(self, password: str) -> bool:
+        """验证 admin 账户密码(非 admin 用户编辑他人时需调用)"""
+        self._ensure_loaded()
+        admin = self.get_user("admin")
+        if not admin:
+            return False
+        return verify_password(password, admin.get("password_hash", ""))
 
     # ---- 认证 ----
 

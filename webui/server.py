@@ -110,6 +110,7 @@ def set_event_loop(loop):
 _github_repo = ""    # e.g. "UserXYY123/EnderBridge"
 _app_version = APP_VERSION    # 初始为兜底值,set_app_info 后为 main.py 的真实 VERSION
 _description = None  # 非 None 时直接用作 Release Notes,跳过 GitHub API
+_system_mode = False  # --system 启动时启用系统保留账户功能
 
 
 def set_app_info(github_repo: str, version: str, description=None) -> None:
@@ -121,6 +122,12 @@ def set_app_info(github_repo: str, version: str, description=None) -> None:
     _github_repo = github_repo
     _app_version = version
     _description = description
+
+
+def set_system_mode(enabled: bool) -> None:
+    """启用/禁用系统保留账户模式(--system 启动参数)"""
+    global _system_mode
+    _system_mode = enabled
 
 
 def _github_headers() -> dict:
@@ -1202,7 +1209,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
         self._respond(result)
 
     def _api_users_update(self) -> None:
-        """更新用户(仅 admin)"""
+        """更新用户(仅 admin;非 admin 编辑他人需验证 admin 密码)"""
         if not _require_permission("permissions")(self):
             return
         body = self._read_body()
@@ -1210,14 +1217,27 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if not username:
             self._respond({"ok": False, "message": "缺少用户名"})
             return
-        # 不允许通过 API 修改自己的角色(防止误操作锁死)
         current = _auth_user(self)
-        if current.get("username") == username and body.get("role") and body["role"] != current.get("role"):
+        is_admin = current.get("role") == "admin"
+        is_self = current.get("username") == username
+        target_user = user_manager.get_user(username)
+        # 非 admin 编辑他人:需验证 admin 密码
+        if not is_admin and not is_self:
+            admin_pw = body.get("admin_password", "")
+            if not admin_pw or not user_manager.verify_admin_password(admin_pw):
+                self._respond({"ok": False, "message": "admin 密码验证失败"})
+                return
+        # 非 admin 编辑系统保留账户:拒绝
+        if not is_admin and not is_self and target_user and target_user.get("system_reserved"):
+            self._respond({"ok": False, "message": "该账户为系统保留账户,仅 admin 可编辑"})
+            return
+        # 不允许通过 API 修改自己的角色(防止误操作锁死)
+        if is_self and body.get("role") and body["role"] != current.get("role"):
             self._respond({"ok": False, "message": "不能修改自己的角色"})
             return
         result = user_manager.update_user(username, **{
             k: v for k, v in body.items()
-            if k in ("password", "role", "enabled", "permissions", "no_role_inherit") and (k != "password" or v)
+            if k in ("password", "role", "enabled", "permissions", "no_role_inherit", "system_reserved") and (k != "password" or v)
         })
         self._respond(result)
 
@@ -1299,6 +1319,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
             "username": user["username"],
             "role": user["role"],
             "permissions": user["permissions"],
+            "systemMode": _system_mode,
         })
 
     def _api_auth_logout(self) -> None:
@@ -1323,11 +1344,11 @@ class WebUIHandler(BaseHTTPRequestHandler):
             "name": cfg.get("name", "EnderBridge"),
             "port": cfg.get("port", 8800),
             "webPort": webui.get("port", 18888),
-            "webTokenSet": bool(str(webui.get("token", "") or "").strip()),
             "clients": extra.get("clients", 0),
             "uptime": extra.get("uptime", 0),
             "players": extra.get("players", []),
             "version": _app_version or "EnderBridge",
+            "systemMode": _system_mode,
         })
 
     def _api_release_notes(self) -> None:

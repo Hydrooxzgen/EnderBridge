@@ -76,6 +76,42 @@ function renderMarkdown(md) {
 }
 
 // ===== 页面认证守卫 =====
+var _PAGE_PERM_MAP = {
+  "dashboard": "dashboard",
+  "permissions": "permissions",
+  "config": "config",
+  "mods": "mods",
+  "console": "console",
+  "audit": "audit",
+  "update": "update",
+};
+var _PAGE_ORDER = ["dashboard", "permissions", "config", "mods", "console", "audit", "update"];
+
+/** 找到当前路径对应的活跃页面名 */
+function _getActivePage() {
+  var path = location.pathname.replace(/^\//, "").replace(/\/$/, "");
+  if (!path || path === "index.html") return "dashboard";
+  return path;
+}
+
+/** 如果当前页面无权限,自动跳转到第一个有权限的页面 */
+function _redirectIfNoPermission(perms) {
+  var active = _getActivePage();
+  var needed = _PAGE_PERM_MAP[active];
+  if (needed && perms.indexOf(needed) === -1) {
+    // 当前页面无权限,找第一个有权限的页面
+    for (var i = 0; i < _PAGE_ORDER.length; i++) {
+      if (perms.indexOf(_PAGE_ORDER[i]) !== -1) {
+        var target = _PAGE_ORDER[i];
+        location.href = target === "dashboard" ? "/" : "/" + target;
+        return true; // 已跳转
+      }
+    }
+    // 没有任何权限——由 initSidebar 处理提示
+  }
+  return false;
+}
+
 function requireAuth(callback) {
   var role = sessionStorage.getItem(ROLE_KEY) || "";
   var token = sessionStorage.getItem(TOKEN_KEY) || "";
@@ -97,7 +133,10 @@ function requireAuth(callback) {
       sessionStorage.setItem(USER_KEY, JSON.stringify({
         username: d.username, role: d.role, permissions: d.permissions || []
       }));
-      callback(d.role);
+      // 检查是否需要跳转到有权限的页面
+      if (!_redirectIfNoPermission(d.permissions || [])) {
+        callback(d.role);
+      }
     } else {
       clearAuth();
       location.href = "/login";
@@ -105,7 +144,11 @@ function requireAuth(callback) {
   }).catch(function () {
     // 网络错误:如果有本地缓存就继续
     var user = getCurrentUser();
-    if (user.username) callback(user.role || role);
+    if (user.username) {
+      if (!_redirectIfNoPermission(user.permissions || [])) {
+        callback(user.role || role);
+      }
+    }
     else { clearAuth(); location.href = "/login"; }
   });
 }
@@ -123,8 +166,10 @@ function initSidebar(activePage, role) {
   var isGuest = role === "guest";
   // 按权限控制侧边栏可见性
   var permMap = {
+    "dashboard": "dashboard",
     "permissions": "permissions",
     "config": "config",
+    "mods": "mods",
     "console": "console",
     "audit": "audit",
     "update": "update",
@@ -136,6 +181,31 @@ function initSidebar(activePage, role) {
       el.style.display = hasPermission(perm) ? "" : "none";
     }
   });
+  // 检查是否有任何权限,没有则显示无权限提示
+  var user = getCurrentUser();
+  var userPerms = user.permissions || [];
+  if (!isGuest && userPerms.length === 0) {
+    // 隐藏所有页面内容,显示无权限提示
+    var mainEl = document.querySelector(".main");
+    if (mainEl) {
+      // 隐藏 main 内所有子元素
+      Array.from(mainEl.children).forEach(function (child) {
+        child.style.display = "none";
+      });
+      // 插入无权限提示
+      var noPermDiv = document.createElement("div");
+      noPermDiv.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;text-align:center;padding:40px;";
+      noPermDiv.innerHTML = '<div style="font-size:48px;margin-bottom:16px;">🔒</div>'
+        + '<h2 style="margin-bottom:8px;">你的账户没有权限</h2>'
+        + '<p class="muted" style="margin-bottom:20px;">当前账户没有任何已授权的权限,请联系管理员或登录其他账户。</p>'
+        + '<button class="btn btn-primary" onclick="clearAuth();location.href=\'/login\'">切换账户</button>';
+      mainEl.appendChild(noPermDiv);
+    }
+    // 隐藏侧边栏所有导航项(仅保留品牌和退出)
+    document.querySelectorAll(".nav-item[data-page]").forEach(function (el) {
+      el.style.display = "none";
+    });
+  }
   var gb = $("guestBadge"); if (gb) gb.style.display = isGuest ? "block" : "none";
   var alb = $("adminLoginBtn");
   if (alb) {

@@ -131,15 +131,37 @@
       <input id="modalPassword" class="input" type="password" placeholder="密码" autocomplete="new-password">
       <label>角色</label>
       <select id="modalRole" class="input"></select>
+      <!-- 系统保留账户(仅 --system 模式) -->
+      <div id="systemReservedRow" style="margin-top:10px;display:none;">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.88em;">
+          <input type="checkbox" id="modalSystemReserved">
+          <span>🛡️ 系统保留账户</span>
+        </label>
+        <div class="muted" style="margin:2px 0 0 24px;font-size:0.8em;">标记后非 admin 用户无法编辑此账户</div>
+      </div>
       <!-- 用户权限覆盖 -->
       <div style="margin-top:12px;">
         <label style="font-weight:600;">用户权限覆盖</label>
-        <div class="muted" style="margin:4px 0 8px;font-size:0.85em;">单独覆盖此用户的权限。开启"不继承"可完全自定义。拒绝优先于允许。<span style="color:var(--err)">❌ 拒绝</span> &gt; <span style="color:var(--ok)">✅ 允许</span> &gt; 继承角色</div>
+        <div class="muted" style="margin:4px 0 8px;font-size:0.85em;">单独覆盖此用户的权限。开启"不继承"可完全自定义。拒绝优先于允许。<span style="color:var(--err)">❌ 拒绝</span> &gt; <span style="color:var(--ok)">✅ 允许</span> &gt; 继承角色。可用上方按钮批量设置。</div>
         <div id="userPermOverrides"></div>
       </div>
       <div class="row gap-10" style="margin-top:16px;justify-content:flex-end;">
         <button class="btn" id="modalCancel">取消</button>
         <button class="btn btn-primary" id="modalConfirm">确认</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Admin 密码验证弹窗 ===== -->
+  <div class="modal-overlay" id="adminPwModal" style="display:none;">
+    <div class="modal-card" style="max-width:400px;">
+      <h3>🔐 验证 admin 密码</h3>
+      <p class="muted" style="margin-bottom:12px;">非 admin 账户编辑其他用户时需要验证 admin 密码。</p>
+      <input id="adminPwInput" class="input" type="password" placeholder="admin 密码" autocomplete="current-password">
+      <div class="login-msg" id="adminPwMsg"></div>
+      <div class="row gap-10" style="margin-top:16px;justify-content:flex-end;">
+        <button class="btn" id="adminPwCancel">取消</button>
+        <button class="btn btn-primary" id="adminPwConfirm">验证</button>
       </div>
     </div>
   </div>

@@ -12,11 +12,12 @@ import threading
 import time
 from uuid import uuid4
 
+# 常量定义区
 ROOT = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PY = os.path.join(ROOT, "config.py")
 CONFIG_JSON = os.path.join(ROOT, "config.json")
 CONFIG_EXAMPLE_JSON = os.path.join(ROOT, "config.example.json")
-VERSION = "b0.3.7 feat4 dev2"
+VERSION = "b0.3.7 feat4 dev3"
 """
 feat1: 在线玩家列表--OK
 safefix1: 修复安全漏洞
@@ -32,6 +33,8 @@ WANT_EXPORT = "export" in sys.argv
 WANT_EXPORT_CLEAR = WANT_EXPORT and "-clear" in sys.argv
 WANT_LOAD_WITHOUT_CONFIG = "--load-without-config" in sys.argv
 WANT_VIEW_VERSION = "--version" in sys.argv or "-v" in sys.argv
+WANT_SYSTEM_MODE = "--system" in sys.argv
+WANT_HELP = "--help" in sys.argv or "-h" in sys.argv
 
 # ===== 依赖检测(必须早于任何第三方mod使用) ===== 
 # websockets 使用动态导入:缺失时自动运行 setup.py 安装,成功后继续启动。
@@ -60,8 +63,9 @@ if not WANT_RESET and not WANT_EXPORT and not _dependencies_ok():
     _run_setup()
 
 # ===== 引导阶段(必须早于任何依赖 config.py 的模块加载) =====
-# 依赖 config.py 的模块(lib/logger.py、lib/utils.py、lib/mods.py 等)均为延迟加载,
-# 因此 config.py 缺失时(如 --reset-all 之后)可先在此根据模板自动补全,保证程序可启动。
+# 依赖 config.json 的模块(lib/logger.py、lib/utils.py、lib/mods.py 等)均为延迟加载,
+# 因此 config.json 缺失时(如 --reset-all 之后)可先在此根据模板自动补全,保证程序可启动。
+# 此阶段判断启动参数并执行对应操作
 if not WANT_RESET and not os.path.exists(CONFIG_PY) and not os.path.exists(CONFIG_JSON) and not WANT_VIEW_VERSION and not WANT_EXPORT:
     # 优先生成 config.json, 若无模板则回退到 config.py
     if os.path.exists(CONFIG_EXAMPLE_JSON):
@@ -1156,7 +1160,7 @@ def _webui_status() -> dict:
 def _start_webui() -> None:
     """启动 Web 管理界面(每次启动都监听配置的 Web 端口)"""
     try:
-        from webui.server import set_app_info, set_event_loop, set_restart_handler, set_status_provider, start_webui
+        from webui.server import set_app_info, set_event_loop, set_restart_handler, set_status_provider, set_system_mode, start_webui
         # 加载用户系统(首次运行/升级时自动创建 admin + guest)
         from lib.users import user_manager
         user_manager.load()
@@ -1175,6 +1179,7 @@ def _start_webui() -> None:
         set_restart_handler(_request_restart)
         set_event_loop(asyncio.get_running_loop())
         set_app_info(GITHUB_REPO, VERSION, DESCRIPTION)
+        set_system_mode(WANT_SYSTEM_MODE)
         start_webui()
     except Exception as error:
         shared.logger.warning(f"Web 管理界面启动失败: {error}")

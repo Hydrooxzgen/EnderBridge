@@ -47,8 +47,7 @@ function refreshStatus() {
       statCard("🔌", data.port, "WebSocket 端口") +
       statCard("🌐", data.webPort, "Web 管理端口") +
       statCard("👥", data.clients, "在线客户端") +
-      statCard("⏱️", uptimeText, "运行时间") +
-      statCard("🔑", data.webTokenSet ? "已设置" : "未设置", "管理令牌");
+      statCard("⏱️", uptimeText, "运行时间");
     renderPlayers(data.players || []);
   }).catch(function () {});
 }
