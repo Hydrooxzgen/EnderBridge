@@ -786,6 +786,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/mods/reload-all":
             self._api_reload_all()
             return
+        if parsed.path == "/api/mods/reload":
+            self._api_reload_mod()
+            return
         if parsed.path == "/api/restart":
             self._api_restart()
             return
@@ -1454,6 +1457,49 @@ class WebUIHandler(BaseHTTPRequestHandler):
             from lib.mods import ServerModManager
             result = asyncio.run(ServerModManager.reload_all())
             self._respond({"ok": True, "result": result})
+        except Exception as e:
+            self._respond({"ok": False, "message": f"重载失败: {e}"})
+
+    def _api_reload_mod(self) -> None:
+        """重载单个 Mod(仅 admin)"""
+        if not _require_admin(self):
+            return
+        body = self._read_body()
+        name = (body.get("name") or "").strip()
+        side = (body.get("side") or "").strip()
+        if not name:
+            self._respond({"ok": False, "message": "缺少 name 参数"})
+            return
+        if side not in ("client", "server"):
+            self._respond({"ok": False, "message": "side 必须为 client 或 server"})
+            return
+        try:
+            import asyncio
+            if side == "server":
+                from lib.mods import ServerModManager
+                result = asyncio.run(ServerModManager.reload(name))
+            else:
+                from lib.current import Current
+                from lib.mods import ClientModManager
+                success_all = []
+                failed_all = []
+                for client, manager in list(Current.client_mods.items()):
+                    if not manager or not hasattr(manager, "reload"):
+                        continue
+                    r = asyncio.run(manager.reload(name))
+                    cid = getattr(client, "id", None) or "?"
+                    if r.get("success"):
+                        success_all.append(f"{cid}:{name}")
+                    else:
+                        failed_all.append(f"{cid}:{name}")
+                if not Current.client_mods:
+                    result = {"success": False, "message": f"无客户端连接,无法重载客户端 Mod"}
+                elif success_all:
+                    result = {"success": True, "message": f"Client Mod {name} 已重载 ({len(success_all)} 个连接)"}
+                else:
+                    result = {"success": False, "message": failed_all[0] if failed_all else f"Client Mod {name} 重载失败"}
+            ok = result.get("success", False)
+            self._respond({"ok": ok, "message": result.get("message", "重载完成")})
         except Exception as e:
             self._respond({"ok": False, "message": f"重载失败: {e}"})
 

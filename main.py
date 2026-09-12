@@ -17,11 +17,12 @@ CONFIG_PY = os.path.join(ROOT, "config.py")
 CONFIG_JSON = os.path.join(ROOT, "config.json")
 CONFIG_EXAMPLE = os.path.join(ROOT, "config.example.py")
 CONFIG_EXAMPLE_JSON = os.path.join(ROOT, "config.example.json")
-VERSION = "b0.3.7 feat2 dev1"
+VERSION = "b0.3.7 feat3"
 """
 feat1: 在线玩家列表--OK
 safefix1: 修复安全漏洞
 feat2: 日志实时查看器--deving
+feat3: webui mod 管理页热重载按钮
 """
 DESCRIPTION = "新增webui日志实时查看器" # 仅当不为None时从Github拉取更新日志，反之则直接显示该变量内容。
 GITHUB_REPO = "Hydrooxzgen/EnderBridge"  # You can edit this to your own repository if you fork it :)
