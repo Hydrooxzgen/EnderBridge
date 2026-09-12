@@ -25,6 +25,7 @@ def _load_announcement_config():
 
 class Mod:
     """消息通知 Mod -- (client)"""
+    terminal_compatible = True
 
     logger = None  # 由 ModManager 注入,类型: lib.mods.ModLogger
 

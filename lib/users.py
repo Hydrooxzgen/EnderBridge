@@ -289,12 +289,12 @@ class UserManager:
         return {"ok": True, "message": f"用户 {username} 已更新"}
 
     def delete_user(self, username: str) -> dict:
-        """删除用户(系统用户不可删除)"""
+        """删除用户(系统用户/系统保留账户不可删除)"""
         self._ensure_loaded()
         user = self.get_user(username)
         if not user:
             return {"ok": False, "message": f"用户 {username} 不存在"}
-        if user.get("system"):
+        if user.get("system") or user.get("system_reserved"):
             return {"ok": False, "message": f"系统用户 {username} 不可删除"}
         with self._lock:
             self._users = [u for u in self._users if u["username"] != username]
@@ -330,9 +330,10 @@ class UserManager:
                 "username": username,
                 "role": role,
                 "permissions": permissions,
+                "system": user.get("system", False),
                 "expires": time.time() + 86400 * 7,  # 7 天
             }
-        return {"ok": True, "token": token, "role": role, "permissions": permissions, "username": username}
+        return {"ok": True, "token": token, "role": role, "permissions": permissions, "username": username, "system": user.get("system", False)}
 
     def validate_session(self, token: str) -> Optional[dict]:
         """验证会话 token,返回 {username, role, permissions} 或 None"""

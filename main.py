@@ -17,16 +17,19 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PY = os.path.join(ROOT, "config.py")
 CONFIG_JSON = os.path.join(ROOT, "config.json")
 CONFIG_EXAMPLE_JSON = os.path.join(ROOT, "config.example.json")
-VERSION = "b0.3.7 feat4 dev3"
+VERSION = "b0.4.0"
 """
-feat1: 在线玩家列表--OK
+feat1: 在线玩家列表
 safefix1: 修复安全漏洞
 fix2: 完全使用EBC0.3.6格式配置文件, 丢弃0.1.0标准配置文件
 feat2: 日志实时查看器
 feat3: webui mod 管理页热重载按钮
 feat4: webui 权限精细化(用户名+bcrypt+角色权限)
+fix3: 修复$message指令无法使用的bug
+feat5: 新增py main.py --help(-h) 显示帮助信息
+feat6: 新建404页面 **并且更新到b0.4.0**
 """
-DESCRIPTION = "新增webui用户权限系统:用户名登录/bcrypt密码/角色权限管理" # 仅当不为None时从Github拉取更新日志, 反之则直接显示该变量内容。
+DESCRIPTION = None # 仅当不为None时从Github拉取更新日志, 反之则直接显示该变量内容。
 GITHUB_REPO = "Hydrooxzgen/EnderBridge"  # You can edit this to your own repository if you fork it :)
 WANT_RESET = "--reset-all" in sys.argv
 WANT_EXPORT = "export" in sys.argv
@@ -128,6 +131,34 @@ if WANT_RESET:
 # 查看版本并退出
 if WANT_VIEW_VERSION:
     print(f"EnderBridge {VERSION}")
+    sys.exit(0)
+
+# 显示帮助并退出
+if WANT_HELP:
+    print(f"EnderBridge {VERSION}")
+    print(f"{DESCRIPTION}")
+    print()
+    print("用法: python main.py [命令] [选项]")
+    print()
+    print("命令:")
+    print("  (无参数)              正常启动服务器")
+    print("  update <压缩包>       一键升级(保留配置)")
+    print("  export [输出路径]     一键导出为zip")
+    print()
+    print("选项:")
+    print("  --help, -h            显示此帮助信息")
+    print("  --version, -v         显示当前版本")
+    print("  --reset-all           一键重置所有配置")
+    print("  --load-without-config 跳过配置直接启动(调试用)")
+    print("  --system              启用系统保留账户模式")
+    print()
+    print("示例:")
+    print("  python main.py                           启动服务器")
+    print("  python main.py update update.zip         从压缩包升级")
+    print("  python main.py export                    导出为zip")
+    print("  python main.py export D:/backup/eb.zip   导出到指定路径")
+    print("  python main.py --reset-all               重置所有配置")
+    print("  python main.py --version                 查看版本")
     sys.exit(0)
 
 # ===== 一键升级:python main.py update <新版本压缩包> =====

@@ -130,29 +130,24 @@ After saving, the config files are generated (old files backed up as `.bak`). **
 **On every server start**, the Web management console listens on the configured port (default `18888`). Open `http://127.0.0.1:18888` in your browser:
 
 - 📊 **仪表盘 / Dashboard**：服务器名称、端口、客户端连接数、运行时间, 一键重启服务器（优雅关闭后自动以相同参数重启进程）；根路径 `/` 直接进入仪表盘 / Server name, port, connected clients, uptime, one-click server restart; root path `/` goes directly to dashboard
-- 👥 **权限管理 / Permissions**：在线查看与编辑 `owner` / `op` / `user` / `blocker`, 保存后即时生效 / View & edit permission groups, applied immediately
-- ⚙️ **功能设置 / Settings**：修改名称、端口、命令前缀、日志等级、音乐 / QQ 开关、命令限流与 Web 管理本身（端口 / 令牌）/ Edit server settings, feature toggles, rate limit and Web console port / token
+- 👥 **权限管理 / Permissions**：基于用户名和密码的用户权限系统, 角色 + 细粒度权限覆盖, 保存后即时生效 / Username & password-based user permission system with role-based granular permissions, applied immediately
+- ⚙️ **功能设置 / Settings**：修改名称、端口、命令前缀、日志等级、音乐 / QQ 开关、命令限流与 Web 管理端口 / Edit server settings, feature toggles, rate limit and Web console port
 - 🧩 **Mod 管理 / Mods**：查看已加载的客户端 / 服务端 Mod 及其可导入状态, 一键重载服务端 Mod / View loaded mods and reload server mods
 
 配置存放于 `config.json` 的 `webuiConfig` 块：
 
-```python
-webuiConfig = {
-    "enabled": True,     # 是否启用 Web 管理界面
-    "port": 18888,       # 监听端口
-    "token": "",         # 管理令牌, 留空则仅限本机访问(无鉴权)
+```json
+{
+  "webuiConfig": {
+    "enabled": true,
+    "port": 18888
+  }
 }
 ```
 
-> 令牌（`token`）非空时, 登录页需输入令牌：
+> 首次运行时终端会显示 admin 的随机密码。访客账户 guest 无需密码, 仅可查看仪表盘和 Mod 列表。
 >
-> - **令牌正确** → 管理员（全部管理权限：权限管理 / 功能设置 / Mod 重载）
-> - **令牌错误** → 提示「密码错误, 请重新输入」, 停留在登录页（不再自动进入访客模式）
-> - **点击"以访客身份浏览 (Guest)"** → 访客模式（仅基础功能：默认仪表盘 & Mod 列表, 只读）
->
-> 建议在非本机访问时设置。部分设置（如名称 / 端口）保存后需重启服务器生效, 权限与 Mod 重载即时生效。
->
-> When a token is set, the login page requires it: a correct token grants full admin access; a wrong token shows "wrong password" and stays on the login page (no automatic guest fallback); the Guest button enters read-only guest mode (dashboard + mod list only). Leave it empty for localhost-only access without login.
+> 建议在非本机访问时修改 admin 密码。部分设置（如名称 / 端口）保存后需重启服务器生效, 权限与 Mod 重载即时生效。
 
 ### 3. 在游戏内连接 / Connect from the game
 

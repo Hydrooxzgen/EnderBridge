@@ -15,9 +15,15 @@ var _PERM_META = [
 requireAuth(function (role) {
   initSidebar("permissions", role);
   initTheme();
-  // 获取 systemMode
+  // 获取 systemMode + system 标记
   api("/auth/me").then(function (d) {
-    if (d.ok) _systemMode = d.systemMode || false;
+    if (d.ok) {
+      _systemMode = d.systemMode || false;
+      // 缓存 system 标记到 sessionStorage
+      var user = getCurrentUser();
+      user.system = d.system || false;
+      sessionStorage.setItem(USER_KEY, JSON.stringify(user));
+    }
   }).catch(function(){});
   loadPermissions();
 });
@@ -99,22 +105,27 @@ function loadUsers() {
       var me = getCurrentUser();
       var isMe = me.username === u.username;
       var isSystem = u.system;
+      var isReserved = u.system_reserved;
       var statusHtml = isDisabled
         ? '<span style="color:var(--err)">禁用</span>'
         : '<span style="color:var(--accent)">启用</span>';
-      // 启用/禁用按钮
-      var toggleBtn = isMe ? '' // 不能禁用自己
+      // 启用/禁用按钮(不能禁用自己)
+      var toggleBtn = isMe ? ''
         : '<button class="btn btn-sm" onclick="toggleUser(\'' + escapeHtml(u.username) + '\',' + (isDisabled ? 'true' : 'false') + ')" title="' + (isDisabled ? '启用' : '禁用') + '">'
         + (isDisabled ? '🔓' : '🔒') + '</button> ';
-      // 删除按钮(系统用户不可删除)
-      var delBtn = (isMe || isSystem) ? ''
+      // 删除按钮(系统用户/系统保留账户不可删除)
+      var delBtn = (isMe || isSystem || isReserved) ? ''
         : '<button class="btn btn-sm" style="color:var(--err)" onclick="deleteUser(\'' + escapeHtml(u.username) + '\')">🗑️</button>';
+      // 编辑按钮(非系统管理员不可编辑系统保留账户;不可编辑自己)
+      var isSystemAdmin = me.role === "admin" && me.system;
+      var editBtn = (isMe || (isReserved && !isSystemAdmin)) ? ''
+        : '<button class="btn btn-sm" onclick="editUser(\'' + escapeHtml(u.username) + '\')">✏️</button> ';
       return '<tr>'
         + '<td>' + escapeHtml(u.username) + (isMe ? ' <span class="muted">(你)</span>' : '') + (isSystem ? ' <span class="muted">系统</span>' : '') + (u.system_reserved ? ' <span style="color:var(--accent);font-size:0.8em;" title="系统保留账户">🛡️</span>' : '') + '</td>'
         + '<td><span class="chip">' + escapeHtml(roleLabel) + '</span></td>'
         + '<td>' + statusHtml + '</td>'
         + '<td>'
-        + '<button class="btn btn-sm" onclick="editUser(\'' + escapeHtml(u.username) + '\')">✏️</button> '
+        + editBtn
         + toggleBtn + delBtn
         + '</td></tr>';
     }).join("");
@@ -174,7 +185,7 @@ if (roleSaveBtn) roleSaveBtn.addEventListener("click", function () {
       api("/auth/me").then(function (d) {
         if (d.ok) {
           sessionStorage.setItem("enderbridge_user", JSON.stringify({
-            username: d.username, role: d.role, permissions: d.permissions || []
+            username: d.username, role: d.role, permissions: d.permissions || [], system: d.system || false
           }));
         }
       }).catch(function(){});
@@ -224,14 +235,17 @@ if (userAddBtn) userAddBtn.addEventListener("click", function () {
   $("userModalTitle").textContent = "添加用户";
   $("modalUsername").value = "";
   $("modalUsername").disabled = false;
-  $("modalPassword").value = "";
-  $("modalPassword").placeholder = "密码";
+  var pwInput = $("modalPassword");
+  pwInput.value = "";
+  pwInput.disabled = false;
+  pwInput.placeholder = "密码";
   fillRoleSelect();
   $("modalRole").value = "viewer";
   fillUserPermOverrides({}, false);  // 新用户默认继承
   // 新用户不显示系统保留选项
   var sysReservedRow = $("systemReservedRow");
   if (sysReservedRow) sysReservedRow.style.display = "none";
+  _showUserModalMsg("");
   _editingUser = null;
   $("userModal").style.display = "flex";
 });
@@ -242,9 +256,18 @@ function editUser(username) {
   $("userModalTitle").textContent = "编辑用户 - " + username;
   $("modalUsername").value = username;
   $("modalUsername").disabled = true;
-  $("modalPassword").value = "";
-  $("modalPassword").placeholder = "留空则不修改";
+  var pwInput = $("modalPassword");
+  pwInput.value = "";
+  // guest 用户禁用密码框
+  if (username === "guest") {
+    pwInput.disabled = true;
+    pwInput.placeholder = "guest 不允许设置密码";
+  } else {
+    pwInput.disabled = false;
+    pwInput.placeholder = "留空则不修改";
+  }
   fillRoleSelect();
+  _showUserModalMsg("");
   // 系统保留账户选项:仅 --system 模式下显示
   var sysReservedRow = $("systemReservedRow");
   if (sysReservedRow) sysReservedRow.style.display = _systemMode ? "" : "none";
@@ -369,41 +392,99 @@ function collectUserPermOverrides() {
 // 删除用户
 function deleteUser(username) {
   if (!confirm("确定要删除用户 " + username + " 吗?")) return;
-  api("/users", { method: "DELETE", body: JSON.stringify({ username: username }) })
-    .then(function (data) {
-      toast(data.message || "已删除", data.ok ? "ok" : "err");
-      if (data.ok) loadUsers();
-    }).catch(function () {});
+  var me = getCurrentUser();
+  var isSystemAdmin = me.role === "admin" && me.system;
+  function doDelete(adminPw) {
+    var body = { username: username };
+    if (adminPw) body.admin_password = adminPw;
+    api("/users", { method: "DELETE", body: JSON.stringify(body) })
+      .then(function (data) {
+        toast(data.message || "已删除", data.ok ? "ok" : "err");
+        if (data.ok) loadUsers();
+      }).catch(function () {});
+  }
+  if (isSystemAdmin) {
+    doDelete(null);
+  } else {
+    _promptAdminPassword(function (adminPw, modal) {
+      var body = { username: username, admin_password: adminPw };
+      api("/users", { method: "DELETE", body: JSON.stringify(body) })
+        .then(function (data) {
+          if (!data.ok && modal && modal.error) {
+            modal.error(data.message || "验证失败");
+            return;
+          }
+          toast(data.message || "已删除", data.ok ? "ok" : "err");
+          if (data.ok) { if (modal && modal.dismiss) modal.dismiss(); loadUsers(); }
+        }).catch(function () {
+          if (modal && modal.error) modal.error("网络请求失败");
+        });
+    });
+  }
 }
 
 // 启用/禁用用户
 function toggleUser(username, enable) {
   var action = enable ? "启用" : "禁用";
   if (!confirm("确定要" + action + "用户 " + username + " 吗?")) return;
-  api("/users", { method: "PUT", body: JSON.stringify({ username: username, enabled: enable }) })
-    .then(function (data) {
-      toast(data.message || ("已" + action), data.ok ? "ok" : "err");
-      if (data.ok) loadUsers();
-    }).catch(function () {});
+  var me = getCurrentUser();
+  var isSystemAdmin = me.role === "admin" && me.system;
+  var isSelf = me.username === username;
+  function doToggle(adminPw) {
+    var body = { username: username, enabled: enable };
+    if (adminPw) body.admin_password = adminPw;
+    api("/users", { method: "PUT", body: JSON.stringify(body) })
+      .then(function (data) {
+        toast(data.message || ("已" + action), data.ok ? "ok" : "err");
+        if (data.ok) loadUsers();
+      }).catch(function () {});
+  }
+  if (isSystemAdmin || isSelf) {
+    doToggle(null);
+  } else {
+    _promptAdminPassword(function (adminPw, modal) {
+      var body = { username: username, enabled: enable, admin_password: adminPw };
+      api("/users", { method: "PUT", body: JSON.stringify(body) })
+        .then(function (data) {
+          if (!data.ok && modal && modal.error) {
+            modal.error(data.message || "验证失败");
+            return;
+          }
+          toast(data.message || ("已" + action), data.ok ? "ok" : "err");
+          if (data.ok) { if (modal && modal.dismiss) modal.dismiss(); loadUsers(); }
+        }).catch(function () {
+          if (modal && modal.error) modal.error("网络请求失败");
+        });
+    });
+  }
 }
 
 // 弹窗操作
 var modalCancel = $("modalCancel");
 if (modalCancel) modalCancel.addEventListener("click", function () { $("userModal").style.display = "none"; });
 
+function _showUserModalMsg(msg, isError) {
+  var el = $("userModalMsg");
+  if (!el) return;
+  el.textContent = msg || "";
+  el.style.color = isError ? "var(--err)" : "var(--muted)";
+}
+
 var modalConfirm = $("modalConfirm");
 if (modalConfirm) modalConfirm.addEventListener("click", function () {
   var username = $("modalUsername").value.trim();
   var password = $("modalPassword").value;
   var role = $("modalRole").value;
-  if (!username) { toast("请输入用户名", "err"); return; }
   var isEdit = $("modalUsername").disabled;
+  _showUserModalMsg("");
+  if (!username) { _showUserModalMsg("请输入用户名", true); return; }
+  if (!isEdit && !password) { _showUserModalMsg("请输入密码", true); return; }
   var permData = collectUserPermOverrides();
   var permOverrides = permData.permissions;
   var noRoleInherit = permData.no_role_inherit;
   var sysReserved = $("modalSystemReserved") ? $("modalSystemReserved").checked : false;
   var me = getCurrentUser();
-  var isAdmin = me.role === "admin";
+  var isSystemAdmin = me.role === "admin" && me.system;
   var isSelf = me.username === username;
 
   // 构建请求体
@@ -419,23 +500,39 @@ if (modalConfirm) modalConfirm.addEventListener("click", function () {
     return body;
   }
 
-  // 非 admin 编辑他人:需先验证 admin 密码
-  if (isEdit && !isAdmin && !isSelf) {
-    _promptAdminPassword(function (adminPw) {
-      _doUserSave(isEdit, username, buildBody(adminPw));
+  // 非系统管理员:创建用户或编辑他人需验证 admin 密码;编辑自己免验证
+  if (!isSystemAdmin && (!isSelf || !isEdit)) {
+    _promptAdminPassword(function (adminPw, modal) {
+      _doUserSave(isEdit, username, buildBody(adminPw), modal);
     });
     return;
   }
-  _doUserSave(isEdit, username, buildBody(null));
+  _doUserSave(isEdit, username, buildBody(null), { error: function(msg) { _showUserModalMsg(msg, true); } });
 });
 
-function _doUserSave(isEdit, username, body) {
+function _doUserSave(isEdit, username, body, modal) {
   var method = isEdit ? "PUT" : "POST";
   api("/users", { method: method, body: JSON.stringify(body) })
     .then(function (data) {
-      toast(data.message || (isEdit ? "已更新" : "已创建"), data.ok ? "ok" : "err");
-      if (data.ok) { $("userModal").style.display = "none"; loadUsers(); }
-    }).catch(function () {});
+      if (!data.ok) {
+        if (modal && modal.error) {
+          modal.error(data.message || "操作失败");
+        } else {
+          _showUserModalMsg(data.message || "操作失败", true);
+        }
+        return;
+      }
+      toast(data.message || (isEdit ? "已更新" : "已创建"), "ok");
+      if (modal && modal.dismiss) modal.dismiss();
+      $("userModal").style.display = "none";
+      loadUsers();
+    }).catch(function () {
+      if (modal && modal.error) {
+        modal.error("网络请求失败");
+      } else {
+        _showUserModalMsg("网络请求失败", true);
+      }
+    });
 }
 
 function _promptAdminPassword(onConfirm) {
@@ -453,11 +550,20 @@ function _promptAdminPassword(onConfirm) {
     cancelBtn.removeEventListener("click", doCancel);
     $("adminPwInput").removeEventListener("keydown", onKey);
   }
+  var modal = {
+    error: function(msg) {
+      $("adminPwMsg").textContent = msg;
+      $("adminPwMsg").style.color = "var(--err)";
+      $("adminPwInput").focus();
+    },
+    dismiss: function() { cleanup(); }
+  };
   function doConfirm() {
     var pw = $("adminPwInput").value;
     if (!pw) { $("adminPwMsg").textContent = "请输入 admin 密码"; return; }
-    cleanup();
-    onConfirm(pw);
+    $("adminPwMsg").textContent = "验证中...";
+    $("adminPwMsg").style.color = "var(--muted)";
+    onConfirm(pw, modal);
   }
   function doCancel() { cleanup(); }
   function onKey(e) { if (e.key === "Enter") doConfirm(); if (e.key === "Escape") doCancel(); }

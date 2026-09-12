@@ -636,6 +636,7 @@ def _auth_user(handler) -> dict:
                 "username": session["username"],
                 "role": session["role"],
                 "permissions": session["permissions"],
+                "system": session.get("system", False),
                 "is_guest": False,
             }
 
@@ -653,11 +654,11 @@ def _auth_user(handler) -> dict:
         if guest_user:
             role = guest_user.get("role", "viewer")
             permissions = user_manager.get_effective_permissions("guest")
-            return {"username": "guest", "role": role, "permissions": permissions, "is_guest": True}
-        return {"username": "guest", "role": "viewer", "permissions": ["dashboard", "mods"], "is_guest": True}
+            return {"username": "guest", "role": role, "permissions": permissions, "system": False, "is_guest": True}
+        return {"username": "guest", "role": "viewer", "permissions": ["dashboard", "mods"], "system": False, "is_guest": True}
 
     # 3) 未授权
-    return {"username": "", "role": "", "permissions": [], "is_guest": False}
+    return {"username": "", "role": "", "permissions": [], "system": False, "is_guest": False}
 
 
 def _auth_role(handler) -> str:
@@ -817,10 +818,10 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if path == "/api/roles":
             self._api_roles_list()
             return
-        self.send_response(404)
-        self.send_header("Content-Type", "text/plain; charset=utf-8")
-        self.end_headers()
-        self.wfile.write(b"Not Found")
+        if path.startswith("/api/"):
+            self._respond({"ok": False, "message": "Not Found"}, status=404)
+            return
+        self._serve_page("404.html")
 
     def do_PUT(self):
         parsed = urllib.parse.urlparse(self.path)
@@ -836,10 +837,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/roles":
             self._api_roles_update()
             return
-        self.send_response(404)
-        self.send_header("Content-Type", "text/plain; charset=utf-8")
-        self.end_headers()
-        self.wfile.write(b"Not Found")
+        self._respond({"ok": False, "message": "Not Found"}, status=404)
 
     def do_DELETE(self):
         parsed = urllib.parse.urlparse(self.path)
@@ -849,10 +847,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/roles":
             self._api_roles_delete()
             return
-        self.send_response(404)
-        self.send_header("Content-Type", "text/plain; charset=utf-8")
-        self.end_headers()
-        self.wfile.write(b"Not Found")
+        self._respond({"ok": False, "message": "Not Found"}, status=404)
 
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
@@ -898,10 +893,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/bot/xbox-account/remove":
             self._api_bot_xbox_account_remove()
             return
-        self.send_response(404)
-        self.send_header("Content-Type", "text/plain; charset=utf-8")
-        self.end_headers()
-        self.wfile.write(b"Not Found")
+        self._respond({"ok": False, "message": "Not Found"}, status=404)
 
     # ---- 前端页面 ----
     def _serve_index(self) -> None:
@@ -1182,6 +1174,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
                 "role": result["role"],
                 "username": result["username"],
                 "permissions": result["permissions"],
+                "system": result.get("system", False),
             })
         else:
             self._respond({"ok": False, "message": result["message"]})
@@ -1195,10 +1188,20 @@ class WebUIHandler(BaseHTTPRequestHandler):
         self._respond({"ok": True, "users": user_manager.list_users()})
 
     def _api_users_create(self) -> None:
-        """创建用户(仅 admin)"""
+        """创建用户(需 permissions 权限;非系统管理员需验证 admin 密码)"""
         if not _require_permission("permissions")(self):
             return
-        body = self._read_body()
+        current = _auth_user(self)
+        # 非系统管理员创建用户需验证 admin 密码
+        if not (current.get("role") == "admin" and current.get("system")):
+            body_tmp = self._read_body()
+            admin_pw = body_tmp.get("admin_password", "")
+            if not admin_pw or not user_manager.verify_admin_password(admin_pw):
+                self._respond({"ok": False, "message": "admin 密码验证失败"})
+                return
+            body = body_tmp
+        else:
+            body = self._read_body()
         result = user_manager.add_user(
             body.get("username", "").strip(),
             body.get("password", ""),
@@ -1218,22 +1221,29 @@ class WebUIHandler(BaseHTTPRequestHandler):
             self._respond({"ok": False, "message": "缺少用户名"})
             return
         current = _auth_user(self)
-        is_admin = current.get("role") == "admin"
+        is_system_admin = current.get("role") == "admin" and current.get("system")
         is_self = current.get("username") == username
-        target_user = user_manager.get_user(username)
-        # 非 admin 编辑他人:需验证 admin 密码
-        if not is_admin and not is_self:
+        # 非系统管理员编辑他人:需验证 admin 密码
+        if not is_system_admin and not is_self:
             admin_pw = body.get("admin_password", "")
             if not admin_pw or not user_manager.verify_admin_password(admin_pw):
                 self._respond({"ok": False, "message": "admin 密码验证失败"})
                 return
-        # 非 admin 编辑系统保留账户:拒绝
-        if not is_admin and not is_self and target_user and target_user.get("system_reserved"):
-            self._respond({"ok": False, "message": "该账户为系统保留账户,仅 admin 可编辑"})
+        # 系统保留账户:仅内置系统管理员可编辑(自己除外)
+        if not is_system_admin and not is_self and target_user and target_user.get("system_reserved"):
+            self._respond({"ok": False, "message": "该账户为系统保留账户,仅系统管理员可编辑"})
             return
         # 不允许通过 API 修改自己的角色(防止误操作锁死)
         if is_self and body.get("role") and body["role"] != current.get("role"):
             self._respond({"ok": False, "message": "不能修改自己的角色"})
+            return
+        # 非系统管理员不允许修改自己的权限覆盖(防止提权)
+        if is_self and not is_system_admin:
+            body.pop("permissions", None)
+            body.pop("no_role_inherit", None)
+        # guest 用户不允许设置密码
+        if target_user and target_user.get("username") == "guest" and body.get("password"):
+            self._respond({"ok": False, "message": "guest 用户不允许设置密码"})
             return
         result = user_manager.update_user(username, **{
             k: v for k, v in body.items()
@@ -1242,7 +1252,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
         self._respond(result)
 
     def _api_users_delete(self) -> None:
-        """删除用户(仅 admin)"""
+        """删除用户(需 permissions 权限,非系统管理员需验证 admin 密码)"""
         if not _require_permission("permissions")(self):
             return
         body = self._read_body()
@@ -1255,6 +1265,12 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if current.get("username") == username:
             self._respond({"ok": False, "message": "不能删除自己"})
             return
+        # 非系统管理员操作需验证 admin 密码
+        if not (current.get("role") == "admin" and current.get("system")):
+            admin_pw = body.get("admin_password", "")
+            if not admin_pw or not user_manager.verify_admin_password(admin_pw):
+                self._respond({"ok": False, "message": "admin 密码验证失败"})
+                return
         result = user_manager.delete_user(username)
         self._respond(result)
 
@@ -1319,6 +1335,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
             "username": user["username"],
             "role": user["role"],
             "permissions": user["permissions"],
+            "system": user.get("system", False),
             "systemMode": _system_mode,
         })
 

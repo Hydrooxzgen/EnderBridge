@@ -31,7 +31,7 @@
 <script>
 (function() {
   var role = sessionStorage.getItem(ROLE_KEY) || "";
-  if (role === "guest" || (role === "admin" && sessionStorage.getItem(TOKEN_KEY))) {
+  if (role === "guest" || (role && sessionStorage.getItem(TOKEN_KEY))) {
     location.href = "/"; return;
   }
   $("loginBtn").addEventListener("click", doLogin);
@@ -45,7 +45,7 @@
           sessionStorage.setItem(TOKEN_KEY, data.token);
           sessionStorage.setItem(ROLE_KEY, data.role);
           sessionStorage.setItem("enderbridge_user", JSON.stringify({
-            username: data.username, role: data.role, permissions: data.permissions || []
+            username: data.username, role: data.role, permissions: data.permissions || [], system: data.system || false
           }));
           location.href = "/";
         } else {
@@ -76,7 +76,7 @@
           sessionStorage.setItem(TOKEN_KEY, data.token);
           sessionStorage.setItem(ROLE_KEY, data.role);
           sessionStorage.setItem("enderbridge_user", JSON.stringify({
-            username: data.username, role: data.role, permissions: data.permissions || []
+            username: data.username, role: data.role, permissions: data.permissions || [], system: data.system || false
           }));
           location.href = "/";
         } else {

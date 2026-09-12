@@ -55,7 +55,7 @@ function api(path, options) {
 }
 
 function escapeHtml(s) {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\'/g, "&#39;").replace(/"/g, "&quot;");
 }
 
 function renderMarkdown(md) {
@@ -121,7 +121,7 @@ function requireAuth(callback) {
     var user = getCurrentUser();
     if (!user.username) {
       sessionStorage.setItem(USER_KEY, JSON.stringify({
-        username: "guest", role: "guest", permissions: ["dashboard", "mods"]
+        username: "guest", role: "guest", permissions: ["dashboard", "mods"], system: false
       }));
     }
     callback(role);
@@ -131,7 +131,7 @@ function requireAuth(callback) {
   api("/auth/me").then(function (d) {
     if (d.ok) {
       sessionStorage.setItem(USER_KEY, JSON.stringify({
-        username: d.username, role: d.role, permissions: d.permissions || []
+        username: d.username, role: d.role, permissions: d.permissions || [], system: d.system || false
       }));
       // 检查是否需要跳转到有权限的页面
       if (!_redirectIfNoPermission(d.permissions || [])) {
