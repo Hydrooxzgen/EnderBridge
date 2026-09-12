@@ -192,5 +192,9 @@
         "stream": false
       }
     }
+  },
+  "playerListPolling": {
+    "enabled": false,
+    "intervalSeconds": 30
   }
 }

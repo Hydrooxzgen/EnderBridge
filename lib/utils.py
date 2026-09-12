@@ -40,6 +40,9 @@ class ClientConnection:
         self.utils = None
         # 发送锁:websockets 库不允许并发 send,而 JS 的 ws 会自动排队
         self._send_lock = asyncio.Lock()
+        # 连接建立时间(供 WebUI 仪表盘展示在线玩家信息)
+        import time as _time
+        self.connect_time: float = _time.time()
 
     @property
     def ready_state(self):

@@ -13,7 +13,6 @@ ROOT = Path(__file__).parent.parent
 CONFIG_JSON = ROOT / "config.json"
 CONFIG_PY = ROOT / "config.py"
 CONFIG_EXAMPLE_JSON = ROOT / "config.example.json"
-CONFIG_EXAMPLE_PY = ROOT / "config.example.py"
 
 # 版本常量（供外部引用）
 CURRENT_VERSION = "b0.3.6"
@@ -107,10 +106,8 @@ def load_config() -> dict:
             print(f"[Config] ⚠️ 检测到旧版本配置 (v{version} <= {LEGACY_VERSION_THRESHOLD})")
             print("[Config] 建议迁移到 config.json 格式，详见 config.example.json")
     else:
-        # 都没有，使用示例配置
-        json_example = _load_json_config(CONFIG_EXAMPLE_JSON)
-        py_example = _load_py_config(CONFIG_EXAMPLE_PY)
-        config = _merge_configs(json_example, py_example)
+        # 都没有，使用 JSON 示例配置
+        config = _load_json_config(CONFIG_EXAMPLE_JSON)
         config["_config_format"] = "example"
 
     # 确保版本信息

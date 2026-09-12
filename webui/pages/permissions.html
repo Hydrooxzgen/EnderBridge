@@ -31,6 +31,52 @@
 </aside>
 <div class="main">
   <h2>👥 权限管理</h2>
+
+  <!-- ===== 用户管理 ===== -->
+  <div class="card card-gap">
+    <div class="row" style="justify-content:space-between;align-items:center;">
+      <div style="font-weight:600">用户</div>
+      <button class="btn btn-primary btn-sm" id="userAddBtn">添加用户</button>
+    </div>
+    <div class="muted" style="margin:6px 0 12px">管理 WebUI 登录账号,每个用户可分配不同角色。</div>
+    <table class="table" id="userTable">
+      <thead>
+        <tr><th>用户名</th><th>角色</th><th>状态</th><th>操作</th></tr>
+      </thead>
+      <tbody id="userTableBody">
+        <tr><td colspan="4" class="muted" style="text-align:center;padding:20px">加载中...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ===== 角色权限 ===== -->
+  <div class="card card-gap">
+    <div class="row" style="justify-content:space-between;align-items:center;">
+      <div style="font-weight:600">🔐 角色权限配置</div>
+      <div class="row gap-10">
+        <button class="btn btn-sm" id="roleAddBtn">➕ 新建角色</button>
+        <button class="btn btn-primary btn-sm" id="roleSaveBtn">💾 保存角色配置</button>
+      </div>
+    </div>
+    <div class="muted" style="margin:6px 0 12px">定义每个角色可以访问的页面和操作权限。修改后需保存才能生效。</div>
+    <div id="roleList"></div>
+    <!-- 新建角色弹窗 -->
+    <div class="modal-overlay" id="roleModal" style="display:none;">
+      <div class="modal-card">
+        <h3 id="roleModalTitle">新建角色</h3>
+        <label>角色标识(英文)</label>
+        <input id="roleNameInput" class="input" placeholder="如: editor" autocomplete="off">
+        <label>显示名称</label>
+        <input id="roleLabelInput" class="input" placeholder="如: 编辑员" autocomplete="off">
+        <div class="row gap-10" style="margin-top:16px;justify-content:flex-end;">
+          <button class="btn" id="roleModalCancel">取消</button>
+          <button class="btn btn-primary" id="roleModalConfirm">创建</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Minecraft 玩家权限(保留原有) ===== -->
   <div class="card card-gap">
     <div class="row" style="justify-content:space-between;align-items:center;">
       <div style="font-weight:600">⚙️ 玩家权限列表</div>
@@ -72,6 +118,52 @@
         <span class="muted" id="count-blocker"></span>
       </div>
       <div class="chips" id="chips-blocker"></div>
+    </div>
+  </div>
+
+  <!-- ===== 添加/编辑用户弹窗 ===== -->
+  <div class="modal-overlay" id="userModal" style="display:none;">
+    <div class="modal-card" style="max-width:520px;">
+      <h3 id="userModalTitle">添加用户</h3>
+      <label>用户名</label>
+      <input id="modalUsername" class="input" placeholder="用户名" autocomplete="off">
+      <label>密码</label>
+      <input id="modalPassword" class="input" type="password" placeholder="密码" autocomplete="new-password">
+      <label>角色</label>
+      <select id="modalRole" class="input"></select>
+      <!-- 系统保留账户(仅 --system 模式) -->
+      <div id="systemReservedRow" style="margin-top:10px;display:none;">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.88em;">
+          <input type="checkbox" id="modalSystemReserved">
+          <span>🛡️ 系统保留账户</span>
+        </label>
+        <div class="muted" style="margin:2px 0 0 24px;font-size:0.8em;">标记后非 admin 用户无法编辑此账户</div>
+      </div>
+      <!-- 用户权限覆盖 -->
+      <div style="margin-top:12px;">
+        <label style="font-weight:600;">用户权限覆盖</label>
+        <div class="muted" style="margin:4px 0 8px;font-size:0.85em;">单独覆盖此用户的权限。开启"不继承"可完全自定义。拒绝优先于允许。<span style="color:var(--err)">❌ 拒绝</span> &gt; <span style="color:var(--ok)">✅ 允许</span> &gt; 继承角色。可用上方按钮批量设置。</div>
+        <div id="userPermOverrides"></div>
+      </div>
+      <div class="login-msg" id="userModalMsg"></div>
+      <div class="row gap-10" style="margin-top:16px;justify-content:flex-end;">
+        <button class="btn" id="modalCancel">取消</button>
+        <button class="btn btn-primary" id="modalConfirm">确认</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Admin 密码验证弹窗 ===== -->
+  <div class="modal-overlay" id="adminPwModal" style="display:none;">
+    <div class="modal-card" style="max-width:400px;">
+      <h3>🔐 验证 admin 密码</h3>
+      <p class="muted" style="margin-bottom:12px;">非 admin 账户编辑其他用户时需要验证 admin 密码。</p>
+      <input id="adminPwInput" class="input" type="password" placeholder="admin 密码" autocomplete="current-password">
+      <div class="login-msg" id="adminPwMsg"></div>
+      <div class="row gap-10" style="margin-top:16px;justify-content:flex-end;">
+        <button class="btn" id="adminPwCancel">取消</button>
+        <button class="btn btn-primary" id="adminPwConfirm">验证</button>
+      </div>
     </div>
   </div>
 </div>

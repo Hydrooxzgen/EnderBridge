@@ -13,7 +13,7 @@
 API 一览:
 - GET  /                         返回前端页面
 - GET  /static/*                 静态资源(css/js/图片/字体,自动识别 MIME)
-- POST /api/auth                 登录校验(令牌正确→admin,错误→密码错误提示)
+- POST /api/auth                 登录校验(用户名+密码,正确→返回会话token)
 - GET  /api/status               仪表盘状态(名称/端口/在线客户端/mod 等,无需鉴权)
 - GET  /api/release-notes        当前版本 Release Notes(GitHub API,无需鉴权)
 - GET  /api/config               读取可管理配置(仅 admin)
@@ -24,12 +24,10 @@ API 一览:
 - POST /api/mods/reload-all      重载所有服务端 Mod(仅 admin)
 - POST /api/restart              一键重启服务器进程(优雅关闭后自动以相同参数重启,仅 admin)
 
-鉴权:config.webuiConfig.token 非空时,登录页询问令牌——
-- 令牌正确 → admin(全部权限)
-- 令牌错误 → 提示"密码错误",停留在登录页(不会自动进入访客模式)
-- 点击「以访客身份浏览」按钮 → guest(仅基础只读功能:仪表盘 / Mod 列表)
-- 请求头 X-Auth-Token 携带正确令牌 → admin
-- 请求头 X-Auth-Guest: 1 → guest
+鉴权:用户名+bcrypt密码登录
+- 登录页(/login)输入用户名+密码,正确→返回会话token
+- 请求头 X-Auth-Token 携带有效会话token → 对应用户角色
+- 请求头 X-Auth-Guest: 1 → guest(仅基础只读功能:仪表盘 / Mod 列表)
 - 无有效身份 → 401;访客访问管理操作 → 403
 """
 import json
@@ -43,6 +41,8 @@ import time
 import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+from lib.users import user_manager
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WEBUI_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -110,6 +110,7 @@ def set_event_loop(loop):
 _github_repo = ""    # e.g. "UserXYY123/EnderBridge"
 _app_version = APP_VERSION    # 初始为兜底值,set_app_info 后为 main.py 的真实 VERSION
 _description = None  # 非 None 时直接用作 Release Notes,跳过 GitHub API
+_system_mode = False  # --system 启动时启用系统保留账户功能
 
 
 def set_app_info(github_repo: str, version: str, description=None) -> None:
@@ -121,6 +122,12 @@ def set_app_info(github_repo: str, version: str, description=None) -> None:
     _github_repo = github_repo
     _app_version = version
     _description = description
+
+
+def set_system_mode(enabled: bool) -> None:
+    """启用/禁用系统保留账户模式(--system 启动参数)"""
+    global _system_mode
+    _system_mode = enabled
 
 
 def _github_headers() -> dict:
@@ -384,6 +391,7 @@ def load_config() -> dict:
         },
         "githubToken": config.get("githubToken", ""),
         "commandAliases": command_aliases,
+        "playerListPolling": config.get("playerListPolling", {"enabled": False, "intervalSeconds": 30}),
     }
 
 
@@ -531,6 +539,13 @@ def save_config(new: dict) -> None:
     # 命令别名
     config["commandAliases"] = new.get("commandAliases") or {}
 
+    # 玩家列表轮询
+    plp = new.get("playerListPolling") or {}
+    config["playerListPolling"] = {
+        "enabled": bool(plp.get("enabled", False)),
+        "intervalSeconds": int(plp.get("intervalSeconds", 30)),
+    }
+
     # 版本信息
     config["_version"] = "b0.3.6"
 
@@ -594,31 +609,84 @@ def _perm_groups() -> list:
 
 # ===== 鉴权 =====
 
-def _webui_token() -> str:
-    ns = _load_config_module()
-    return str(ns.get("webuiConfig", {}).get("token", "") or "").strip()
+def _extract_session_token(handler) -> str:
+    """从请求头或查询参数中提取会话 token"""
+    # 优先从请求头获取
+    token = handler.headers.get("X-Auth-Token", "")
+    if token:
+        return token
+    # 查询参数兼容(EventSource 等无法设置自定义头的场景)
+    parsed = urllib.parse.urlparse(handler.path)
+    qs = urllib.parse.parse_qs(parsed.query)
+    return qs.get("token", [None])[0] or ""
+
+
+def _auth_user(handler) -> dict:
+    """返回请求身份信息: {username, role, permissions, is_guest}
+
+    通过会话 token 查找用户。无 token 时回退到 guest 访客。
+    """
+    token = _extract_session_token(handler)
+
+    # 1) 通过 session token 查找
+    if token:
+        session = user_manager.validate_session(token)
+        if session:
+            return {
+                "username": session["username"],
+                "role": session["role"],
+                "permissions": session["permissions"],
+                "system": session.get("system", False),
+                "is_guest": False,
+            }
+
+    # 2) Guest header / 查询参数兼容(EventSource 等无法设置自定义头的场景)
+    is_guest = False
+    if handler.headers.get("X-Auth-Guest", "") == "1":
+        is_guest = True
+    else:
+        parsed_qs = urllib.parse.parse_qs(urllib.parse.urlparse(handler.path).query)
+        if parsed_qs.get("guest", [None])[0] is not None:
+            is_guest = True
+
+    if is_guest:
+        guest_user = user_manager.get_user("guest")
+        if guest_user:
+            role = guest_user.get("role", "viewer")
+            permissions = user_manager.get_effective_permissions("guest")
+            return {"username": "guest", "role": role, "permissions": permissions, "system": False, "is_guest": True}
+        return {"username": "guest", "role": "viewer", "permissions": ["dashboard", "mods"], "system": False, "is_guest": True}
+
+    # 3) 未授权
+    return {"username": "", "role": "", "permissions": [], "system": False, "is_guest": False}
 
 
 def _auth_role(handler) -> str:
-    """返回请求身份: "admin"(令牌正确) / "guest"(访客) / ""(未授权)
+    """返回请求角色字符串(兼容旧代码);新代码请用 _auth_user"""
+    user = _auth_user(handler)
+    return user["role"]
 
-    token 未设置时直接开放全部权限(本机使用)。
-    """
-    token = _webui_token()
-    if not token:
-        return "admin"
-    if handler.headers.get("X-Auth-Guest", "") == "1":
-        return "guest"
-    provided = handler.headers.get("X-Auth-Token", "")
-    return "admin" if provided == token else ""
+
+def _require_permission(permission: str):
+    """返回一个检查权限的装饰器函数:调用时传入 handler,有权限返回 True,否则自动 401/403 并返回 False"""
+    def checker(handler) -> bool:
+        user = _auth_user(handler)
+        if permission in user.get("permissions", []):
+            return True
+        if not user.get("role"):
+            handler._respond_denied()
+        else:
+            handler._respond({"ok": False, "message": f"无权限:需要 {permission} 权限"}, status=403)
+        return False
+    return checker
 
 
 def _require_admin(handler) -> bool:
-    """管理操作:仅 admin 可访问;访客返回 403,未授权返回 401"""
-    role = _auth_role(handler)
-    if role == "admin":
+    """管理操作:仅 admin 角色可访问;访客返回 403,未授权返回 401(兼容旧代码)"""
+    user = _auth_user(handler)
+    if user["role"] == "admin":
         return True
-    if role == "guest":
+    if user["is_guest"]:
         handler._respond({"ok": False, "message": "访客模式:无管理权限"}, status=403)
         return False
     handler._respond_denied()
@@ -626,8 +694,9 @@ def _require_admin(handler) -> bool:
 
 
 def _require_any(handler) -> bool:
-    """登录即可访问(admin 或 guest);未授权返回 401"""
-    if _auth_role(handler) in ("admin", "guest"):
+    """登录即可访问(任何角色);未授权返回 401(兼容旧代码)"""
+    user = _auth_user(handler)
+    if user.get("role"):
         return True
     handler._respond_denied()
     return False
@@ -639,6 +708,14 @@ class WebUIHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         # 静默日志,避免刷屏
         pass
+
+    def log_error(self, fmt, *args):
+        """静默连接断开类错误,避免 Ctrl+C / SSE 断开时刷 traceback"""
+        msg = str(fmt) % args if args else str(fmt)
+        if any(s in msg for s in ("ConnectionAbortedError", "BrokenPipeError",
+                                   "ConnectionResetError", "10053", "10054")):
+            return
+        super().log_error(fmt, *args)
 
     def _respond(self, obj, status=200) -> None:
         data = json.dumps(obj, ensure_ascii=False).encode("utf-8")
@@ -726,10 +803,25 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if path == "/api/audit-logs":
             self._api_audit_logs()
             return
-        self.send_response(404)
-        self.send_header("Content-Type", "text/plain; charset=utf-8")
-        self.end_headers()
-        self.wfile.write(b"Not Found")
+        if path == "/api/logs/recent":
+            self._api_logs_recent()
+            return
+        if path == "/api/logs/stream":
+            self._api_logs_stream()
+            return
+        if path == "/api/auth/me":
+            self._api_auth_me()
+            return
+        if path == "/api/users":
+            self._api_users_list()
+            return
+        if path == "/api/roles":
+            self._api_roles_list()
+            return
+        if path.startswith("/api/"):
+            self._respond({"ok": False, "message": "Not Found"}, status=404)
+            return
+        self._serve_page("404.html")
 
     def do_PUT(self):
         parsed = urllib.parse.urlparse(self.path)
@@ -739,18 +831,43 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/permissions":
             self._api_save_permissions()
             return
-        self.send_response(404)
-        self.send_header("Content-Type", "text/plain; charset=utf-8")
-        self.end_headers()
-        self.wfile.write(b"Not Found")
+        if parsed.path == "/api/users":
+            self._api_users_update()
+            return
+        if parsed.path == "/api/roles":
+            self._api_roles_update()
+            return
+        self._respond({"ok": False, "message": "Not Found"}, status=404)
+
+    def do_DELETE(self):
+        parsed = urllib.parse.urlparse(self.path)
+        if parsed.path == "/api/users":
+            self._api_users_delete()
+            return
+        if parsed.path == "/api/roles":
+            self._api_roles_delete()
+            return
+        self._respond({"ok": False, "message": "Not Found"}, status=404)
 
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path == "/api/auth":
             self._api_auth()
             return
+        if parsed.path == "/api/auth/logout":
+            self._api_auth_logout()
+            return
+        if parsed.path == "/api/users":
+            self._api_users_create()
+            return
+        if parsed.path == "/api/roles":
+            self._api_roles_create()
+            return
         if parsed.path == "/api/mods/reload-all":
             self._api_reload_all()
+            return
+        if parsed.path == "/api/mods/reload":
+            self._api_reload_mod()
             return
         if parsed.path == "/api/restart":
             self._api_restart()
@@ -776,10 +893,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/bot/xbox-account/remove":
             self._api_bot_xbox_account_remove()
             return
-        self.send_response(404)
-        self.send_header("Content-Type", "text/plain; charset=utf-8")
-        self.end_headers()
-        self.wfile.write(b"Not Found")
+        self._respond({"ok": False, "message": "Not Found"}, status=404)
 
     # ---- 前端页面 ----
     def _serve_index(self) -> None:
@@ -854,8 +968,8 @@ class WebUIHandler(BaseHTTPRequestHandler):
 
     # ---- API ----
     def _api_console(self) -> None:
-        """向 MCBE 客户端发送命令并返回结果(仅 admin)"""
-        if not _require_admin(self):
+        """向 MCBE 客户端发送命令并返回结果(需要 console 权限)"""
+        if not _require_permission("console")(self):
             return
         body = self._read_body()
         command = body.get("command", "").strip()
@@ -889,7 +1003,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
 
     def _api_bot_xbox_accounts(self) -> None:
         """获取已保存的 Xbox Live 账号列表"""
-        if not _require_admin(self):
+        if not _require_permission("config")(self):
             return
         ns = _load_config_module()
         bot_cfg = ns.get("botConfig") or {}
@@ -899,7 +1013,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
 
     def _api_bot_xbox_login(self) -> None:
         """启动 Xbox Live 登录流程 — Gamertag 从认证响应中自动获取,无需传入用户名"""
-        if not _require_admin(self):
+        if not _require_permission("config")(self):
             return
         if _event_loop is None or _event_loop.is_closed():
             self._respond({"ok": False, "message": "事件循环未就绪,请稍后重试"})
@@ -920,7 +1034,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
 
     def _api_bot_xbox_login_status(self) -> None:
         """查询 Xbox Live 登录状态"""
-        if not _require_admin(self):
+        if not _require_permission("config")(self):
             return
         try:
             from mod.bot import XboxLoginManager
@@ -931,7 +1045,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
 
     def _api_bot_xbox_login_stop(self) -> None:
         """取消 Xbox Live 登录流程"""
-        if not _require_admin(self):
+        if not _require_permission("config")(self):
             return
         if _event_loop is None or _event_loop.is_closed():
             self._respond({"ok": True})
@@ -950,7 +1064,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
 
     def _api_bot_xbox_account_switch(self) -> None:
         """切换活跃的 Xbox Live 账号"""
-        if not _require_admin(self):
+        if not _require_permission("config")(self):
             return
         body = self._read_body()
         username = (body.get("username") or "").strip()
@@ -987,7 +1101,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
 
     def _api_bot_xbox_account_remove(self) -> None:
         """移除 Xbox Live 账号"""
-        if not _require_admin(self):
+        if not _require_permission("config")(self):
             return
         body = self._read_body()
         username = (body.get("username") or "").strip()
@@ -1043,17 +1157,194 @@ class WebUIHandler(BaseHTTPRequestHandler):
             pass
 
     def _api_auth(self) -> None:
-        """登录校验:令牌正确返回 admin;错误返回失败(不自动进入访客模式)"""
+        """登录校验:用户名+密码"""
         body = self._read_body()
-        token = _webui_token()
-        if not token:
-            self._respond({"ok": True, "role": "admin"})
+        username = str(body.get("username", "") or "").strip()
+        password = str(body.get("password", "") or "")
+
+        if not username:
+            self._respond({"ok": False, "message": "请输入用户名"})
             return
-        provided = str(body.get("token", "") or "")
-        if provided == token:
-            self._respond({"ok": True, "role": "admin"})
+
+        result = user_manager.authenticate(username, password)
+        if result["ok"]:
+            self._respond({
+                "ok": True,
+                "token": result["token"],
+                "role": result["role"],
+                "username": result["username"],
+                "permissions": result["permissions"],
+                "system": result.get("system", False),
+            })
         else:
-            self._respond({"ok": False, "message": "密码错误,请重新输入"})
+            self._respond({"ok": False, "message": result["message"]})
+
+    # ---- 用户管理 API ----
+
+    def _api_users_list(self) -> None:
+        """获取用户列表(仅 admin)"""
+        if not _require_permission("permissions")(self):
+            return
+        self._respond({"ok": True, "users": user_manager.list_users()})
+
+    def _api_users_create(self) -> None:
+        """创建用户(需 permissions 权限;非系统管理员需验证 admin 密码)"""
+        if not _require_permission("permissions")(self):
+            return
+        current = _auth_user(self)
+        # 非系统管理员创建用户需验证 admin 密码
+        if not (current.get("role") == "admin" and current.get("system")):
+            body_tmp = self._read_body()
+            admin_pw = body_tmp.get("admin_password", "")
+            if not admin_pw or not user_manager.verify_admin_password(admin_pw):
+                self._respond({"ok": False, "message": "admin 密码验证失败"})
+                return
+            body = body_tmp
+        else:
+            body = self._read_body()
+        result = user_manager.add_user(
+            body.get("username", "").strip(),
+            body.get("password", ""),
+            body.get("role", "viewer"),
+            permissions=body.get("permissions") or {},
+            no_role_inherit=body.get("no_role_inherit", False),
+        )
+        self._respond(result)
+
+    def _api_users_update(self) -> None:
+        """更新用户(仅 admin;非 admin 编辑他人需验证 admin 密码)"""
+        if not _require_permission("permissions")(self):
+            return
+        body = self._read_body()
+        username = body.get("username", "").strip()
+        if not username:
+            self._respond({"ok": False, "message": "缺少用户名"})
+            return
+        current = _auth_user(self)
+        is_system_admin = current.get("role") == "admin" and current.get("system")
+        is_self = current.get("username") == username
+        # 非系统管理员编辑他人:需验证 admin 密码
+        if not is_system_admin and not is_self:
+            admin_pw = body.get("admin_password", "")
+            if not admin_pw or not user_manager.verify_admin_password(admin_pw):
+                self._respond({"ok": False, "message": "admin 密码验证失败"})
+                return
+        # 系统保留账户:仅内置系统管理员可编辑(自己除外)
+        if not is_system_admin and not is_self and target_user and target_user.get("system_reserved"):
+            self._respond({"ok": False, "message": "该账户为系统保留账户,仅系统管理员可编辑"})
+            return
+        # 不允许通过 API 修改自己的角色(防止误操作锁死)
+        if is_self and body.get("role") and body["role"] != current.get("role"):
+            self._respond({"ok": False, "message": "不能修改自己的角色"})
+            return
+        # 非系统管理员不允许修改自己的权限覆盖(防止提权)
+        if is_self and not is_system_admin:
+            body.pop("permissions", None)
+            body.pop("no_role_inherit", None)
+        # guest 用户不允许设置密码
+        if target_user and target_user.get("username") == "guest" and body.get("password"):
+            self._respond({"ok": False, "message": "guest 用户不允许设置密码"})
+            return
+        result = user_manager.update_user(username, **{
+            k: v for k, v in body.items()
+            if k in ("password", "role", "enabled", "permissions", "no_role_inherit", "system_reserved") and (k != "password" or v)
+        })
+        self._respond(result)
+
+    def _api_users_delete(self) -> None:
+        """删除用户(需 permissions 权限,非系统管理员需验证 admin 密码)"""
+        if not _require_permission("permissions")(self):
+            return
+        body = self._read_body()
+        username = body.get("username", "").strip()
+        if not username:
+            self._respond({"ok": False, "message": "缺少用户名"})
+            return
+        # 不允许删除自己
+        current = _auth_user(self)
+        if current.get("username") == username:
+            self._respond({"ok": False, "message": "不能删除自己"})
+            return
+        # 非系统管理员操作需验证 admin 密码
+        if not (current.get("role") == "admin" and current.get("system")):
+            admin_pw = body.get("admin_password", "")
+            if not admin_pw or not user_manager.verify_admin_password(admin_pw):
+                self._respond({"ok": False, "message": "admin 密码验证失败"})
+                return
+        result = user_manager.delete_user(username)
+        self._respond(result)
+
+    def _api_roles_list(self) -> None:
+        """获取角色列表(仅 admin)"""
+        if not _require_permission("permissions")(self):
+            return
+        self._respond({"ok": True, "roles": user_manager.get_roles()})
+
+    def _api_roles_update(self) -> None:
+        """更新角色权限(仅 admin)"""
+        if not _require_permission("permissions")(self):
+            return
+        body = self._read_body()
+        role_name = body.get("role", "").strip()
+        if not role_name:
+            self._respond({"ok": False, "message": "缺少角色名"})
+            return
+        result = user_manager.update_role(
+            role_name,
+            label=body.get("label"),
+            permissions=body.get("permissions"),
+        )
+        self._respond(result)
+
+    def _api_roles_create(self) -> None:
+        """新增自定义角色(仅 admin)"""
+        if not _require_permission("permissions")(self):
+            return
+        body = self._read_body()
+        name = body.get("name", "").strip()
+        label = body.get("label", "").strip()
+        permissions = body.get("permissions", [])
+        if not name:
+            self._respond({"ok": False, "message": "缺少角色名"})
+            return
+        result = user_manager.add_role(name, label=label or None, permissions=permissions)
+        self._respond(result)
+
+    def _api_roles_delete(self) -> None:
+        """删除自定义角色(仅 admin)"""
+        if not _require_permission("permissions")(self):
+            return
+        body = self._read_body()
+        name = body.get("name", "").strip()
+        if not name:
+            self._respond({"ok": False, "message": "缺少角色名"})
+            return
+        result = user_manager.delete_role(name)
+        self._respond(result)
+
+    # ---- 当前用户信息 ----
+
+    def _api_auth_me(self) -> None:
+        """返回当前用户信息(含角色和权限)"""
+        user = _auth_user(self)
+        if not user.get("role"):
+            self._respond({"ok": False, "message": "未登录"}, status=401)
+            return
+        self._respond({
+            "ok": True,
+            "username": user["username"],
+            "role": user["role"],
+            "permissions": user["permissions"],
+            "system": user.get("system", False),
+            "systemMode": _system_mode,
+        })
+
+    def _api_auth_logout(self) -> None:
+        """注销当前会话"""
+        token = _extract_session_token(self)
+        if token:
+            user_manager.logout(token)
+        self._respond({"ok": True, "message": "已注销"})
 
     def _api_status(self) -> None:
         ns = _load_config_module()
@@ -1070,10 +1361,11 @@ class WebUIHandler(BaseHTTPRequestHandler):
             "name": cfg.get("name", "EnderBridge"),
             "port": cfg.get("port", 8800),
             "webPort": webui.get("port", 18888),
-            "webTokenSet": bool(str(webui.get("token", "") or "").strip()),
             "clients": extra.get("clients", 0),
             "uptime": extra.get("uptime", 0),
+            "players": extra.get("players", []),
             "version": _app_version or "EnderBridge",
+            "systemMode": _system_mode,
         })
 
     def _api_release_notes(self) -> None:
@@ -1221,9 +1513,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
             self._respond({"ok": False, "message": f"获取 Release 列表失败: {e}"})
 
     def _api_update_install(self) -> None:
-        """从本地 zip 或 GitHub Release 执行更新(仅 admin)"""
+        """从本地 zip 或 GitHub Release 执行更新(需要 update 权限)"""
         import tempfile
-        if not _require_admin(self):
+        if not _require_permission("update")(self):
             return
         body = self._read_body()
         github_tag = body.get("github_tag", "").strip()
@@ -1299,9 +1591,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
             pass  # 响应已发送,重启失败时用户可手动重启
 
     def _api_update_upload(self) -> None:
-        """接收前端上传的压缩包文件,保存到临时目录(仅 admin)"""
+        """接收前端上传的压缩包文件,保存到临时目录(需要 update 权限)"""
         import tempfile
-        if not _require_admin(self):
+        if not _require_permission("update")(self):
             return
         try:
             content_type = self.headers.get("Content-Type", "")
@@ -1352,12 +1644,12 @@ class WebUIHandler(BaseHTTPRequestHandler):
             self._respond({"ok": False, "message": f"上传处理失败: {e}"})
 
     def _api_get_config(self) -> None:
-        if not _require_admin(self):
+        if not _require_permission("config")(self):
             return
         self._respond({"ok": True, "config": load_config()})
 
     def _api_save_config(self) -> None:
-        if not _require_admin(self):
+        if not _require_permission("config")(self):
             return
         body = self._read_body()
         if not body or "config" not in body:
@@ -1371,12 +1663,12 @@ class WebUIHandler(BaseHTTPRequestHandler):
         self._respond({"ok": True, "message": "配置已保存(部分设置需重启服务器生效)"})
 
     def _api_get_permissions(self) -> None:
-        if not _require_admin(self):
+        if not _require_permission("permissions")(self):
             return
         self._respond({"ok": True, "permissions": load_permissions()})
 
     def _api_save_permissions(self) -> None:
-        if not _require_admin(self):
+        if not _require_permission("permissions")(self):
             return
         body = self._read_body()
         perm = body.get("permissions")
@@ -1397,7 +1689,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
         self._respond({"ok": True, "message": "权限已保存"})
 
     def _api_get_mods(self) -> None:
-        if not _require_any(self):
+        if not _require_permission("mods")(self):
             return
         ns = _load_config_module()
         mods = ns.get("mods", {}) or {"client": {}, "server": {}}
@@ -1412,7 +1704,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
         self._respond({"ok": True, "mods": result})
 
     def _api_reload_all(self) -> None:
-        if not _require_admin(self):
+        if not _require_permission("mods")(self):
             return
         try:
             import asyncio
@@ -1422,9 +1714,52 @@ class WebUIHandler(BaseHTTPRequestHandler):
         except Exception as e:
             self._respond({"ok": False, "message": f"重载失败: {e}"})
 
+    def _api_reload_mod(self) -> None:
+        """重载单个 Mod(需要 mods 权限)"""
+        if not _require_permission("mods")(self):
+            return
+        body = self._read_body()
+        name = (body.get("name") or "").strip()
+        side = (body.get("side") or "").strip()
+        if not name:
+            self._respond({"ok": False, "message": "缺少 name 参数"})
+            return
+        if side not in ("client", "server"):
+            self._respond({"ok": False, "message": "side 必须为 client 或 server"})
+            return
+        try:
+            import asyncio
+            if side == "server":
+                from lib.mods import ServerModManager
+                result = asyncio.run(ServerModManager.reload(name))
+            else:
+                from lib.current import Current
+                from lib.mods import ClientModManager
+                success_all = []
+                failed_all = []
+                for client, manager in list(Current.client_mods.items()):
+                    if not manager or not hasattr(manager, "reload"):
+                        continue
+                    r = asyncio.run(manager.reload(name))
+                    cid = getattr(client, "id", None) or "?"
+                    if r.get("success"):
+                        success_all.append(f"{cid}:{name}")
+                    else:
+                        failed_all.append(f"{cid}:{name}")
+                if not Current.client_mods:
+                    result = {"success": False, "message": f"无客户端连接,无法重载客户端 Mod"}
+                elif success_all:
+                    result = {"success": True, "message": f"Client Mod {name} 已重载 ({len(success_all)} 个连接)"}
+                else:
+                    result = {"success": False, "message": failed_all[0] if failed_all else f"Client Mod {name} 重载失败"}
+            ok = result.get("success", False)
+            self._respond({"ok": ok, "message": result.get("message", "重载完成")})
+        except Exception as e:
+            self._respond({"ok": False, "message": f"重载失败: {e}"})
+
     def _api_restart(self) -> None:
-        """一键重启:触发主程序后台执行优雅关闭并重启进程(仅 admin)"""
-        if not _require_admin(self):
+        """一键重启:触发主程序后台执行优雅关闭并重启进程(需要 restart 权限)"""
+        if not _require_permission("restart")(self):
             return
         if _restart_handler is None:
             self._respond({"ok": False, "message": "重启处理器未注册(请通过 main.py 启动服务器)"})
@@ -1440,8 +1775,8 @@ class WebUIHandler(BaseHTTPRequestHandler):
     # ---- 审计日志 API ----
 
     def _api_audit_logs(self) -> None:
-        """读取审计日志(admin/guest 均可)"""
-        if not _require_any(self):
+        """读取审计日志(需要 audit 权限)"""
+        if not _require_permission("audit")(self):
             return
         parsed = urllib.parse.urlparse(self.path)
         qs = urllib.parse.parse_qs(parsed.query)
@@ -1458,6 +1793,82 @@ class WebUIHandler(BaseHTTPRequestHandler):
         from lib.logger import audit_log
         result = audit_log.query(sender=sender, type_=type_, limit=limit, offset=offset)
         self._respond({"ok": True, **result})
+
+    # ---- 实时日志流(SSE) ----
+
+    def _api_logs_recent(self) -> None:
+        """获取最近 N 条日志(需要 console 权限,用于 SSE 初始加载)"""
+        if not _require_permission("console")(self):
+            return
+        parsed = urllib.parse.urlparse(self.path)
+        qs = urllib.parse.parse_qs(parsed.query)
+        try:
+            limit = min(int(qs.get("limit", ["200"])[0]), 500)
+        except (ValueError, IndexError):
+            limit = 200
+        from lib.logger import _live_log
+        logs = _live_log.get_recent(limit)
+        self._respond({"ok": True, "logs": logs})
+
+    def _api_logs_stream(self) -> None:
+        """SSE 实时日志流(需要 console 权限)
+
+        首次连接时发送最近 50 条日志作为历史,
+        之后持续推送新日志直到客户端断开。
+        """
+        if not _require_permission("console")(self):
+            return
+        from lib.logger import _live_log
+        try:
+            # 发送 SSE 响应头
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "keep-alive")
+            self.send_header("X-Accel-Buffering", "no")
+            self.end_headers()
+
+            # 发送最近 50 条历史日志
+            recent = _live_log.get_recent(50)
+            for record in recent:
+                data = json.dumps(record, ensure_ascii=False)
+                self.wfile.write(f"data: {data}\n\n".encode("utf-8"))
+            self.wfile.flush()
+
+            # 订阅新日志
+            _queue = []
+            _queue_lock = threading.Lock()
+            _event = threading.Event()
+
+            def _on_log(record):
+                with _queue_lock:
+                    _queue.append(record)
+                _event.set()
+
+            _live_log.subscribe(_on_log)
+
+            try:
+                while True:
+                    # 心跳:每 15 秒发送一次,检测客户端是否断开
+                    _event.wait(timeout=15)
+                    _event.clear()
+
+                    # 取出并发送所有排队的日志
+                    with _queue_lock:
+                        batch = list(_queue)
+                        _queue.clear()
+                    for record in batch:
+                        data = json.dumps(record, ensure_ascii=False)
+                        self.wfile.write(f"data: {data}\n\n".encode("utf-8"))
+                    # 空闲时发心跳注释保持连接
+                    self.wfile.write(b": heartbeat\n\n")
+                    self.wfile.flush()
+            except (ConnectionAbortedError, BrokenPipeError, OSError):
+                pass  # 客户端已断开
+            finally:
+                _live_log.unsubscribe(_on_log)
+        except (ConnectionAbortedError, BrokenPipeError, OSError):
+            pass
 
 
 def _check_importable(mod_path: str) -> bool:
@@ -1489,6 +1900,14 @@ class _FastHTTPServer(ThreadingHTTPServer):
         host, port = self.server_address[:2]
         self.server_name = socket.gethostname()
         self.server_port = port
+
+    def handle_error(self, request, client_address):
+        """静默连接断开类错误,避免 Ctrl+C / SSE 断开时打印 traceback"""
+        import traceback as _tb
+        _, exc, _ = sys.exc_info()
+        if exc in (ConnectionAbortedError, BrokenPipeError, ConnectionResetError, OSError):
+            return
+        super().handle_error(request, client_address)
 
 
 class WebUIServer:

@@ -25,3 +25,4 @@ mod/bot/.minecraft/
 mod/bot/TheCandyBot/
 logs/
 CHANGELOG.md
+users.json

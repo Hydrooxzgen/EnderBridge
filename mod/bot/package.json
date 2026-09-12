@@ -12,6 +12,8 @@
     "bedrock-protocol": "^3.58.3"
   },
   "overrides": {
-    "axios": "^1.8.2"
+    "axios": "^1.8.2",
+    "tar": "^7.4.3",
+    "uuid": "^11.1.0"
   }
 }

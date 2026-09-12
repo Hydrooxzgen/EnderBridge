@@ -102,6 +102,8 @@ class Logger:
                 return
             # 标准格式: [北京时间戳] [类型] 名称 - 消息
             log_message = f"[{beijing_time()}] [{type_}] {self.name} - {message}"
+            # 推送到实时日志缓冲(供 WebUI SSE 流)
+            _live_log.append(type_, self.name, message)
         else:
             log_message = str(message)
 
@@ -187,3 +189,67 @@ class _AuditLog:
 
 
 audit_log = _AuditLog()
+
+
+# ===== 实时日志(环形缓冲 + 订阅者,供 WebUI SSE 流) =====
+
+class _LiveLog:
+    """内存实时日志:环形缓冲最近 N 条日志记录,支持订阅者实时推送,线程安全。
+
+    每条记录格式:
+      {"ts": "2026-09-04T12:00:00.000+08:00",
+       "level": "info"|"warning"|"error"|"debug",
+       "source": "模块名(如 app/read/MainClient)",
+       "message": "日志正文"}
+    """
+
+    def __init__(self, max_size: int = 500):
+        self._buffer: deque = deque(maxlen=max_size)
+        self._lock = threading.Lock()
+        self._subscribers: list = []
+        self._sub_lock = threading.Lock()
+
+    def append(self, level: str, source: str, message: str) -> None:
+        """追加一条日志记录并通知所有订阅者"""
+        record = {
+            "ts": beijing_time(),
+            "level": level,
+            "source": source,
+            "message": message,
+        }
+        with self._lock:
+            self._buffer.append(record)
+        # 通知订阅者(在锁外执行,避免死锁)
+        self._notify(record)
+
+    def _notify(self, record: dict) -> None:
+        """通知所有订阅者(每个订阅者的 callback 在独立线程中调用)"""
+        with self._sub_lock:
+            subscribers = list(self._subscribers)
+        for callback in subscribers:
+            try:
+                callback(record)
+            except Exception:
+                pass
+
+    def get_recent(self, limit: int = 200) -> list:
+        """获取最近 N 条日志(最新在后)"""
+        with self._lock:
+            items = list(self._buffer)
+        return items[-limit:] if len(items) > limit else items
+
+    def subscribe(self, callback) -> None:
+        """注册订阅者:callback(record) 在日志产生时被调用"""
+        with self._sub_lock:
+            self._subscribers.append(callback)
+
+    def unsubscribe(self, callback) -> None:
+        """取消订阅"""
+        with self._sub_lock:
+            try:
+                self._subscribers.remove(callback)
+            except ValueError:
+                pass
+
+
+_live_log = _LiveLog()

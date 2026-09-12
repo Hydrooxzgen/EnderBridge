@@ -418,6 +418,23 @@
           </div>
         </div>
 
+        <div class="cfg-section" id="cfgCardPlayerListPolling">
+          <h3>👥 玩家列表轮询</h3>
+          <div class="cfg-switch">
+            <label class="switch"><input type="checkbox" id="cfg-playerlistpolling"><span class="track"></span></label>
+            <span class="switch-label">启用定期 /list 获取玩家名 (playerListPolling.enabled)</span>
+          </div>
+          <div class="cfg-sub-box show" id="plpFields">
+            <div class="cfg-grid">
+              <div class="cfg-field">
+                <label>轮询间隔 (秒)</label>
+                <input id="cfg-plpinterval" class="cfg-input" type="number" min="5" />
+              </div>
+            </div>
+            <p class="cfg-hint">通过定期执行 /list 命令解析在线玩家名，在仪表盘显示玩家名称而非 IP。需主客户端已连接。</p>
+          </div>
+        </div>
+
         <div class="cfg-section" id="cfgCardWebui">
           <h3>🌐 Web 管理端</h3>
           <div class="cfg-switch">
@@ -425,21 +442,15 @@
             <span class="switch-label">启用 Web 管理界面 (webui.enabled)</span>
           </div>
           <div class="cfg-sub-box show" id="webuiFields">
-            <div class="cfg-grid">
-              <div class="cfg-field">
-                <label>端口 (port)</label>
-                <input id="cfg-webport" class="cfg-input" type="number" />
-              </div>
-              <div class="cfg-field">
-                <label>管理令牌 (token)</label>
-                <input id="cfg-webtoken" class="cfg-input" type="password" placeholder="修改并牢记，否则无法登录管理界面" />
-              </div>
+            <div class="cfg-field">
+              <label>端口 (port)</label>
+              <input id="cfg-webport" class="cfg-input" type="number" />
             </div>
             <div class="cfg-switch" style="margin-top:8px;">
               <label class="switch"><input type="checkbox" id="cfg-weblockal"><span class="track"></span></label>
               <span class="switch-label">仅允许本机访问 (localOnly)</span>
             </div>
-            <p class="hint">关闭后将绑定 0.0.0.0，允许局域网/远程设备访问管理界面。建议配合管理令牌使用。</p>
+            <p class="hint">关闭后将绑定 0.0.0.0，允许局域网/远程设备访问管理界面。</p>
             <p class="hint">禁用 Web 管理界面后将不再启动 HTTP 服务。</p>
           </div>
         </div>

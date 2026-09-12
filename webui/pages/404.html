@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EnderBridge - 404</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<script>document.documentElement.setAttribute('data-theme',localStorage.getItem('enderbridge_theme')||(window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark'));</script>
+</head>
+<body>
+<div style="min-height:100vh;width:100%;display:flex;align-items:center;justify-content:center;padding:24px;">
+  <div class="login-card" style="text-align:center;">
+    <div style="font-size:48px;margin-bottom:8px;">⛏️</div>
+    <div style="font-size:3rem;font-weight:700;color:var(--accent);line-height:1;margin-bottom:4px;">404</div>
+    <h1>页面不存在</h1>
+    <p class="sub">你访问的页面可能已移动或不存在。</p>
+    <a href="/" style="display:block;width:100%;padding:12px;margin-bottom:12px;font-size:15px;font-weight:700;color:#fff;border:none;border-radius:10px;cursor:pointer;text-align:center;text-decoration:none;background:linear-gradient(90deg,#6366f1,#8b5cf6);letter-spacing:2px;">返回仪表盘</a>
+    <button onclick="history.back()" style="width:100%;padding:12px;font-size:15px;font-weight:700;color:var(--text);background:var(--input-bg);border:1px solid var(--input-border);border-radius:10px;cursor:pointer;">返回上一页</button>
+  </div>
+</div>
+<div id="toast"></div>
+<script src="/static/js/app.js"></script>
+</body>
+</html>
