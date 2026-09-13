@@ -110,18 +110,20 @@ def set_event_loop(loop):
 # 应用信息(main.py 注入):用于 Release Notes 获取
 _github_repo = ""    # e.g. "UserXYY123/EnderBridge"
 _app_version = APP_VERSION    # 初始为兜底值,set_app_info 后为 main.py 的真实 VERSION
+_minimum_version = ""  # 最低允许版本,低于此版本禁止升级
 _description = None  # 非 None 时直接用作 Release Notes,跳过 GitHub API
 _system_mode = False  # --system 启动时启用系统保留账户功能
 
 
-def set_app_info(github_repo: str, version: str, description=None) -> None:
+def set_app_info(github_repo: str, version: str, description=None, minimum_version: str = "") -> None:
     """注入应用信息:main.py 启动后调用,提供 GitHub 仓库名与当前版本
 
     description: 若提供(非 None),则 /api/release-notes 直接返回该内容,
     不再从 GitHub 拉取 Release 数据。"""
-    global _github_repo, _app_version, _description
+    global _github_repo, _app_version, _minimum_version, _description
     _github_repo = github_repo
     _app_version = version
+    _minimum_version = minimum_version
     _description = description
 
 
@@ -154,6 +156,16 @@ def _parse_version(ver: str) -> list:
 def _version_gt(a: str, b: str) -> bool:
     """判断版本 a 是否严格大于版本 b"""
     return _parse_version(a) > _parse_version(b)
+
+
+def _version_below_min(ver: str) -> bool:
+    """判断版本是否低于最低允许版本(低于则返回 True,禁止安装)"""
+    if not _minimum_version or not ver:
+        return False
+    try:
+        return _parse_version(ver) < _parse_version(_minimum_version)
+    except Exception:
+        return False
 
 
 
@@ -1298,14 +1310,16 @@ class WebUIHandler(BaseHTTPRequestHandler):
             })
         else:
             # 登录失败:记录并检查是否触发自动封禁
+            # 但"账户已禁用"不计入失败次数(防止被误封)
             from lib import banlist
-            fail_info = banlist.record_auth_failure(ip)
             msg = result["message"]
-            if fail_info["banned"]:
-                abc = banlist.get_auto_ban_config()
-                msg = f"登录失败次数过多,你的 IP 已被自动封禁(检测窗口: {abc['window']}秒, 封禁时长: {abc['banDuration']}分钟)"
-            elif fail_info["remaining"] > 0:
-                msg = f"{msg}(登录失败记录: {fail_info['attempts']}/{banlist._FAIL_THRESHOLD})"
+            if "禁用" not in msg:
+                fail_info = banlist.record_auth_failure(ip)
+                if fail_info["banned"]:
+                    abc = banlist.get_auto_ban_config()
+                    msg = f"登录失败次数过多,你的 IP 已被自动封禁(检测窗口: {abc['window']}秒, 封禁时长: {abc['banDuration']}分钟)"
+                elif fail_info["remaining"] > 0:
+                    msg = f"{msg}(登录失败记录: {fail_info['attempts']}/{banlist._FAIL_THRESHOLD})"
             self._respond({"ok": False, "message": msg})
 
     # ---- 用户管理 API ----
@@ -1616,6 +1630,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
                 "html_url": latest.get("html_url", ""),
                 "published_at": latest.get("published_at", ""),
                 "update_available": _version_gt(latest_tag, _app_version),
+                "minimum_version": _minimum_version,
             })
         except urllib.error.HTTPError as e:
             msg = f"GitHub API 错误: {e.code}"
@@ -1654,8 +1669,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
                         a.get("name", "").endswith((".zip", ".tar.gz", ".tgz"))
                         for a in r.get("assets", [])
                     ),
+                    "below_min": _version_below_min(r.get("tag_name", "")),
                 })
-            self._respond({"ok": True, "releases": items, "page": page})
+            self._respond({"ok": True, "releases": items, "page": page, "minimum_version": _minimum_version})
         except urllib.error.HTTPError as e:
             msg = f"GitHub API 错误: {e.code}"
             if e.code == 403:

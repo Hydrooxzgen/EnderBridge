@@ -20,26 +20,30 @@ CONFIG_JSON = os.path.join(CONFIG_DIR, "config.json")
 CONFIG_EXAMPLE_JSON = os.path.join(CONFIG_DIR, "config.example.json")
 
 # ===== 自动迁移:将根目录下的旧配置文件移动到 config/ 目录 =====
-_OLD_CONFIG_FILES = [
+os.makedirs(CONFIG_DIR, exist_ok=True)
+# 清理根目录残留的旧配置文件(0.4.1+ 配置统一在 config/ 目录,旧文件直接删除不再迁移)
+for _fname in [
     "config.py", "config.py.bak", "config.json", "config.json.bak",
     "config.example.json",
     "permission.json", "permission.json.bak", "permission.example.json",
     "users.json", "users.example.json",
     "banlist.json",
-]
-os.makedirs(CONFIG_DIR, exist_ok=True)
-for _fname in _OLD_CONFIG_FILES:
+]:
     _old = os.path.join(ROOT, _fname)
-    _new = os.path.join(CONFIG_DIR, _fname)
-    if os.path.exists(_old) and not os.path.exists(_new):
+    if os.path.exists(_old):
         try:
-            import shutil as _shutil_mv
-            _shutil_mv.move(_old, _new)
-        except Exception:
+            os.remove(_old)
+        except OSError:
             pass
 
 VERSION = "b0.4.1 dev"
-MINIMIUM_ALLOWED_VERSION = "b0.4.0"
+MINIMIUM_ALLOWED_VERSION = "b0.4.0" # 因为b0.4.0版本大量重写了账户登录逻辑, 所以, 我设置了拒绝降级到b0.4.0-的版本
+                                    # 但是如果你需要降级低于b0.4.0的版本，请更改这里的值为b0.0.0以删除限制
+                                    # 但请注意，降级后若想重新升级至b0.4.0及以上版本, 程序不会自动创建admin账户默认密码
+                                    # 你需要自己计算admin密码的哈希值并手动修改users.json (计算哈希值请使用tell_me_hash.py)
+                                    # 或者临时修改guest用户组为'admin'
+                                    # 否则, 你无法获取admin权限
+                                    # 注: 请一定在使用完该操作后把guest用户组重新改回'viewer', 否则任何人都可以使用guest账号获取admin权限!
 
 
 def _parse_version(v: str) -> tuple:
@@ -72,6 +76,7 @@ def _check_minimum_version(new_version: str) -> None:
         pass  # 版本格式异常时跳过检查,不阻塞升级
 
 
+# ↓仅当不为None时从Github拉取更新日志, 反之则直接显示该变量内容。
 DESCRIPTION = """
 fix1: 修复仅本机访问开关无法关闭的BUG
 fix2: 修复无法绑定0.0.0.0的BUG
@@ -91,8 +96,10 @@ feat11: banip现在无法ban127.0.0.1
 fix5: 修复无法更改自己密码的bug
 feat12: 降级现在会被限制
 feat13: 审计日志完善
+feat14: 账户被禁用现在不计入密码输入错误总数
+fix6: 修复重置配置后不启动firstrun的bug
 """ 
-# ↑仅当不为None时从Github拉取更新日志, 反之则直接显示该变量内容。
+
 GITHUB_REPO = "Hydrooxzgen/EnderBridge"  # You can edit this to your own repository if you fork it :)
 WANT_RESET = "--reset-all" in sys.argv
 WANT_EXPORT = "export" in sys.argv
@@ -170,26 +177,27 @@ if not os.path.exists(PERMISSION_JSON) and os.path.exists(PERMISSION_EXAMPLE) an
 if WANT_RESET:
     files = ["config.py", "config.py.bak", "config.json", "config.json.bak", "permission.json", "permission.json.bak", "users.json", "banlist.json"]
     removed = []
+    # 同时清理 config/ 子目录和根目录的旧配置文件,防止启动时自动迁移将旧文件恢复
     for name in files:
-        p = os.path.join(CONFIG_DIR, name)
-        if os.path.exists(p):
-            os.remove(p)
-            removed.append(name)
+        for base in (CONFIG_DIR, ROOT):
+            p = os.path.join(base, name)
+            if os.path.exists(p):
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
+                removed.append(name)
     # 复位模板标记,下次启动自动进入向导重新配置
-    for tpl_path, tpl_pattern, tpl_repl in [
-        (CONFIG_EXAMPLE_JSON, r'"is_first_run"\s*:\s*(true|false)', '"is_first_run": true'),
-    ]:
-        try:
-            if not os.path.exists(tpl_path):
-                continue
-            with open(tpl_path, "r", encoding="utf-8") as f:
-                src = f.read()
-            next_ = re.sub(tpl_pattern, tpl_repl, src)
-            if next_ != src:
-                with open(tpl_path, "w", encoding="utf-8") as f:
-                    f.write(next_)
-        except Exception:
-            pass
+    try:
+        if os.path.exists(CONFIG_EXAMPLE_JSON):
+            with open(CONFIG_EXAMPLE_JSON, "r", encoding="utf-8") as f:
+                tpl = json.load(f)
+            if not tpl.get("is_first_run", False):
+                tpl["is_first_run"] = True
+                with open(CONFIG_EXAMPLE_JSON, "w", encoding="utf-8") as f:
+                    json.dump(tpl, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
     print("========================================")
     print("  配置已重置")
     print("========================================")
@@ -947,15 +955,7 @@ except Exception:
     _cfg = {}
     _cfg_format = "py"
 
-# ===== 版本变迁配置文件位置迁移 =====
-try:
-    from version_manager.detector import migrate_config_location, detect_version
-    _saved_ver = _cfg.get("_version", "")
-    _cur_ver = VERSION.replace(" dev", "")
-    if _saved_ver and _saved_ver != _cur_ver:
-        migrate_config_location(_saved_ver, _cur_ver)
-except Exception:
-    pass
+
 
 # 兼容路径适配函数:JSON 格式下 basePath/resolvePath 不存在,直接使用相对路径
 try:
@@ -1006,13 +1006,7 @@ if is_first_run is None:
     else:
         is_first_run = False
 
-# 旧版本配置迁移提醒
-if _cfg.get("_is_legacy", False) and _cfg.get("_config_format") == "py":
-    _ver = _cfg.get("_version", "unknown")
-    print("========================================")
-    print(f"  当前配置为旧版本格式 (v{_ver})")
-    print("  建议迁移到 config.json 格式以获得更好支持")
-    print("  运行 py main.py --migrate-config 可自动迁移")
+
     print("  运行 py main.py --downgrade-config 可降级回 Python 格式")
     print("========================================")
 
@@ -1315,7 +1309,7 @@ def _start_webui() -> None:
         set_status_provider(_webui_status)
         set_restart_handler(_request_restart)
         set_event_loop(asyncio.get_running_loop())
-        set_app_info(GITHUB_REPO, VERSION, DESCRIPTION)
+        set_app_info(GITHUB_REPO, VERSION, DESCRIPTION, minimum_version=MINIMIUM_ALLOWED_VERSION)
         set_system_mode(WANT_SYSTEM_MODE)
         start_webui()
     except Exception as error:

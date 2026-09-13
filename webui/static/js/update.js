@@ -2,6 +2,26 @@
 var _releasesPage = 1;
 var _selectedUpdateFile = null;
 var _userRole = "guest";
+var _minimumVersion = "";
+
+/** 解析版本号为可比较的数字数组 */
+function _parseVer(v) {
+  if (!v) return [0];
+  var nums = v.match(/\d+/g);
+  return nums ? nums.map(Number) : [0];
+}
+/** 判断版本是否低于最低允许版本 */
+function _isBelowMin(tag) {
+  if (!_minimumVersion || !tag) return false;
+  var a = _parseVer(tag), b = _parseVer(_minimumVersion);
+  var len = Math.max(a.length, b.length);
+  for (var i = 0; i < len; i++) {
+    var x = a[i] || 0, y = b[i] || 0;
+    if (x < y) return true;
+    if (x > y) return false;
+  }
+  return false;
+}
 
 /** 轮询服务器状态,恢复后跳转到正确地址 */
 function _pollAndRedirect(btn, restoreText) {
@@ -111,11 +131,19 @@ function checkUpdate() {
       btn.classList.remove("btn-primary");
       btn.classList.add("btn-danger");
       btn.dataset.tag = data.latest || "";
+      // 版本低于最低允许版本时禁止安装
+      if (data.minimum_version && _isBelowMin(data.latest)) {
+        btn.disabled = true;
+        btn.textContent = "🚫 版本过低,禁止降级";
+        btn.classList.remove("btn-danger");
+        delete btn.dataset.tag;
+      }
     } else {
       btn.textContent = "🔍 检查更新";
       btn.classList.add("btn-primary");
       btn.classList.remove("btn-danger");
       delete btn.dataset.tag;
+      _minimumVersion = data.minimum_version || _minimumVersion;
     }
     $("updateCheckResult").style.display = "";
     $("updateCurVer").textContent = data.current || "?";
@@ -296,9 +324,11 @@ function loadReleases(page) {
       var assetTag = r.has_asset ? "" : '<span class="td-dim" style="margin-left:6px;font-size:12px;">(无附件)</span>';
       var date = r.published_at ? new Date(r.published_at).toLocaleDateString("zh-CN") : "";
       var bodyHtml = r.body ? renderMarkdown(r.body) : '<span class="td-dim">无描述</span>';
-      var actionBtn = (!r.current && r.has_asset && _userRole !== "guest")
+      _minimumVersion = r.below_min !== undefined ? (data.minimum_version || _minimumVersion) : _minimumVersion;
+      var belowMin = r.below_min || _isBelowMin(r.tag);
+      var actionBtn = (!r.current && r.has_asset && _userRole !== "guest" && !belowMin)
         ? '<button class="btn btn-sm release-install-btn" data-tag="' + escapeHtml(r.tag) + '">安装此版本</button>'
-        : "";
+        : (belowMin && !r.current ? '<span class="td-dim" style="font-size:12px;">🚫 版本过低</span>' : "");
       return '<div class="release-item">' +
         '<div class="release-header">' + badge + ' <b>' + escapeHtml(r.name || r.tag) + '</b>' + currentTag + assetTag +
         ' <span class="td-dim" style="margin-left:8px;font-size:12px;">' + date + '</span>' +
