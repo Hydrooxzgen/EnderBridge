@@ -36,7 +36,7 @@ for _fname in [
         except OSError:
             pass
 
-VERSION = "b0.4.1 dev"
+VERSION = "b0.4.1"
 MINIMIUM_ALLOWED_VERSION = "b0.4.0" # 因为b0.4.0版本大量重写了账户登录逻辑, 所以, 我设置了拒绝降级到b0.4.0-的版本
                                     # 但是如果你需要降级低于b0.4.0的版本，请更改这里的值为b0.0.0以删除限制
                                     # 但请注意，降级后若想重新升级至b0.4.0及以上版本, 程序不会自动创建admin账户默认密码
@@ -77,7 +77,8 @@ def _check_minimum_version(new_version: str) -> None:
 
 
 # ↓仅当不为None时从Github拉取更新日志, 反之则直接显示该变量内容。
-DESCRIPTION = """
+DESCRIPTION = None
+"""
 fix1: 修复仅本机访问开关无法关闭的BUG
 fix2: 修复无法绑定0.0.0.0的BUG
 feat1: 新增--description参数
@@ -737,6 +738,8 @@ if os.path.isfile(UPDATE_MARKER) and not WANT_UPDATE:
             ".git", "logs", "resources", "structures",
             "config",
         })
+        # config/ 整体跳过,但模板文件必须带入(与命令行 update 保持一致)
+        _webui_config_allow = {"config/config.example.json", "config/permission.example.json", "config/users.example.json"}
 
         print("========================================")
         print(f"  WebUI 触发更新: {pending_path}")
@@ -773,7 +776,7 @@ if os.path.isfile(UPDATE_MARKER) and not WANT_UPDATE:
                         if not rel:
                             continue
                         top = rel.split("/", 1)[0]
-                        if top in _keep:
+                        if top in _keep and rel not in _webui_config_allow:
                             continue
                         target = os.path.join(tmp, *rel.split("/"))
                         os.makedirs(os.path.dirname(target), exist_ok=True)
@@ -796,7 +799,7 @@ if os.path.isfile(UPDATE_MARKER) and not WANT_UPDATE:
                         if not rel:
                             continue
                         top = rel.split("/", 1)[0]
-                        if top in _keep:
+                        if top in _keep and rel not in _webui_config_allow:
                             continue
                         target = os.path.join(tmp, *rel.split("/"))
                         os.makedirs(os.path.dirname(target), exist_ok=True)
@@ -820,7 +823,8 @@ if os.path.isfile(UPDATE_MARKER) and not WANT_UPDATE:
                     src = os.path.join(dirpath, fname)
                     dst = os.path.join(ROOT, rel_dir, fname)
                     top = rel_dir.split(os.sep)[0]
-                    if top in _keep:
+                    _rel_from_root = os.path.relpath(dst, ROOT).replace(os.sep, "/")
+                    if top in _keep and _rel_from_root not in _webui_config_allow:
                         continue
                     os.makedirs(os.path.dirname(dst), exist_ok=True)
                     shutil.copy2(src, dst)
