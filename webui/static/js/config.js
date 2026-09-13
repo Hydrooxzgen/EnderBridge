@@ -125,7 +125,6 @@ function loadConfig() {
     $("cfg-webui").checked = webui.enabled !== false;
     $("cfg-webport").value = webui.port || 18888;
     $("cfg-weblockal").checked = webui.localOnly === true || webui.localOnly === "true";
-    $("cfg-autoBan").checked = webui.autoBan !== false;
     toggleSub("webuiFields", $("cfg-webui").checked);
 
     $("cfg-github-token").value = data.config.githubToken || "";
@@ -535,7 +534,6 @@ function saveConfig() {
   webui.enabled = $("cfg-webui").checked;
     webui.port = parseInt($("cfg-webport").value, 10) || 18888;
     webui.localOnly = $("cfg-weblockal").checked;
-    webui.autoBan = $("cfg-autoBan").checked;
   var ai = {
     baseURL: $("cfg-aibase").value.trim(), apiKey: $("cfg-aikey").value.trim(),
     chatModel: $("cfg-aichatmodel").value.trim() || "deepseek-chat",

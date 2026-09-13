@@ -895,6 +895,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if path == "/api/banlist/auto-ban":
             self._api_banlist_auto_ban_status()
             return
+        if path == "/api/banlist/auto-ban-config":
+            self._api_banlist_auto_ban_config_get()
+            return
         if path.startswith("/api/"):
             self._respond({"ok": False, "message": "Not Found"}, status=404)
             return
@@ -972,6 +975,12 @@ class WebUIHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/banlist/auto-ban":
             self._api_banlist_auto_ban_toggle()
+            return
+        if parsed.path == "/api/banlist/auto-ban-config":
+            self._api_banlist_auto_ban_config_set()
+            return
+        if parsed.path == "/api/banlist/edit":
+            self._api_banlist_edit()
             return
         if parsed.path == "/api/firewall":
             self._api_firewall_add_rule()
@@ -1281,7 +1290,8 @@ class WebUIHandler(BaseHTTPRequestHandler):
             fail_info = banlist.record_auth_failure(ip)
             msg = result["message"]
             if fail_info["banned"]:
-                msg = f"登录失败次数过多,你的 IP 已被自动封禁(检测窗口: {banlist._FAIL_WINDOW}秒)"
+                abc = banlist.get_auto_ban_config()
+                msg = f"登录失败次数过多,你的 IP 已被自动封禁(检测窗口: {abc['window']}秒, 封禁时长: {abc['banDuration']}分钟)"
             elif fail_info["remaining"] > 0:
                 msg = f"{msg}(登录失败记录: {fail_info['attempts']}/{banlist._FAIL_THRESHOLD})"
             self._respond({"ok": False, "message": msg})
@@ -1772,13 +1782,6 @@ class WebUIHandler(BaseHTTPRequestHandler):
         except Exception as e:
             self._respond({"ok": False, "message": f"保存失败: {e}"})
             return
-        # 同步自动封禁开关到内存
-        try:
-            from lib import banlist
-            auto_ban = (body["config"].get("webui") or {}).get("autoBan", True)
-            banlist.set_auto_ban(bool(auto_ban))
-        except Exception:
-            pass
         new_local_only = (body["config"].get("webui") or {}).get("localOnly", False)
         # localOnly/port 变更时原地重启 WebUI 以重新绑定地址
         new_port = int((body["config"].get("webui") or {}).get("port") or 18888)
@@ -1957,6 +1960,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
             self._respond({"ok": False, "message": f"无效的 IP 地址: {ip}"})
             return
         from lib import banlist
+        if ip in banlist._PROTECTED_IPS:
+            self._respond({"ok": False, "message": f"{ip} 是受保护的本地地址,无法封禁"})
+            return
         if banlist.ban(ip, reason, duration=duration):
             # 尝试断开该 IP 的现有连接
             self._disconnect_banned_ip(ip)
@@ -1976,6 +1982,23 @@ class WebUIHandler(BaseHTTPRequestHandler):
         from lib import banlist
         if banlist.unban(ip):
             self._respond({"ok": True, "message": f"已解封 {ip}"})
+        else:
+            self._respond({"ok": False, "message": f"{ip} 不在封禁列表中"})
+
+    def _api_banlist_edit(self) -> None:
+        """修改封禁时长(需要 banlist 权限)"""
+        if not _require_permission("banlist")(self):
+            return
+        body = self._read_body()
+        ip = (body.get("ip") or "").strip()
+        duration = int(body.get("duration", 0))  # 分钟,0=永久
+        if not ip:
+            self._respond({"ok": False, "message": "请输入 IP 地址"})
+            return
+        from lib import banlist
+        if banlist.set_ban_duration(ip, duration):
+            dur_text = "永久" if duration <= 0 else f"{duration} 分钟"
+            self._respond({"ok": True, "message": f"已将 {ip} 的封禁时长改为 {dur_text}"})
         else:
             self._respond({"ok": False, "message": f"{ip} 不在封禁列表中"})
 
@@ -2006,7 +2029,42 @@ class WebUIHandler(BaseHTTPRequestHandler):
         enabled = body.get("enabled", True)
         from lib import banlist
         banlist.set_auto_ban(bool(enabled))
+        # 持久化到 config.json
+        try:
+            from lib.config_loader import get_config, save_config
+            cfg = get_config()
+            wb = cfg.setdefault("webuiConfig", {})
+            wb["autoBan"] = banlist.is_auto_ban_enabled()
+            save_config(cfg)
+        except Exception:
+            pass
         self._respond({"ok": True, "enabled": banlist.is_auto_ban_enabled()})
+
+    def _api_banlist_auto_ban_config_get(self) -> None:
+        """获取自动封禁详细配置(window/threshold/duration)"""
+        if not _require_permission("banlist")(self):
+            return
+        from lib import banlist
+        self._respond({"ok": True, **banlist.get_auto_ban_config()})
+
+    def _api_banlist_auto_ban_config_set(self) -> None:
+        """更新自动封禁详细配置(window/threshold/duration)"""
+        if not _require_permission("banlist")(self):
+            return
+        body = self._read_body()
+        from lib import banlist
+        banlist.set_auto_ban_config(body)
+        # 同步到 config.json
+        try:
+            from lib.config_loader import get_config, save_config
+            cfg = get_config()
+            wb = cfg.setdefault("webuiConfig", {})
+            wb["autoBanConfig"] = banlist.get_auto_ban_config()
+            wb["autoBan"] = banlist.is_auto_ban_enabled()
+            save_config(cfg)
+        except Exception:
+            pass
+        self._respond({"ok": True, **banlist.get_auto_ban_config()})
 
     def _api_restart(self) -> None:
         """一键重启:触发主程序后台执行优雅关闭并重启进程(需要 restart 权限)"""
@@ -2151,6 +2209,15 @@ class _FastHTTPServer(ThreadingHTTPServer):
         host, port = self.server_address[:2]
         self.server_name = socket.gethostname()
         self.server_port = port
+
+    def process_request(self, request, client_address):
+        """静默连接中断类错误,避免 Windows 上浏览器快速刷新/断开时打印 traceback"""
+        try:
+            super().process_request(request, client_address)
+        except Exception:
+            # ConnectionAbortedError / BrokenPipeError / ConnectionResetError
+            # 均为客户端提前断开导致,静默忽略
+            pass
 
     def handle_error(self, request, client_address):
         """静默连接断开类错误,避免 Ctrl+C / SSE 断开时打印 traceback"""

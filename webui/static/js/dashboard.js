@@ -7,28 +7,18 @@ requireAuth(function (role) {
   checkAttackAlert();
 });
 
+var _attackToastShown = false;
 /** 检查是否有被封禁的 IP (攻击警报) */
 function checkAttackAlert() {
-  var el = $("attackAlert");
-  if (!el) return;
-  // 仅管理员可见
-  var me = getCurrentUser();
-  if (!me || (me.role !== "admin" && me.role !== "operator")) {
-    el.style.display = "none";
-    return;
-  }
+  if (!hasPermission("banlist")) return;
   api("/banlist").then(function (data) {
     if (!data.ok) return;
     var autoCount = data.autoBanCount || 0;
-    if (autoCount > 0) {
-      el.style.display = "";
-      $("attackAlertInfo").textContent = "—" + autoCount + " 个 IP 被自动封禁";
-    } else {
-      el.style.display = "none";
+    if (autoCount > 0 && !_attackToastShown) {
+      _attackToastShown = true;
+      toast("🚨 服务器正遭受攻击 — " + autoCount + " 个 IP 被自动封禁", "warn", 6000);
     }
-  }).catch(function () {
-    el.style.display = "none";
-  });
+  }).catch(function () {});
 }
 
 function formatDuration(seconds) {

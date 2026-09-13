@@ -24,14 +24,14 @@ function hasPermission(perm) {
   return perms.indexOf(perm) !== -1;
 }
 
-function toast(msg, type) {
+function toast(msg, type, duration) {
   var t = $("toast");
   if (!t) return;
   t.className = type || "ok";
   t.textContent = msg;
   t.style.display = "block";
   clearTimeout(t._timer);
-  t._timer = setTimeout(function () { t.style.display = "none"; }, 3000);
+  t._timer = setTimeout(function () { t.style.display = "none"; }, duration || 3000);
 }
 
 function api(path, options) {
@@ -172,6 +172,7 @@ function initSidebar(activePage, role) {
     "config": "config",
     "mods": "mods",
     "console": "console",
+    "banlist": "banlist",
     "audit": "audit",
     "update": "update",
   };

@@ -129,9 +129,6 @@ def save_config(config: dict) -> bool:
         with open(CONFIG_JSON, "w", encoding="utf-8") as f:
             json.dump(save_data, f, ensure_ascii=False, indent=2)
 
-        # 如果存在旧的 config.py，提示用户可删除
-        if CONFIG_PY.exists():
-            print(f"[Config] 配置已保存到 config.json，旧的 config.py 可手动删除")
         return True
     except Exception as e:
         print(f"[Config] 保存配置失败: {e}")

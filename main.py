@@ -45,13 +45,16 @@ fix2: 修复无法绑定0.0.0.0的BUG
 feat1: 新增--description参数
 feat2: 新增一键添加防火墙排除项
 feat3: 修复在Termux中无法启动的BUG
-feat4: 新增banlist 添加服务器正被攻击提示, 并自动封禁(可选)
+feat4: 新增banlist 添加服务器正被攻击提示, 并自动封禁(可选)--toast通知
 feat5: version_manager可以自动迁移配置文件
 fix3: 修复无法取消系统保留用户属性的bug
 feat6: banip新增封禁时间
 feat7: 在被封禁页面也显示解禁时间
 fix4: 防止is_banned()方法死锁
 feat8: 权限管理页面添加ban权限
+feat9: 可自定义封禁时间单位
+feat10: 可自定义自动封禁规则
+feat11: banip现在无法ban127.0.0.1
 """ 
 # ↑仅当不为None时从Github拉取更新日志, 反之则直接显示该变量内容。
 GITHUB_REPO = "Hydrooxzgen/EnderBridge"  # You can edit this to your own repository if you fork it :)
@@ -1245,12 +1248,8 @@ def _start_webui() -> None:
         # 加载 IP 封禁列表
         from lib import banlist
         banlist.load()
-        # 从配置加载自动封禁开关
-        try:
-            _wb = _cfg.get("webuiConfig", {})
-            banlist.set_auto_ban(_wb.get("autoBan", True))
-        except Exception:
-            pass
+        # 从配置加载自动封禁参数(window/threshold/duration)和开关
+        banlist.load_auto_ban_config()
         # 首次运行或升级:打印 admin 凭证到终端
         if user_manager._first_run_password:
             admin_pw = user_manager._first_run_password

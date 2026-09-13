@@ -22,6 +22,7 @@ _banned_ips: dict = {}  # {"1.2.3.4": {"reason": "...", "time": "...", "expires"
 _FAIL_WINDOW = 60       # 检测窗口(秒)
 _FAIL_THRESHOLD = 5     # 窗口内失败次数阈值
 _BAN_DURATION = 600     # 自动封禁时长(秒),0 = 永久
+_PROTECTED_IPS = {"127.0.0.1", "::1"}  # 禁止封禁的本地回环地址
 _fail_log: dict = defaultdict(list)  # {ip: [timestamp, ...]}
 _auto_ban_enabled = True
 
@@ -35,6 +36,60 @@ def set_auto_ban(enabled: bool) -> None:
 def is_auto_ban_enabled() -> bool:
     """查询自动封禁是否开启"""
     return _auto_ban_enabled
+
+
+def get_auto_ban_config() -> dict:
+    """获取当前自动封禁配置
+
+    Returns:
+        {"enabled": bool, "window": int(秒), "threshold": int, "banDuration": int(分钟)}
+    """
+    return {
+        "enabled": _auto_ban_enabled,
+        "window": _FAIL_WINDOW,
+        "threshold": _FAIL_THRESHOLD,
+        "banDuration": _BAN_DURATION // 60,
+    }
+
+
+def set_auto_ban_config(config: dict) -> None:
+    """更新自动封禁配置
+
+    Args:
+        config: 可包含 window(秒), threshold(次), banDuration(秒), enabled(布尔)
+    """
+    global _FAIL_WINDOW, _FAIL_THRESHOLD, _BAN_DURATION, _auto_ban_enabled
+    if "window" in config:
+        val = int(config["window"])
+        if val >= 1:
+            _FAIL_WINDOW = val
+    if "threshold" in config:
+        val = int(config["threshold"])
+        if val >= 1:
+            _FAIL_THRESHOLD = val
+    if "banDuration" in config:
+        # banDuration 存储单位为分钟(与 UI 一致),内部转为秒
+        val = int(config["banDuration"])
+        if val >= 0:
+            _BAN_DURATION = val * 60
+    if "enabled" in config:
+        _auto_ban_enabled = bool(config["enabled"])
+
+
+def load_auto_ban_config() -> None:
+    """从 config.json 加载自动封禁配置(启动时调用)"""
+    try:
+        from lib.config_loader import get_config
+        cfg = get_config()
+        wb = cfg.get("webuiConfig", {})
+        abc = wb.get("autoBanConfig", {})
+        if abc:
+            set_auto_ban_config(abc)
+            # 确保 enabled 与 autoBan 开关同步(autoBan 优先)
+            if "autoBan" in wb:
+                set_auto_ban(bool(wb["autoBan"]))
+    except Exception:
+        pass
 
 
 def _clean_old_fails(ip: str) -> None:
@@ -59,7 +114,10 @@ def record_auth_failure(ip: str) -> dict:
     remaining = max(0, _FAIL_THRESHOLD - attempts)
 
     if attempts >= _FAIL_THRESHOLD and _auto_ban_enabled:
-        ban(ip, reason=f"自动封禁: {_FAIL_WINDOW}秒内 {attempts} 次登录失败")
+        # 自动封禁时长: _BAN_DURATION 为秒, ban() 需要分钟
+        ban_dur_min = max(_BAN_DURATION // 60, 1) if _BAN_DURATION > 0 else 0
+        ban(ip, reason=f"自动封禁: {_FAIL_WINDOW}秒内 {attempts} 次登录失败",
+            duration=ban_dur_min)
         _fail_log.pop(ip, None)
         return {"banned": True, "attempts": attempts, "remaining": 0}
 
@@ -126,6 +184,8 @@ def ban(ip: str, reason: str = "", duration: int = 0) -> bool:
         reason: 封禁原因
         duration: 封禁时长(分钟)。0 = 永久, >0 = 指定时长(分钟)
     """
+    if ip in _PROTECTED_IPS:
+        return False
     now = time.time()
     expires = None if duration <= 0 else now + duration * 60
     with _lock:
@@ -136,6 +196,23 @@ def ban(ip: str, reason: str = "", duration: int = 0) -> bool:
             "time": time.strftime("%Y-%m-%d %H:%M:%S"),
             "expires": expires,
         }
+    save()
+    return True
+
+
+def set_ban_duration(ip: str, duration: int) -> bool:
+    """更改封禁时长,返回是否成功
+
+    Args:
+        ip: 要修改的 IP 地址
+        duration: 新的封禁时长(分钟)。0 = 永久, >0 = 指定时长(分钟)
+    """
+    now = time.time()
+    expires = None if duration <= 0 else now + duration * 60
+    with _lock:
+        if ip not in _banned_ips:
+            return False
+        _banned_ips[ip]["expires"] = expires
     save()
     return True
 

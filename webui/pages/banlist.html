@@ -33,18 +33,6 @@
 <div class="main">
   <h2>🚫 封禁管理</h2>
 
-  <!-- 攻击警报状态 -->
-  <div class="card" id="alertCard" style="display:none;border:1px solid var(--err,#ef4444);background:rgba(239,68,68,0.05);">
-    <div class="row" style="justify-content:space-between;align-items:center;">
-      <div>
-        <span style="font-size:20px;">🚨</span>
-        <span style="font-weight:600;color:var(--err,#ef4444);">服务器正遭受攻击</span>
-        <span class="muted" id="alertCount"></span>
-      </div>
-    </div>
-    <p class="hint" style="margin-top:8px;">检测到大量暴力破解尝试,相关 IP 已被自动封禁。请在下方查看封禁列表。</p>
-  </div>
-
   <!-- 封禁操作 -->
   <div class="card">
     <div style="font-weight:600;margin-bottom:12px;">封禁 IP</div>
@@ -62,7 +50,12 @@
         <option value="43200">30 天</option>
         <option value="-1">自定义</option>
       </select>
-      <input type="text" id="banCustomDuration" placeholder="分钟数" style="width:90px;padding:8px 12px;border:1px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:14px;display:none;" autocomplete="off" />
+      <input type="text" id="banCustomDuration" placeholder="时长" style="width:80px;padding:8px 12px;border:1px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:14px;display:none;" autocomplete="off" />
+      <select id="banDurationUnit" style="padding:8px 8px;border:1px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:14px;display:none;min-width:60px;">
+        <option value="s">秒</option>
+        <option value="m" selected>分</option>
+        <option value="h">时</option>
+      </select>
       <button class="btn btn-primary btn-sm" id="banBtn">🚫 封禁</button>
     </div>
   </div>
@@ -78,6 +71,33 @@
         <input type="checkbox" id="autoBanToggle" checked />
         <span class="slider"></span>
       </label>
+    </div>
+    <div id="autoBanConfigArea" style="margin-top:16px;padding-top:12px;border-top:1px solid #1e293b;">
+      <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;">
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label style="font-size:13px;color:var(--muted,#94a3b8);">检测窗口</label>
+          <div style="display:flex;align-items:center;gap:4px;">
+            <input type="number" id="abWindowInput" min="1" value="60" style="width:72px;padding:6px 8px;border:1px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:14px;" />
+            <span style="font-size:13px;color:var(--muted,#94a3b8);">秒</span>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label style="font-size:13px;color:var(--muted,#94a3b8);">失败阈值</label>
+          <div style="display:flex;align-items:center;gap:4px;">
+            <input type="number" id="abThresholdInput" min="1" value="5" style="width:72px;padding:6px 8px;border:1px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:14px;" />
+            <span style="font-size:13px;color:var(--muted,#94a3b8);">次</span>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label style="font-size:13px;color:var(--muted,#94a3b8);">封禁时长</label>
+          <div style="display:flex;align-items:center;gap:4px;">
+            <input type="number" id="abDurationInput" min="0" value="10" style="width:72px;padding:6px 8px;border:1px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:14px;" />
+            <span style="font-size:13px;color:var(--muted,#94a3b8);">分钟</span>
+          </div>
+        </div>
+        <button class="btn btn-sm" id="abConfigSaveBtn" style="padding:6px 14px;">💾 保存</button>
+      </div>
+      <div class="hint" style="margin-top:8px;">例: 60 秒内失败 5 次 → 自动封禁 10 分钟 (0 = 永久封禁)</div>
     </div>
   </div>
 

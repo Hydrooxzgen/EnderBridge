@@ -273,7 +273,7 @@ function loadReleases(page) {
   _releasesPage = page || 1;
   $("releasesLoadBtn").style.display = "none";
   $("releasesPager").style.display = "";
-  $("releasesPageNum").textContent = "第 " + _releasesPage + " 页";
+  $("releasesPageNum").textContent = _releasesPage;
   $("releasesPrevBtn").disabled = _releasesPage <= 1;
   $("releasesList").innerHTML = '<div class="td-dim" style="padding:12px 0;">加载中...</div>';
   api("/update/releases?page=" + _releasesPage).then(function (data) {

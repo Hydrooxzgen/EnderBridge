@@ -13,19 +13,16 @@ function loadBanlist() {
     $("banCount").textContent = "(" + keys.length + " 条)";
     if (keys.length === 0) {
       $("banTableBody").innerHTML = '<tr><td colspan="5" class="muted" style="text-align:center;padding:24px;">暂无封禁记录</td></tr>';
-      $("alertCard").style.display = "none";
       return;
     }
-    // 只有自动封禁的 IP 才触发攻击警报(管理员手动封的不算)
+    // 只有自动封禁的 IP 才触发攻击警报 toast(管理员手动封的不算)
     var autoBans = keys.filter(function (ip) {
       var reason = (bans[ip] || {}).reason || "";
       return reason.indexOf("自动封禁") !== -1;
     });
-    if (autoBans.length > 0) {
-      $("alertCard").style.display = "";
-      $("alertCount").textContent = "—" + autoBans.length + " 个 IP 被自动封禁";
-    } else {
-      $("alertCard").style.display = "none";
+    if (autoBans.length > 0 && !_banlistAttackToastShown) {
+      _banlistAttackToastShown = true;
+      toast("🚨 服务器正遭受攻击 — " + autoBans.length + " 个 IP 被自动封禁", "warn", 6000);
     }
     $("banTableBody").innerHTML = keys.map(function (ip) {
       var info = bans[ip] || {};
@@ -39,8 +36,9 @@ function loadBanlist() {
         + '<td style="padding:10px 12px;">' + escapeHtml(info.reason || "—") + '</td>'
         + '<td style="padding:10px 12px;font-size:13px;" class="muted">' + escapeHtml(info.time || "—") + '</td>'
         + '<td style="padding:10px 12px;font-size:13px;" class="muted">' + escapeHtml(expiresText) + '</td>'
-        + '<td style="padding:10px 12px;text-align:right;">'
-        + '<button class="btn btn-sm" style="color:var(--accent,#818cf8);" onclick="unbanIp(\'' + escapeHtml(ip) + '\')">解封</button>'
+        + '<td style="padding:10px 12px;text-align:right;white-space:nowrap;">'
+        + '<button class="btn btn-sm" style="color:var(--accent,#818cf8);" onclick="editBanDuration(\'' + escapeHtml(ip) + '\')">⏱️</button> '
+        + '<button class="btn btn-sm" style="color:var(--err,#ef4444);" onclick="unbanIp(\'' + escapeHtml(ip) + '\')">解封</button>'
         + '</td></tr>';
     }).join("");
   }).catch(function () {
@@ -58,6 +56,24 @@ function unbanIp(ip) {
     .catch(function (e) { toast("操作失败: " + (e.message || e), "err"); });
 }
 
+function editBanDuration(ip) {
+  // 弹出输入框让用户输入新的封禁时长(分钟),0=永久
+  var val = prompt("请输入新的封禁时长(分钟),0 = 永久:", "0");
+  if (val === null) return; // 用户取消
+  var duration = parseInt(val, 10);
+  if (isNaN(duration) || duration < 0) { toast("请输入有效的数字", "err"); return; }
+  var durText = duration === 0 ? "永久" : duration + " 分钟";
+  if (!confirm("确认将 " + ip + " 的封禁时长改为 " + durText + " ?")) return;
+  api("/banlist/edit", { method: "POST", body: JSON.stringify({ ip: ip, duration: duration }) })
+    .then(function (data) {
+      toast(data.message, data.ok ? "ok" : "err");
+      if (data.ok) loadBanlist();
+    })
+    .catch(function (e) { toast("操作失败: " + (e.message || e), "err"); });
+}
+
+var _banlistAttackToastShown = false;
+
 // 封禁按钮
 var banBtn = $("banBtn");
 if (banBtn) banBtn.addEventListener("click", function () {
@@ -66,10 +82,17 @@ if (banBtn) banBtn.addEventListener("click", function () {
   var durSel = $("banDurationSelect");
   var duration = parseInt(durSel.value, 10) || 0;
   if (duration === -1) {
-    // 自定义时长
+    // 自定义时长:根据单位转换为分钟
     var custom = parseInt($("banCustomDuration").value, 10);
-    if (!custom || custom <= 0) { toast("请输入有效的封禁时长(分钟)", "err"); return; }
-    duration = custom;
+    if (!custom || custom <= 0) { toast("请输入有效的封禁时长", "err"); return; }
+    var unit = $("banDurationUnit").value;
+    if (unit === "s") {
+      duration = Math.max(Math.round(custom / 60), 1); // 秒→分钟,最少1分钟
+    } else if (unit === "h") {
+      duration = custom * 60; // 时→分钟
+    } else {
+      duration = custom; // 已经是分钟
+    }
   }
   if (!ip) { toast("请输入 IP 地址", "err"); return; }
   var durText = duration === 0 ? "永久" : duration + " 分钟";
@@ -86,11 +109,14 @@ if (banBtn) banBtn.addEventListener("click", function () {
     .catch(function (e) { toast("操作失败: " + (e.message || e), "err"); });
 });
 
-// 自定义时长切换
+// 自定义时长切换(显示/隐藏自定义输入框和单位选择器)
 var durSel = $("banDurationSelect");
 var customDur = $("banCustomDuration");
+var durUnit = $("banDurationUnit");
 if (durSel) durSel.addEventListener("change", function () {
-  customDur.style.display = this.value === "-1" ? "" : "none";
+  var isCustom = this.value === "-1";
+  customDur.style.display = isCustom ? "" : "none";
+  durUnit.style.display = isCustom ? "" : "none";
 });
 
 // 回车封禁
@@ -105,14 +131,19 @@ if (refreshBtn) refreshBtn.addEventListener("click", loadBanlist);
 
 // ===== 自动封禁开关 =====
 var autoBanToggle = $("autoBanToggle");
+var autoBanConfigArea = $("autoBanConfigArea");
 if (autoBanToggle) {
   // 加载当前状态
   api("/banlist/auto-ban").then(function (data) {
-    if (data.ok) autoBanToggle.checked = !!data.enabled;
+    if (data.ok) {
+      autoBanToggle.checked = !!data.enabled;
+      if (autoBanConfigArea) autoBanConfigArea.style.display = data.enabled ? "" : "none";
+    }
   }).catch(function () {});
   // 切换
   autoBanToggle.addEventListener("change", function () {
     var enabled = this.checked;
+    if (autoBanConfigArea) autoBanConfigArea.style.display = enabled ? "" : "none";
     api("/banlist/auto-ban", { method: "POST", body: JSON.stringify({ enabled: enabled }) })
       .then(function (data) {
         toast(enabled ? "自动封禁已开启" : "自动封禁已关闭", data.ok ? "ok" : "err");
@@ -121,3 +152,40 @@ if (autoBanToggle) {
       .catch(function (e) { toast("操作失败: " + (e.message || e), "err"); });
   });
 }
+
+// ===== 自动封禁参数配置 =====
+function loadAutoBanConfig() {
+  api("/banlist/auto-ban-config").then(function (data) {
+    if (!data.ok) return;
+    $("abWindowInput").value = data.window || 60;
+    $("abThresholdInput").value = data.threshold || 5;
+    $("abDurationInput").value = data.banDuration || 10;
+  }).catch(function () {});
+}
+loadAutoBanConfig();
+
+var abSaveBtn = $("abConfigSaveBtn");
+if (abSaveBtn) abSaveBtn.addEventListener("click", function () {
+  var window_ = parseInt($("abWindowInput").value, 10);
+  var threshold = parseInt($("abThresholdInput").value, 10);
+  var banDuration = parseInt($("abDurationInput").value, 10);
+  if (!window_ || window_ < 1) { toast("检测窗口至少为 1 秒", "err"); return; }
+  if (!threshold || threshold < 1) { toast("失败阈值至少为 1 次", "err"); return; }
+  if (banDuration < 0) { toast("封禁时长不能为负数", "err"); return; }
+  api("/banlist/auto-ban-config", {
+    method: "POST",
+    body: JSON.stringify({ window: window_, threshold: threshold, banDuration: banDuration })
+  }).then(function (data) {
+    if (data.ok) {
+      toast("自动封禁参数已保存", "ok");
+      // 更新提示文本
+      var hint = abSaveBtn.parentElement.nextElementSibling;
+      if (hint) {
+        var durText = banDuration === 0 ? "永久" : banDuration + " 分钟";
+        hint.textContent = "例: " + window_ + " 秒内失败 " + threshold + " 次 → 自动封禁 " + durText;
+      }
+    } else {
+      toast("保存失败", "err");
+    }
+  }).catch(function (e) { toast("操作失败: " + (e.message || e), "err"); });
+});

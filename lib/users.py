@@ -115,6 +115,15 @@ class UserManager:
                     data = json.load(f)
                 self._users = data.get("users", [])
                 if data.get("roles"):
+                    # 合并:确保新版本新增的权限不会因旧 users.json 而丢失
+                    for role_name, default_info in DEFAULT_ROLES.items():
+                        existing = data["roles"].get(role_name, {})
+                        existing_perms = set(existing.get("permissions", []))
+                        default_perms = set(default_info.get("permissions", []))
+                        merged = existing_perms | default_perms  # 并集,只增不减
+                        if merged != existing_perms:
+                            existing["permissions"] = sorted(merged)
+                        data["roles"][role_name] = existing
                     self._roles = data["roles"]
                 self._loaded = True
                 return

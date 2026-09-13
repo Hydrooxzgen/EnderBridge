@@ -430,8 +430,10 @@ button { font-family: inherit; }
 }
 #toast.ok { background: rgba(16, 185, 129, 0.15); color: var(--ok); border: 1px solid rgba(16,185,129,0.3); }
 #toast.err { background: rgba(244, 63, 94, 0.15); color: var(--danger); border: 1px solid rgba(244,63,94,0.3); }
+#toast.warn { background: rgba(239, 68, 68, 0.18); color: var(--danger); border: 1px solid rgba(239,68,68,0.35); }
 [data-theme="light"] #toast.ok { background: rgba(16, 185, 129, 0.1); }
 [data-theme="light"] #toast.err { background: rgba(244, 63, 94, 0.1); }
+[data-theme="light"] #toast.warn { background: rgba(239, 68, 68, 0.12); }
 
 /* 更新页面 */
 .release-badge {
