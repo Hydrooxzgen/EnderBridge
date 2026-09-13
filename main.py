@@ -36,7 +36,7 @@ for _fname in [
         except OSError:
             pass
 
-VERSION = "b0.4.1"
+VERSION = "b0.4.2 dev"
 MINIMIUM_ALLOWED_VERSION = "b0.4.0" # 因为b0.4.0版本大量重写了账户登录逻辑, 所以, 我设置了拒绝降级到b0.4.0-的版本
                                     # 但是如果你需要降级低于b0.4.0的版本，请更改这里的值为b0.0.0以删除限制
                                     # 但请注意，降级后若想重新升级至b0.4.0及以上版本, 程序不会自动创建admin账户默认密码
@@ -77,29 +77,8 @@ def _check_minimum_version(new_version: str) -> None:
 
 
 # ↓仅当不为None时从Github拉取更新日志, 反之则直接显示该变量内容。
-DESCRIPTION = None
-"""
-fix1: 修复仅本机访问开关无法关闭的BUG
-fix2: 修复无法绑定0.0.0.0的BUG
-feat1: 新增--description参数
-feat2: 新增一键添加防火墙排除项
-feat3: 修复在Termux中无法启动的BUG
-feat4: 新增banlist 添加服务器正被攻击提示, 并自动封禁(可选)--toast通知
-feat5: version_manager可以自动迁移配置文件
-fix3: 修复无法取消系统保留用户属性的bug
-feat6: banip新增封禁时间
-feat7: 在被封禁页面也显示解禁时间
-fix4: 防止is_banned()方法死锁
-feat8: 权限管理页面添加ban权限
-feat9: 可自定义封禁时间单位
-feat10: 可自定义自动封禁规则
-feat11: banip现在无法ban127.0.0.1
-fix5: 修复无法更改自己密码的bug
-feat12: 降级现在会被限制
-feat13: 审计日志完善
-feat14: 账户被禁用现在不计入密码输入错误总数
-fix6: 修复重置配置后不启动firstrun的bug
-fix7: 从OOBE中删除登录令牌输入框
+DESCRIPTION = """
+safefix1: 修复了14个漏洞
 """ 
 
 GITHUB_REPO = "Hydrooxzgen/EnderBridge"  # You can edit this to your own repository if you fork it :)
