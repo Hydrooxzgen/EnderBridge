@@ -207,7 +207,6 @@ def load_defaults() -> dict:
         "webuiPort": _get(cfg, "webuiConfig", "port", default=18888),
         "webuiToken": _get(cfg, "webuiConfig", "token", default=""),
         "webuiLocalOnly": _get(cfg, "webuiConfig", "localOnly", default=False),
-        "githubToken": cfg.get("githubToken", ""),
         "botEnabled": _get(cfg, "botConfig", "enabled", default=True),
         "botMode": _get(cfg, "botConfig", "mode", default="server"),
         "botHost": _get(cfg, "botConfig", "host", default="127.0.0.1"),
@@ -313,7 +312,6 @@ def save_config(f) -> None:
     cfg["wsConfig"]["port"] = int(f.get("port") or 8800)
     cfg["commandPrefix"] = str(f.get("commandPrefix") or "$")
     cfg["logLevel"] = str(f.get("logLevel") or "info")
-    cfg["githubToken"] = str(f.get("githubToken") or "")
 
     # --- AI 配置 ---
     cfg.setdefault("AIConfig", {})

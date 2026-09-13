@@ -778,46 +778,11 @@ class WebUIHandler(BaseHTTPRequestHandler):
                 expires_str = datetime.fromtimestamp(expires_ts).strftime("%Y-%m-%d %H:%M:%S")
             else:
                 expires_str = "永久"
-            html = f"""<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🚫 IP 已被封禁</title>
-<style>
-  * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-  body {{ min-height: 100vh; display: flex; align-items: center; justify-content: center;
-         background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-         color: #e0e0e0; }}
-  .card {{ background: rgba(255,255,255,0.06); backdrop-filter: blur(12px);
-           border: 1px solid rgba(255,255,255,0.1); border-radius: 16px;
-           padding: 48px 40px; max-width: 480px; width: 90%; text-align: center;
-           box-shadow: 0 8px 32px rgba(0,0,0,0.4); }}
-  .icon {{ font-size: 64px; margin-bottom: 16px; }}
-  h1 {{ font-size: 24px; font-weight: 700; color: #ff6b6b; margin-bottom: 12px; }}
-  .msg {{ font-size: 15px; color: #aaa; line-height: 1.6; margin-bottom: 24px; }}
-  .info {{ background: rgba(255,255,255,0.04); border-radius: 8px; padding: 16px;
-           text-align: left; font-size: 13px; color: #888; line-height: 1.8; }}
-  .info b {{ color: #ccc; }}
-  .footer {{ margin-top: 24px; font-size: 12px; color: #555; }}
-</style>
-</head>
-<body>
-<div class="card">
-  <div class="icon">🚫</div>
-  <h1>访问已被拒绝</h1>
-  <p class="msg">你的 IP 地址已被服务器封禁，无法访问此管理界面。</p>
-  <div class="info">
-    <div><b>封禁 IP：</b>{ip}</div>
-    <div><b>封禁原因：</b>{reason}</div>
-    <div><b>封禁时间：</b>{ban_time}</div>
-    <div><b>解禁时间：</b>{expires_str}</div>
-  </div>
-  <p class="footer">如需解除封禁，请联系服务器管理员。</p>
-</div>
-</body>
-</html>"""
+            # 从 ban.html 模板读取并填充动态数据
+            from string import Template
+            _ban_tpl = os.path.join(os.path.dirname(__file__), "ban.html")
+            with open(_ban_tpl, "r", encoding="utf-8") as _bf:
+                html = Template(_bf.read()).safe_substitute(ip=ip, reason=reason, ban_time=ban_time, expires_str=expires_str)
             try:
                 data = html.encode("utf-8")
                 self.send_response(403)

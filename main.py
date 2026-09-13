@@ -98,6 +98,7 @@ feat12: 降级现在会被限制
 feat13: 审计日志完善
 feat14: 账户被禁用现在不计入密码输入错误总数
 fix6: 修复重置配置后不启动firstrun的bug
+fix7: 从OOBE中删除登录令牌输入框
 """ 
 
 GITHUB_REPO = "Hydrooxzgen/EnderBridge"  # You can edit this to your own repository if you fork it :)
@@ -109,6 +110,7 @@ WANT_VIEW_VERSION = "--version" in sys.argv or "-v" in sys.argv
 WANT_SYSTEM_MODE = "--system" in sys.argv
 WANT_HELP = "--help" in sys.argv or "-h" in sys.argv
 WANT_VIEW_DESCRIPTION = "--description" in sys.argv
+WANT_GOTO_OOBE = "--goto-oobe" in sys.argv
 
 # ===== 依赖检测(必须早于任何第三方mod使用) ===== 
 # websockets 使用动态导入:缺失时自动运行 setup.py 安装,成功后继续启动。
@@ -234,6 +236,7 @@ if WANT_HELP:
     print("  --reset-all           一键重置所有配置")
     print("  --load-without-config 跳过配置直接启动(调试用)")
     print("  --system              启用系统保留账户模式")
+    print("  --goto-oobe           重新进入配置向导(保留当前配置)")
     print()
     print("示例:")
     print("  python main.py                           启动服务器")
@@ -388,11 +391,13 @@ if WANT_UPDATE:
                 pass
 
         # 2. 解压到临时目录(跳过数据区)
+        # config/ 整体跳过,但模板文件必须带入以保证目标实例可首次运行
+        _UPDATE_CONFIG_ALLOW = {"config/config.example.json", "config/permission.example.json", "config/users.example.json"}
         tmp = tempfile.mkdtemp(prefix="enderbridge_update_")
         try:
             for rel, fobj in _update_archive_members(archive):
                 top = rel.split("/", 1)[0]
-                if top in UPDATE_KEEP:
+                if top in UPDATE_KEEP and rel not in _UPDATE_CONFIG_ALLOW:
                     continue
                 target = os.path.join(tmp, *rel.split("/"))
                 os.makedirs(os.path.dirname(target), exist_ok=True)
@@ -413,7 +418,9 @@ if WANT_UPDATE:
                 for fname in filenames:
                     src = os.path.join(dirpath, fname)
                     dst = os.path.join(ROOT, rel_dir, fname)
-                    if rel_dir.split(os.sep)[0] in UPDATE_KEEP:
+                    # 计算相对路径用于模板白名单检查
+                    _rel_from_root = os.path.relpath(dst, ROOT).replace(os.sep, "/")
+                    if rel_dir.split(os.sep)[0] in UPDATE_KEEP and _rel_from_root not in _UPDATE_CONFIG_ALLOW:
                         continue
                     os.makedirs(os.path.dirname(dst), exist_ok=True)
                     shutil.copy2(src, dst)
@@ -857,6 +864,12 @@ if WANT_EXPORT:
         "config",
         "node_modules",  # Bot 的 npm 依赖(约 500MB),用户需自行 npm install
     }
+    # config/ 整体排除,但模板文件和权限模板必须随导出带出,否则目标实例无法首次运行
+    EXPORT_FORCE_INCLUDE = {
+        "config/config.example.json",
+        "config/permission.example.json",
+        "config/users.example.json",
+    }
     EXPORT_SKIP_DIRS = {"__pycache__"}
     EXPORT_SKIP_EXTS = {".pyc", ".pyo"}
 
@@ -900,6 +913,11 @@ if WANT_EXPORT:
         _export_err("输出路径不能位于项目目录内,请放到上级目录或指定其他位置")
 
     files = list(_iter_export_files())
+    # 强制包含模板文件(即使 config/ 整体被排除)
+    for force_rel in EXPORT_FORCE_INCLUDE:
+        force_abs = os.path.join(ROOT, force_rel)
+        if os.path.isfile(force_abs) and force_rel not in [f[0] for f in files]:
+            files.append((force_rel, force_abs))
     if not files:
         _export_err("未找到可导出的文件")
 
@@ -993,6 +1011,12 @@ if not wsConfig:
     except Exception:
         wsConfig = {}
 
+# 安全网:如果 ARGV_NOT_EXIST 阶段因某种原因未创建 config.json,此处兜底
+if not os.path.exists(CONFIG_JSON) and not os.path.exists(CONFIG_PY) and os.path.exists(CONFIG_EXAMPLE_JSON) and ARGV_NOT_EXIST:
+    import shutil as _shutil_cfg2
+    _shutil_cfg2.copy2(CONFIG_EXAMPLE_JSON, CONFIG_JSON)
+    print("未找到 config.json, 已根据模板自动生成默认配置(安全网)")
+
 # is_first_run 检测:JSON 优先
 is_first_run = _cfg.get("is_first_run", None)
 if is_first_run is None:
@@ -1003,12 +1027,16 @@ if is_first_run is None:
             is_first_run = _j.get("is_first_run", False)
         except Exception:
             is_first_run = False
+    elif os.path.exists(CONFIG_EXAMPLE_JSON):
+        # config.json 不存在或读取失败,从 config.example.json 兜底
+        try:
+            with open(CONFIG_EXAMPLE_JSON, "r", encoding="utf-8") as f:
+                _j = json.load(f)
+            is_first_run = _j.get("is_first_run", False)
+        except Exception:
+            is_first_run = False
     else:
         is_first_run = False
-
-
-    print("  运行 py main.py --downgrade-config 可降级回 Python 格式")
-    print("========================================")
 
 # --migrate-config: 将 config.py 迁移到 config.json
 if "--migrate-config" in sys.argv:
@@ -1027,6 +1055,22 @@ if "--downgrade-config" in sys.argv:
     else:
         print("降级失败: 未找到 config.json 或降级出错")
     sys.exit(0)
+
+# ===== 终极兜底:若 users.json 不存在,强制视为首次运行(向导会创建用户系统) =====
+USERS_JSON = os.path.join(CONFIG_DIR, "users.json")
+if not is_first_run and not os.path.exists(USERS_JSON):
+    is_first_run = True
+    # 同步写回 config.json,避免下次启动再次误判
+    if os.path.exists(CONFIG_JSON):
+        try:
+            with open(CONFIG_JSON, "r", encoding="utf-8") as f:
+                _j = json.load(f)
+            if not _j.get("is_first_run", False):
+                _j["is_first_run"] = True
+                with open(CONFIG_JSON, "w", encoding="utf-8") as f:
+                    json.dump(_j, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
 
 # ===== WebSocket 服务器 =====
 import websockets
@@ -1836,8 +1880,8 @@ if __name__ == "__main__":
     # 首次运行检查:is_first_run 为 True 时启动图形化配置向导(向导中可设置 Web 管理端口)
     # --load-without-config 模式跳过向导,直接使用默认配置运行
     # 放在 __main__ 块内:保证 import main 无副作用(CI 导入检查等场景可安全执行)
-    if is_first_run and not WANT_LOAD_WITHOUT_CONFIG:
-        shared.logger.info("检测到首次运行或是被更新/改动, 启动图形化配置向导...")
+    if (is_first_run or WANT_GOTO_OOBE) and not WANT_LOAD_WITHOUT_CONFIG:
+        shared.logger.info("检测到首次运行, 启动配置向导...")
         from lib.setup import start_setup_server
         try:
             asyncio.run(start_setup_server())

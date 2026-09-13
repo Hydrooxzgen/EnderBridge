@@ -4,8 +4,7 @@ __pycache__/
 .pytest_cache/
 .venv./
 .idea/
-logs/*
-config/
+logs/
 !config/config.example.json
 !config/permission.example.json
 !config/users.example.json
@@ -21,7 +20,6 @@ importtime.log
 mod/bot/node_modules/
 mod/bot/.minecraft/
 mod/bot/TheCandyBot/
-logs/
 CHANGELOG.md
 users.json
 security_audit.py
