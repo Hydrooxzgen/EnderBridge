@@ -17,7 +17,13 @@
     "enabled": true,
     "port": 18888,
     "token": "",
-    "localOnly": false
+    "localOnly": false,
+    "autoBan": true,
+    "autoBanConfig": {
+      "window": 60,
+      "threshold": 5,
+      "banDuration": 10
+    }
   },
   "logLevel": "info",
   "commandPrefix": "$",

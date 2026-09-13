@@ -7,6 +7,7 @@ var _PERM_META = [
   { key: "mods",      label: "🧩 Mod 管理" },
   { key: "console",   label: "💻 控制台" },
   { key: "permissions", label: "👥 权限管理" },
+  { key: "banlist",   label: "🚫 封禁管理" },
   { key: "audit",     label: "📋 审计日志" },
   { key: "update",    label: "🔄 检查更新" },
   { key: "restart",   label: "🔁 重启服务器" }
@@ -116,10 +117,10 @@ function loadUsers() {
       // 删除按钮(系统用户/系统保留账户不可删除)
       var delBtn = (isMe || isSystem || isReserved) ? ''
         : '<button class="btn btn-sm" style="color:var(--err)" onclick="deleteUser(\'' + escapeHtml(u.username) + '\')">🗑️</button>';
-      // 编辑按钮(非系统管理员不可编辑系统保留账户;不可编辑自己)
+      // 编辑按钮(非系统管理员不可编辑系统保留账户;自己始终可编辑以改密码)
       var isSystemAdmin = me.role === "admin" && me.system;
-      var editBtn = (isMe || (isReserved && !isSystemAdmin)) ? ''
-        : '<button class="btn btn-sm" onclick="editUser(\'' + escapeHtml(u.username) + '\')">✏️</button> ';
+      var editBtn = ((isReserved && !isSystemAdmin) ? ''
+        : '<button class="btn btn-sm" onclick="editUser(\'' + escapeHtml(u.username) + '\')">✏️</button> ');
       return '<tr>'
         + '<td>' + escapeHtml(u.username) + (isMe ? ' <span class="muted">(你)</span>' : '') + (isSystem ? ' <span class="muted">系统</span>' : '') + (u.system_reserved ? ' <span style="color:var(--accent);font-size:0.8em;" title="系统保留账户">🛡️</span>' : '') + '</td>'
         + '<td><span class="chip">' + escapeHtml(roleLabel) + '</span></td>'

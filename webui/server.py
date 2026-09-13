@@ -47,10 +47,11 @@ from lib.users import user_manager
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WEBUI_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(WEBUI_DIR, "static")
-CONFIG_JSON = os.path.join(ROOT, "config.json")
-CONFIG_PY = os.path.join(ROOT, "config.py")
-CONFIG_PY_BAK = os.path.join(ROOT, "config.py.bak")
-PERMISSION_JSON = os.path.join(ROOT, "permission.json")
+CONFIG_DIR = os.path.join(ROOT, "config")
+CONFIG_JSON = os.path.join(CONFIG_DIR, "config.json")
+CONFIG_PY = os.path.join(CONFIG_DIR, "config.py")
+CONFIG_PY_BAK = os.path.join(CONFIG_DIR, "config.py.bak")
+PERMISSION_JSON = os.path.join(CONFIG_DIR, "permission.json")
 # 仅作代码内兜底提示:真实版本由 main.py 启动时通过 set_app_info(main.VERSION) 注入,
 # 实际显示/更新检测均以 main.py 的 VERSION 为准,此处无需随发布同步更新。
 APP_VERSION = "b0.2.1"
@@ -109,18 +110,20 @@ def set_event_loop(loop):
 # 应用信息(main.py 注入):用于 Release Notes 获取
 _github_repo = ""    # e.g. "UserXYY123/EnderBridge"
 _app_version = APP_VERSION    # 初始为兜底值,set_app_info 后为 main.py 的真实 VERSION
+_minimum_version = ""  # 最低允许版本,低于此版本禁止升级
 _description = None  # 非 None 时直接用作 Release Notes,跳过 GitHub API
 _system_mode = False  # --system 启动时启用系统保留账户功能
 
 
-def set_app_info(github_repo: str, version: str, description=None) -> None:
+def set_app_info(github_repo: str, version: str, description=None, minimum_version: str = "") -> None:
     """注入应用信息:main.py 启动后调用,提供 GitHub 仓库名与当前版本
 
     description: 若提供(非 None),则 /api/release-notes 直接返回该内容,
     不再从 GitHub 拉取 Release 数据。"""
-    global _github_repo, _app_version, _description
+    global _github_repo, _app_version, _minimum_version, _description
     _github_repo = github_repo
     _app_version = version
+    _minimum_version = minimum_version
     _description = description
 
 
@@ -153,6 +156,16 @@ def _parse_version(ver: str) -> list:
 def _version_gt(a: str, b: str) -> bool:
     """判断版本 a 是否严格大于版本 b"""
     return _parse_version(a) > _parse_version(b)
+
+
+def _version_below_min(ver: str) -> bool:
+    """判断版本是否低于最低允许版本(低于则返回 True,禁止安装)"""
+    if not _minimum_version or not ver:
+        return False
+    try:
+        return _parse_version(ver) < _parse_version(_minimum_version)
+    except Exception:
+        return False
 
 
 
@@ -343,6 +356,8 @@ def load_config() -> dict:
             "enabled": webui.get("enabled", True),
             "port": webui.get("port", 18888),
             "token": webui.get("token", ""),
+            "localOnly": webui.get("localOnly", False),
+            "autoBan": webui.get("autoBan", True),
         },
         "ai": {
             "baseURL": (ai.get("options") or {}).get("baseURL", ""),
@@ -564,9 +579,7 @@ def save_config(new: dict) -> None:
     except Exception:
         pass
 
-    # 兼容：如果存在旧的 config.py，提示可删除
-    if os.path.exists(CONFIG_PY):
-        print("[Config] 配置已保存到 config.json，旧的 config.py 可手动删除")
+
 
 
 # ===== 权限读写 =====
@@ -681,6 +694,17 @@ def _require_permission(permission: str):
     return checker
 
 
+def _audit(handler, type_: str, message: str) -> None:
+    """写入审计日志(类型: ban/user/role/config/system/update/command)"""
+    try:
+        from lib.logger import audit_log
+        user = _auth_user(handler)
+        sender = user.get("username") or "Anonymous"
+        audit_log.append(type_, sender, message)
+    except Exception:
+        pass
+
+
 def _require_admin(handler) -> bool:
     """管理操作:仅 admin 角色可访问;访客返回 403,未授权返回 401(兼容旧代码)"""
     user = _auth_user(handler)
@@ -740,8 +764,40 @@ class WebUIHandler(BaseHTTPRequestHandler):
         except Exception:
             return {}
 
+    def _check_ban(self) -> bool:
+        """检查当前请求 IP 是否被封禁,被封禁则返回 True(已发送 403 HTML 页面)"""
+        from lib import banlist
+        ip = self.client_address[0] if self.client_address else ""
+        if banlist.is_banned(ip):
+            ban_info = banlist.list_bans().get(ip, {})
+            reason = ban_info.get("reason", "管理员封禁")
+            ban_time = ban_info.get("time", "未知")
+            expires_ts = ban_info.get("expires")
+            if expires_ts:
+                from datetime import datetime
+                expires_str = datetime.fromtimestamp(expires_ts).strftime("%Y-%m-%d %H:%M:%S")
+            else:
+                expires_str = "永久"
+            # 从 ban.html 模板读取并填充动态数据
+            from string import Template
+            _ban_tpl = os.path.join(os.path.dirname(__file__), "ban.html")
+            with open(_ban_tpl, "r", encoding="utf-8") as _bf:
+                html = Template(_bf.read()).safe_substitute(ip=ip, reason=reason, ban_time=ban_time, expires_str=expires_str)
+            try:
+                data = html.encode("utf-8")
+                self.send_response(403)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+            except (ConnectionAbortedError, BrokenPipeError, OSError):
+                pass
+            return True
+        return False
+
     # ---- 静态页面 ----
     def do_GET(self):
+        if self._check_ban(): return
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
 
@@ -800,6 +856,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if path == "/audit":
             self._serve_page("audit.html")
             return
+        if path == "/banlist":
+            self._serve_page("banlist.html")
+            return
         if path == "/api/audit-logs":
             self._api_audit_logs()
             return
@@ -818,12 +877,25 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if path == "/api/roles":
             self._api_roles_list()
             return
+        if path == "/api/banlist":
+            self._api_banlist_list()
+            return
+        if path == "/api/banlist/auto-ban":
+            self._api_banlist_auto_ban_status()
+            return
+        if path == "/api/banlist/auto-ban-config":
+            self._api_banlist_auto_ban_config_get()
+            return
         if path.startswith("/api/"):
             self._respond({"ok": False, "message": "Not Found"}, status=404)
+            return
+        if path == "/author":
+            self._respond({"ok": True, "author": "Hydrooxygen"})
             return
         self._serve_page("404.html")
 
     def do_PUT(self):
+        if self._check_ban(): return
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path == "/api/config":
             self._api_save_config()
@@ -840,6 +912,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
         self._respond({"ok": False, "message": "Not Found"}, status=404)
 
     def do_DELETE(self):
+        if self._check_ban(): return
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path == "/api/users":
             self._api_users_delete()
@@ -847,9 +920,13 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/roles":
             self._api_roles_delete()
             return
+        if parsed.path == "/api/banlist":
+            self._api_banlist_remove()
+            return
         self._respond({"ok": False, "message": "Not Found"}, status=404)
 
     def do_POST(self):
+        if self._check_ban(): return
         parsed = urllib.parse.urlparse(self.path)
         if parsed.path == "/api/auth":
             self._api_auth()
@@ -880,6 +957,21 @@ class WebUIHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/console":
             self._api_console()
+            return
+        if parsed.path == "/api/banlist":
+            self._api_banlist_add()
+            return
+        if parsed.path == "/api/banlist/auto-ban":
+            self._api_banlist_auto_ban_toggle()
+            return
+        if parsed.path == "/api/banlist/auto-ban-config":
+            self._api_banlist_auto_ban_config_set()
+            return
+        if parsed.path == "/api/banlist/edit":
+            self._api_banlist_edit()
+            return
+        if parsed.path == "/api/firewall":
+            self._api_firewall_add_rule()
             return
         if parsed.path == "/api/bot/xbox-login":
             self._api_bot_xbox_login()
@@ -996,6 +1088,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
                 "statusCode": body_data.get("statusCode"),
                 "statusMessage": body_data.get("statusMessage"),
             })
+            _audit(self, "command", f"执行了命令: {command}")
         except Exception as e:
             self._respond({"ok": False, "message": f"命令执行失败: {e}"})
 
@@ -1166,8 +1259,12 @@ class WebUIHandler(BaseHTTPRequestHandler):
             self._respond({"ok": False, "message": "请输入用户名"})
             return
 
+        ip = self.client_address[0] if self.client_address else ""
         result = user_manager.authenticate(username, password)
         if result["ok"]:
+            # 登录成功:清除失败记录
+            from lib import banlist
+            banlist.clear_auth_failures(ip)
             self._respond({
                 "ok": True,
                 "token": result["token"],
@@ -1177,13 +1274,33 @@ class WebUIHandler(BaseHTTPRequestHandler):
                 "system": result.get("system", False),
             })
         else:
-            self._respond({"ok": False, "message": result["message"]})
+            # 登录失败:记录并检查是否触发自动封禁
+            # 但"账户已禁用"不计入失败次数(防止被误封)
+            from lib import banlist
+            msg = result["message"]
+            if "禁用" not in msg:
+                fail_info = banlist.record_auth_failure(ip)
+                if fail_info["banned"]:
+                    abc = banlist.get_auto_ban_config()
+                    msg = f"登录失败次数过多,你的 IP 已被自动封禁(检测窗口: {abc['window']}秒, 封禁时长: {abc['banDuration']}分钟)"
+                elif fail_info["remaining"] > 0:
+                    msg = f"{msg}(登录失败记录: {fail_info['attempts']}/{banlist._FAIL_THRESHOLD})"
+            self._respond({"ok": False, "message": msg})
 
     # ---- 用户管理 API ----
 
     def _api_users_list(self) -> None:
-        """获取用户列表(仅 admin)"""
+        """获取用户列表(需 permissions 权限;未授权时仅返回当前用户自身信息)"""
         if not _require_permission("permissions")(self):
+            # 无 permissions 权限时,仅返回当前用户自身信息(用于改密码)
+            current = _auth_user(self)
+            username = current.get("username", "")
+            user = user_manager.get_user(username) if username else None
+            if user:
+                safe = {k: v for k, v in user.items() if k != "password_hash"}
+                self._respond({"ok": True, "users": [safe]})
+            else:
+                self._respond({"ok": True, "users": []})
             return
         self._respond({"ok": True, "users": user_manager.list_users()})
 
@@ -1209,12 +1326,12 @@ class WebUIHandler(BaseHTTPRequestHandler):
             permissions=body.get("permissions") or {},
             no_role_inherit=body.get("no_role_inherit", False),
         )
+        if result.get("ok"):
+            _audit(self, "user", f"创建了用户 {body.get('username', '').strip()} (角色: {body.get('role', 'viewer')})")
         self._respond(result)
 
     def _api_users_update(self) -> None:
         """更新用户(仅 admin;非 admin 编辑他人需验证 admin 密码)"""
-        if not _require_permission("permissions")(self):
-            return
         body = self._read_body()
         username = body.get("username", "").strip()
         if not username:
@@ -1223,6 +1340,10 @@ class WebUIHandler(BaseHTTPRequestHandler):
         current = _auth_user(self)
         is_system_admin = current.get("role") == "admin" and current.get("system")
         is_self = current.get("username") == username
+        target_user = user_manager.get_user(username)
+        # 修改他人需要 permissions 权限;修改自己只需登录即可
+        if not is_self and not _require_permission("permissions")(self):
+            return
         # 非系统管理员编辑他人:需验证 admin 密码
         if not is_system_admin and not is_self:
             admin_pw = body.get("admin_password", "")
@@ -1249,6 +1370,10 @@ class WebUIHandler(BaseHTTPRequestHandler):
             k: v for k, v in body.items()
             if k in ("password", "role", "enabled", "permissions", "no_role_inherit", "system_reserved") and (k != "password" or v)
         })
+        if result.get("ok"):
+            changes = [k for k in body if k in ("password", "role", "enabled", "permissions", "no_role_inherit", "system_reserved") and (k != "password" or body.get(k))]
+            action = "修改了自己" if is_self else f"更新了用户 {username}"
+            _audit(self, "user", f"{action} (字段: {', '.join(changes)})")
         self._respond(result)
 
     def _api_users_delete(self) -> None:
@@ -1272,12 +1397,12 @@ class WebUIHandler(BaseHTTPRequestHandler):
                 self._respond({"ok": False, "message": "admin 密码验证失败"})
                 return
         result = user_manager.delete_user(username)
+        if result.get("ok"):
+            _audit(self, "user", f"删除了用户 {username}")
         self._respond(result)
 
     def _api_roles_list(self) -> None:
-        """获取角色列表(仅 admin)"""
-        if not _require_permission("permissions")(self):
-            return
+        """获取角色列表(所有登录用户可读;仅 admin 可写)"""
         self._respond({"ok": True, "roles": user_manager.get_roles()})
 
     def _api_roles_update(self) -> None:
@@ -1294,6 +1419,8 @@ class WebUIHandler(BaseHTTPRequestHandler):
             label=body.get("label"),
             permissions=body.get("permissions"),
         )
+        if result.get("ok"):
+            _audit(self, "role", f"更新了角色 {role_name}")
         self._respond(result)
 
     def _api_roles_create(self) -> None:
@@ -1308,6 +1435,8 @@ class WebUIHandler(BaseHTTPRequestHandler):
             self._respond({"ok": False, "message": "缺少角色名"})
             return
         result = user_manager.add_role(name, label=label or None, permissions=permissions)
+        if result.get("ok"):
+            _audit(self, "role", f"创建了角色 {name}")
         self._respond(result)
 
     def _api_roles_delete(self) -> None:
@@ -1320,6 +1449,8 @@ class WebUIHandler(BaseHTTPRequestHandler):
             self._respond({"ok": False, "message": "缺少角色名"})
             return
         result = user_manager.delete_role(name)
+        if result.get("ok"):
+            _audit(self, "role", f"删除了角色 {name}")
         self._respond(result)
 
     # ---- 当前用户信息 ----
@@ -1464,6 +1595,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
                 "html_url": latest.get("html_url", ""),
                 "published_at": latest.get("published_at", ""),
                 "update_available": _version_gt(latest_tag, _app_version),
+                "minimum_version": _minimum_version,
             })
         except urllib.error.HTTPError as e:
             msg = f"GitHub API 错误: {e.code}"
@@ -1502,8 +1634,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
                         a.get("name", "").endswith((".zip", ".tar.gz", ".tgz"))
                         for a in r.get("assets", [])
                     ),
+                    "below_min": _version_below_min(r.get("tag_name", "")),
                 })
-            self._respond({"ok": True, "releases": items, "page": page})
+            self._respond({"ok": True, "releases": items, "page": page, "minimum_version": _minimum_version})
         except urllib.error.HTTPError as e:
             msg = f"GitHub API 错误: {e.code}"
             if e.code == 403:
@@ -1526,6 +1659,14 @@ class WebUIHandler(BaseHTTPRequestHandler):
             if not _github_repo:
                 self._respond({"ok": False, "message": "未配置 GitHub 仓库信息"})
                 return
+            # 版本降级检查
+            try:
+                from main import _parse_version, MINIMIUM_ALLOWED_VERSION
+                if MINIMIUM_ALLOWED_VERSION and _parse_version(github_tag) < _parse_version(MINIMIUM_ALLOWED_VERSION):
+                    self._respond({"ok": False, "message": f"目标版本 {github_tag} 低于最低允许版本 {MINIMIUM_ALLOWED_VERSION},不允许降级"})
+                    return
+            except Exception:
+                pass
             try:
                 api_url = f"https://api.github.com/repos/{_github_repo}/releases/tags/{urllib.parse.quote(github_tag)}"
                 req = urllib.request.Request(api_url, headers=_github_headers())
@@ -1581,6 +1722,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
             self._respond({"ok": False, "message": f"更新触发失败: {e}"})
             return
         # 先发送成功响应,再触发重启(避免 destroy() 在响应发送前关闭连接)
+        _audit(self, "update", f"触发了更新 ({github_tag or os.path.basename(file_path)})")
         self._respond({"ok": True, "message": "服务器正在更新，更新完成后请点击仪表盘"})
         # 等待响应数据发送到浏览器后再触发重启
         import time
@@ -1655,12 +1797,32 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if not body or "config" not in body:
             self._respond({"ok": False, "message": "请求数据格式错误"})
             return
+        # 保存前记录 localOnly 和 port 状态
+        _old_cfg = _load_config_module().get("webuiConfig", {})
+        old_local_only = _old_cfg.get("localOnly", False)
+        old_port = int(_old_cfg.get("port") or 18888)
         try:
             save_config(body["config"])
         except Exception as e:
             self._respond({"ok": False, "message": f"保存失败: {e}"})
             return
-        self._respond({"ok": True, "message": "配置已保存(部分设置需重启服务器生效)"})
+        new_local_only = (body["config"].get("webui") or {}).get("localOnly", False)
+        # localOnly/port 变更时原地重启 WebUI 以重新绑定地址
+        new_port = int((body["config"].get("webui") or {}).get("port") or 18888)
+        need_restart = (bool(old_local_only) != bool(new_local_only)) or (int(old_port) != new_port)
+        _audit(self, "config", "保存了配置")
+        if need_restart:
+            # 先响应客户端,确保浏览器收到结果;再延迟重绑定(停止旧服务器会断开连接)
+            self._respond({"ok": True, "message": "配置已保存,WebUI 正在重新绑定..."})
+            def _deferred_restart():
+                time.sleep(0.3)
+                try:
+                    restart_webui()
+                except Exception:
+                    pass
+            threading.Thread(target=_deferred_restart, daemon=True).start()
+        else:
+            self._respond({"ok": True, "message": "配置已保存(部分设置需重启服务器生效)"})
 
     def _api_get_permissions(self) -> None:
         if not _require_permission("permissions")(self):
@@ -1757,6 +1919,184 @@ class WebUIHandler(BaseHTTPRequestHandler):
         except Exception as e:
             self._respond({"ok": False, "message": f"重载失败: {e}"})
 
+    def _api_firewall_add_rule(self) -> None:
+        """添加 Windows 防火墙入站规则,允许 WebUI 端口(需要 config 权限)"""
+        if not _require_permission("config")(self):
+            return
+        if sys.platform != "win32":
+            self._respond({"ok": False, "message": "此功能仅支持 Windows"})
+            return
+        webui = _load_config_module().get("webuiConfig", {})
+        port = int(webui.get("port") or 18888)
+        rule_name = f"EnderBridge WebUI ({port})"
+        # 尝试通过 netsh 添加防火墙规则
+        try:
+            import subprocess
+            result = subprocess.run(
+                [
+                    "netsh", "advfirewall", "firewall", "add", "rule",
+                    f"name={rule_name}",
+                    "dir=in", "action=allow", "protocol=TCP",
+                    f"localport={port}",
+                    "enable=yes",
+                ],
+                capture_output=True, text=True, timeout=10,
+            )
+            if result.returncode == 0 and "确定" in result.stdout or "ok" in result.stdout.lower():
+                self._respond({"ok": True, "message": f"已添加防火墙规则: {rule_name} (端口 {port})"})
+            else:
+                err = result.stdout.strip() + result.stderr.strip()
+                if "需要提升" in err or "Run as administrator" in err or "拒绝访问" in err or result.returncode == 5:
+                    self._respond({"ok": False, "message": "需要管理员权限,请在管理员终端中手动执行", "command": f'netsh advfirewall firewall add rule name="{rule_name}" dir=in action=allow protocol=TCP localport={port}'})
+                else:
+                    self._respond({"ok": False, "message": f"添加失败: {err}", "command": f'netsh advfirewall firewall add rule name="{rule_name}" dir=in action=allow protocol=TCP localport={port}'})
+        except Exception as e:
+            self._respond({"ok": False, "message": f"执行失败: {e}", "command": f'netsh advfirewall firewall add rule name="{rule_name}" dir=in action=allow protocol=TCP localport={port}'})
+
+    # ---- 封禁管理 API ----
+
+    def _api_banlist_list(self) -> None:
+        """获取封禁列表(需要 banlist 权限)"""
+        if not _require_permission("banlist")(self):
+            return
+        from lib import banlist
+        bans = banlist.list_bans()
+        # 统计自动封禁数量(用于仪表盘攻击警报)
+        auto_ban_count = sum(
+            1 for info in bans.values()
+            if (info.get("reason") or "").startswith("自动封禁")
+        )
+        self._respond({"ok": True, "bans": bans, "count": len(bans), "autoBanCount": auto_ban_count})
+
+    def _api_banlist_add(self) -> None:
+        """封禁 IP(需要 banlist 权限)"""
+        if not _require_permission("banlist")(self):
+            return
+        body = self._read_body()
+        ip = (body.get("ip") or "").strip()
+        reason = (body.get("reason") or "").strip()
+        duration = int(body.get("duration", 0))  # 分钟,0=永久
+        if not ip:
+            self._respond({"ok": False, "message": "请输入 IP 地址"})
+            return
+        # 基本格式校验
+        import re
+        if not re.match(r"^\d{1,3}(\.\d{1,3}){3}$", ip) and ":" not in ip:
+            self._respond({"ok": False, "message": f"无效的 IP 地址: {ip}"})
+            return
+        from lib import banlist
+        if ip in banlist._PROTECTED_IPS:
+            self._respond({"ok": False, "message": f"{ip} 是受保护的本地地址,无法封禁"})
+            return
+        if banlist.ban(ip, reason, duration=duration):
+            # 尝试断开该 IP 的现有连接
+            self._disconnect_banned_ip(ip)
+            dur_text = "永久" if duration <= 0 else f"{duration} 分钟"
+            _audit(self, "ban", f"封禁了 {ip} (原因: {reason or '无'}, 时长: {dur_text})")
+            self._respond({"ok": True, "message": f"已封禁 {ip}"})
+        else:
+            self._respond({"ok": False, "message": f"{ip} 已在封禁列表中"})
+
+    def _api_banlist_remove(self) -> None:
+        """解封 IP(需要 banlist 权限)"""
+        if not _require_permission("banlist")(self):
+            return
+        body = self._read_body()
+        ip = (body.get("ip") or "").strip()
+        if not ip:
+            self._respond({"ok": False, "message": "请输入 IP 地址"})
+            return
+        from lib import banlist
+        if banlist.unban(ip):
+            _audit(self, "ban", f"解封了 {ip}")
+            self._respond({"ok": True, "message": f"已解封 {ip}"})
+        else:
+            self._respond({"ok": False, "message": f"{ip} 不在封禁列表中"})
+
+    def _api_banlist_edit(self) -> None:
+        """修改封禁时长(需要 banlist 权限)"""
+        if not _require_permission("banlist")(self):
+            return
+        body = self._read_body()
+        ip = (body.get("ip") or "").strip()
+        duration = int(body.get("duration", 0))  # 分钟,0=永久
+        if not ip:
+            self._respond({"ok": False, "message": "请输入 IP 地址"})
+            return
+        from lib import banlist
+        if banlist.set_ban_duration(ip, duration):
+            dur_text = "永久" if duration <= 0 else f"{duration} 分钟"
+            _audit(self, "ban", f"修改了 {ip} 的封禁时长为 {dur_text}")
+            self._respond({"ok": True, "message": f"已将 {ip} 的封禁时长改为 {dur_text}"})
+        else:
+            self._respond({"ok": False, "message": f"{ip} 不在封禁列表中"})
+
+    def _disconnect_banned_ip(self, ip: str) -> None:
+        """断开指定 IP 的所有 WebSocket 连接"""
+        try:
+            from main import connections
+            import asyncio
+            for conn in list(connections):
+                remote = getattr(conn.ws, "remote_address", None)
+                if remote and remote[0] == ip:
+                    asyncio.ensure_future(conn.ws.close(1008, "你的 IP 已被封禁"))
+        except Exception:
+            pass
+
+    def _api_banlist_auto_ban_status(self) -> None:
+        """获取自动封禁开关状态"""
+        if not _require_permission("banlist")(self):
+            return
+        from lib import banlist
+        self._respond({"ok": True, "enabled": banlist.is_auto_ban_enabled()})
+
+    def _api_banlist_auto_ban_toggle(self) -> None:
+        """切换自动封禁开关"""
+        if not _require_permission("banlist")(self):
+            return
+        body = self._read_body()
+        enabled = body.get("enabled", True)
+        from lib import banlist
+        banlist.set_auto_ban(bool(enabled))
+        _audit(self, "config", f"{'启用了' if enabled else '关闭了'}自动封禁")
+        # 持久化到 config.json
+        try:
+            from lib.config_loader import get_config, save_config
+            cfg = get_config()
+            wb = cfg.setdefault("webuiConfig", {})
+            wb["autoBan"] = banlist.is_auto_ban_enabled()
+            save_config(cfg)
+        except Exception:
+            pass
+        self._respond({"ok": True, "enabled": banlist.is_auto_ban_enabled()})
+
+    def _api_banlist_auto_ban_config_get(self) -> None:
+        """获取自动封禁详细配置(window/threshold/duration)"""
+        if not _require_permission("banlist")(self):
+            return
+        from lib import banlist
+        self._respond({"ok": True, **banlist.get_auto_ban_config()})
+
+    def _api_banlist_auto_ban_config_set(self) -> None:
+        """更新自动封禁详细配置(window/threshold/duration)"""
+        if not _require_permission("banlist")(self):
+            return
+        body = self._read_body()
+        from lib import banlist
+        banlist.set_auto_ban_config(body)
+        _audit(self, "config", f"修改了自动封禁参数: 窗口={body.get('window','?')}秒, 阈值={body.get('threshold','?')}次, 时长={body.get('banDuration','?')}分钟")
+        # 同步到 config.json
+        try:
+            from lib.config_loader import get_config, save_config
+            cfg = get_config()
+            wb = cfg.setdefault("webuiConfig", {})
+            wb["autoBanConfig"] = banlist.get_auto_ban_config()
+            wb["autoBan"] = banlist.is_auto_ban_enabled()
+            save_config(cfg)
+        except Exception:
+            pass
+        self._respond({"ok": True, **banlist.get_auto_ban_config()})
+
     def _api_restart(self) -> None:
         """一键重启:触发主程序后台执行优雅关闭并重启进程(需要 restart 权限)"""
         if not _require_permission("restart")(self):
@@ -1764,6 +2104,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if _restart_handler is None:
             self._respond({"ok": False, "message": "重启处理器未注册(请通过 main.py 启动服务器)"})
             return
+        _audit(self, "system", "触发了服务器重启")
         try:
             _restart_handler()
         except Exception as e:
@@ -1901,6 +2242,15 @@ class _FastHTTPServer(ThreadingHTTPServer):
         self.server_name = socket.gethostname()
         self.server_port = port
 
+    def process_request(self, request, client_address):
+        """静默连接中断类错误,避免 Windows 上浏览器快速刷新/断开时打印 traceback"""
+        try:
+            super().process_request(request, client_address)
+        except Exception:
+            # ConnectionAbortedError / BrokenPipeError / ConnectionResetError
+            # 均为客户端提前断开导致,静默忽略
+            pass
+
     def handle_error(self, request, client_address):
         """静默连接断开类错误,避免 Ctrl+C / SSE 断开时打印 traceback"""
         import traceback as _tb
@@ -1983,4 +2333,26 @@ def stop_webui() -> None:
     if _instance:
         _instance.stop()
         _instance = None
+
+
+def restart_webui() -> bool:
+    """原地重启 Web 管理服务器(用于 localOnly/port 等需重绑定的设置变更,不重启整个进程)"""
+    global _instance
+    old_port = _instance.port if _instance else None
+    stop_webui()
+    ns = _load_config_module()
+    webui = ns.get("webuiConfig", {})
+    if not webui.get("enabled", True):
+        return False
+    port = int(webui.get("port") or 18888)
+    local_only = webui.get("localOnly", False)
+    _instance = WebUIServer(port)
+    if not _instance.start(local_only=local_only):
+        from lib import shared
+        shared.logger.warning(f"Web 管理端口 {port} 不可用,已跳过重启")
         _instance = None
+        return False
+    from lib import shared
+    bind_desc = "仅本机" if local_only else "所有接口"
+    shared.logger.info(f"Web 管理界面已重启: http://127.0.0.1:{_instance.port} ({bind_desc})")
+    return True

@@ -10,13 +10,13 @@ import importlib.util
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
-CONFIG_JSON = ROOT / "config.json"
-CONFIG_PY = ROOT / "config.py"
-CONFIG_EXAMPLE_JSON = ROOT / "config.example.json"
+CONFIG_DIR = ROOT / "config"
+CONFIG_JSON = CONFIG_DIR / "config.json"
+CONFIG_PY = CONFIG_DIR / "config.py"
+CONFIG_EXAMPLE_JSON = CONFIG_DIR / "config.example.json"
 
 # 版本常量（供外部引用）
 CURRENT_VERSION = "b0.3.6"
-LEGACY_VERSION_THRESHOLD = "b0.3.5"  # 此版本及以下使用 .py 格式
 
 
 def _get_current_version() -> str:
@@ -29,15 +29,6 @@ def _get_current_version() -> str:
     except ImportError:
         pass
     return CURRENT_VERSION
-
-
-def _is_legacy_version(version: str) -> bool:
-    """检查是否为旧版本（<= b0.3.5）"""
-    try:
-        from version_manager.detector import is_at_or_below
-        return is_at_or_below(version, LEGACY_VERSION_THRESHOLD)
-    except ImportError:
-        return "b0.3.5" >= version
 
 
 def _load_json_config(path: Path) -> dict:
@@ -85,13 +76,13 @@ def load_config() -> dict:
     # 启动时自动迁移（删除旧格式配置文件）
     auto_migrate_if_needed()
 
+    # 加载配置
     version = _get_current_version()
-    is_legacy = _is_legacy_version(version)
 
     # 1. 尝试加载 JSON 配置
     json_config = _load_json_config(CONFIG_JSON)
 
-    # 2. 尝试加载 Python 配置（兼容旧版本）
+    # 2. 尝试加载 Python 配置（兼容 b0.4.0）
     py_config = _load_py_config(CONFIG_PY)
 
     # 3. 合并配置
@@ -101,10 +92,6 @@ def load_config() -> dict:
     elif py_config:
         config = py_config
         config["_config_format"] = "py"
-        # 旧版本提醒
-        if is_legacy:
-            print(f"[Config] ⚠️ 检测到旧版本配置 (v{version} <= {LEGACY_VERSION_THRESHOLD})")
-            print("[Config] 建议迁移到 config.json 格式，详见 config.example.json")
     else:
         # 都没有，使用 JSON 示例配置
         config = _load_json_config(CONFIG_EXAMPLE_JSON)
@@ -112,7 +99,6 @@ def load_config() -> dict:
 
     # 确保版本信息
     config["_version"] = version
-    config["_is_legacy"] = is_legacy
 
     return config
 
@@ -121,16 +107,13 @@ def save_config(config: dict) -> bool:
     """保存配置到 JSON 文件"""
     try:
         # 移除内部字段
-        internal_keys = ["_config_format", "_version", "_is_legacy"]
+        internal_keys = ["_config_format", "_version"]
         save_data = {k: v for k, v in config.items() if k not in internal_keys}
         save_data["_version"] = CURRENT_VERSION
 
         with open(CONFIG_JSON, "w", encoding="utf-8") as f:
             json.dump(save_data, f, ensure_ascii=False, indent=2)
 
-        # 如果存在旧的 config.py，提示用户可删除
-        if CONFIG_PY.exists():
-            print(f"[Config] 配置已保存到 config.json，旧的 config.py 可手动删除")
         return True
     except Exception as e:
         print(f"[Config] 保存配置失败: {e}")
@@ -141,7 +124,7 @@ def auto_migrate_if_needed() -> bool:
     """启动时自动检测并迁移配置格式
 
     升级: config.py 存在且 config.json 不存在 -> 迁移到 JSON 并删除 config.py
-    降级: config.json 存在且 config.py 不存在且 config.json._version <= b0.3.5 -> 降级到 Python 并删除 config.json
+    (旧版本 Python 格式不再支持,不再做降级迁移)
 
     Returns:
         是否发生了迁移
@@ -163,25 +146,6 @@ def auto_migrate_if_needed() -> bool:
         else:
             print("[Config] 自动迁移失败")
             return False
-
-    # 降级: 只有 config.json，检查其 _version 字段是否为旧版本
-    if has_json and not has_py:
-        try:
-            with open(CONFIG_JSON, "r", encoding="utf-8") as f:
-                json_config = json.load(f)
-            json_version = json_config.get("_version", "")
-            from version_manager.detector import is_at_or_below
-            if is_at_or_below(json_version, LEGACY_VERSION_THRESHOLD):
-                print(f"[Config] 检测到旧版本 JSON 配置 (v{json_version})，自动降级到 config.py...")
-                from version_manager import migrate
-                if migrate("json", "py"):
-                    print("[Config] 自动降级完成，旧 config.json 已删除")
-                    return True
-                else:
-                    print("[Config] 自动降级失败")
-                    return False
-        except Exception as e:
-            print(f"[Config] 读取 config.json 版本失败: {e}")
 
     return False
 

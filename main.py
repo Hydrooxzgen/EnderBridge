@@ -14,22 +14,94 @@ from uuid import uuid4
 
 # 常量定义区
 ROOT = os.path.dirname(os.path.abspath(__file__))
-CONFIG_PY = os.path.join(ROOT, "config.py")
-CONFIG_JSON = os.path.join(ROOT, "config.json")
-CONFIG_EXAMPLE_JSON = os.path.join(ROOT, "config.example.json")
-VERSION = "b0.4.0"
+CONFIG_DIR = os.path.join(ROOT, "config")
+CONFIG_PY = os.path.join(CONFIG_DIR, "config.py")
+CONFIG_JSON = os.path.join(CONFIG_DIR, "config.json")
+CONFIG_EXAMPLE_JSON = os.path.join(CONFIG_DIR, "config.example.json")
+
+# ===== 自动迁移:将根目录下的旧配置文件移动到 config/ 目录 =====
+os.makedirs(CONFIG_DIR, exist_ok=True)
+# 清理根目录残留的旧配置文件(0.4.1+ 配置统一在 config/ 目录,旧文件直接删除不再迁移)
+for _fname in [
+    "config.py", "config.py.bak", "config.json", "config.json.bak",
+    "config.example.json",
+    "permission.json", "permission.json.bak", "permission.example.json",
+    "users.json", "users.example.json",
+    "banlist.json",
+]:
+    _old = os.path.join(ROOT, _fname)
+    if os.path.exists(_old):
+        try:
+            os.remove(_old)
+        except OSError:
+            pass
+
+VERSION = "b0.4.1"
+MINIMIUM_ALLOWED_VERSION = "b0.4.0" # 因为b0.4.0版本大量重写了账户登录逻辑, 所以, 我设置了拒绝降级到b0.4.0-的版本
+                                    # 但是如果你需要降级低于b0.4.0的版本，请更改这里的值为b0.0.0以删除限制
+                                    # 但请注意，降级后若想重新升级至b0.4.0及以上版本, 程序不会自动创建admin账户默认密码
+                                    # 你需要自己计算admin密码的哈希值并手动修改users.json (计算哈希值请使用tell_me_hash.py)
+                                    # 或者临时修改guest用户组为'admin'
+                                    # 否则, 你无法获取admin权限
+                                    # 注: 请一定在使用完该操作后把guest用户组重新改回'viewer', 否则任何人都可以使用guest账号获取admin权限!
+
+
+def _parse_version(v: str) -> tuple:
+    """解析版本号字符串(如 'b0.4.1 dev', 'b0.4.1')为可比较的元组 (0, 4, 1)"""
+    v = v.strip().split()[0]  # 去掉 ' dev' 等后缀
+    v = v.lstrip('bBvV')      # 去掉前缀 b/B/v/V
+    parts = v.split('.')
+    result = []
+    for p in parts:
+        try:
+            result.append(int(p))
+        except ValueError:
+            break
+    return tuple(result)
+
+
+def _check_minimum_version(new_version: str) -> None:
+    """检查新版本是否低于最低允许版本,是则中止升级"""
+    if not new_version or not MINIMIUM_ALLOWED_VERSION:
+        return
+    try:
+        new_ver = _parse_version(new_version)
+        min_ver = _parse_version(MINIMIUM_ALLOWED_VERSION)
+        if new_ver < min_ver:
+            _update_err(
+                f"目标版本 {new_version} 低于最低允许版本 {MINIMIUM_ALLOWED_VERSION},\n"
+                f"  不允许降级! 如需降级请手动修改 main.py 中的 MINIMIUM_ALLOWED_VERSION"
+            )
+    except Exception:
+        pass  # 版本格式异常时跳过检查,不阻塞升级
+
+
+# ↓仅当不为None时从Github拉取更新日志, 反之则直接显示该变量内容。
+DESCRIPTION = None
 """
-feat1: 在线玩家列表
-safefix1: 修复安全漏洞
-fix2: 完全使用EBC0.3.6格式配置文件, 丢弃0.1.0标准配置文件
-feat2: 日志实时查看器
-feat3: webui mod 管理页热重载按钮
-feat4: webui 权限精细化(用户名+bcrypt+角色权限)
-fix3: 修复$message指令无法使用的bug
-feat5: 新增py main.py --help(-h) 显示帮助信息
-feat6: 新建404页面 **并且更新到b0.4.0**
-"""
-DESCRIPTION = None # 仅当不为None时从Github拉取更新日志, 反之则直接显示该变量内容。
+fix1: 修复仅本机访问开关无法关闭的BUG
+fix2: 修复无法绑定0.0.0.0的BUG
+feat1: 新增--description参数
+feat2: 新增一键添加防火墙排除项
+feat3: 修复在Termux中无法启动的BUG
+feat4: 新增banlist 添加服务器正被攻击提示, 并自动封禁(可选)--toast通知
+feat5: version_manager可以自动迁移配置文件
+fix3: 修复无法取消系统保留用户属性的bug
+feat6: banip新增封禁时间
+feat7: 在被封禁页面也显示解禁时间
+fix4: 防止is_banned()方法死锁
+feat8: 权限管理页面添加ban权限
+feat9: 可自定义封禁时间单位
+feat10: 可自定义自动封禁规则
+feat11: banip现在无法ban127.0.0.1
+fix5: 修复无法更改自己密码的bug
+feat12: 降级现在会被限制
+feat13: 审计日志完善
+feat14: 账户被禁用现在不计入密码输入错误总数
+fix6: 修复重置配置后不启动firstrun的bug
+fix7: 从OOBE中删除登录令牌输入框
+""" 
+
 GITHUB_REPO = "Hydrooxzgen/EnderBridge"  # You can edit this to your own repository if you fork it :)
 WANT_RESET = "--reset-all" in sys.argv
 WANT_EXPORT = "export" in sys.argv
@@ -38,6 +110,8 @@ WANT_LOAD_WITHOUT_CONFIG = "--load-without-config" in sys.argv
 WANT_VIEW_VERSION = "--version" in sys.argv or "-v" in sys.argv
 WANT_SYSTEM_MODE = "--system" in sys.argv
 WANT_HELP = "--help" in sys.argv or "-h" in sys.argv
+WANT_VIEW_DESCRIPTION = "--description" in sys.argv
+WANT_GOTO_OOBE = "--goto-oobe" in sys.argv
 
 # ===== 依赖检测(必须早于任何第三方mod使用) ===== 
 # websockets 使用动态导入:缺失时自动运行 setup.py 安装,成功后继续启动。
@@ -69,7 +143,10 @@ if not WANT_RESET and not WANT_EXPORT and not _dependencies_ok():
 # 依赖 config.json 的模块(lib/logger.py、lib/utils.py、lib/mods.py 等)均为延迟加载,
 # 因此 config.json 缺失时(如 --reset-all 之后)可先在此根据模板自动补全,保证程序可启动。
 # 此阶段判断启动参数并执行对应操作
-if not WANT_RESET and not os.path.exists(CONFIG_PY) and not os.path.exists(CONFIG_JSON) and not WANT_VIEW_VERSION and not WANT_EXPORT:
+ARGV_NOT_EXIST = not WANT_RESET\
+and not WANT_VIEW_VERSION and not WANT_EXPORT \
+and not WANT_VIEW_DESCRIPTION and not WANT_HELP
+if  not os.path.exists(CONFIG_PY) and not os.path.exists(CONFIG_JSON) and ARGV_NOT_EXIST:
     # 优先生成 config.json, 若无模板则回退到 config.py
     if os.path.exists(CONFIG_EXAMPLE_JSON):
         import shutil as _shutil_cfg
@@ -89,9 +166,9 @@ if not WANT_RESET and not os.path.exists(CONFIG_PY) and not os.path.exists(CONFI
         print("未找到 config.json, 已根据模板自动生成默认配置(可在向导中修改)")
 
 # permission.json 缺失时从模板复制(权限系统依赖该文件)
-PERMISSION_JSON = os.path.join(ROOT, "permission.json")
-PERMISSION_EXAMPLE = os.path.join(ROOT, "permission.example.json")
-if not WANT_RESET and not os.path.exists(PERMISSION_JSON) and os.path.exists(PERMISSION_EXAMPLE) and not WANT_VIEW_VERSION and not WANT_EXPORT:
+PERMISSION_JSON = os.path.join(CONFIG_DIR, "permission.json")
+PERMISSION_EXAMPLE = os.path.join(CONFIG_DIR, "permission.example.json")
+if not os.path.exists(PERMISSION_JSON) and os.path.exists(PERMISSION_EXAMPLE) and ARGV_NOT_EXIST:
     with open(PERMISSION_EXAMPLE, "r", encoding="utf-8") as f:
         content = f.read()
     with open(PERMISSION_JSON, "w", encoding="utf-8") as f:
@@ -101,28 +178,29 @@ if not WANT_RESET and not os.path.exists(PERMISSION_JSON) and os.path.exists(PER
 # ===== 一键重置:python main.py --reset-all =====
 # 清除所有配置文件(不启动服务器),并将模板 config.example.json 的 is_first_run 复位为 True
 if WANT_RESET:
-    files = ["config.py", "config.py.bak", "config.json", "config.json.bak", "permission.json", "permission.json.bak", "users.json"]
+    files = ["config.py", "config.py.bak", "config.json", "config.json.bak", "permission.json", "permission.json.bak", "users.json", "banlist.json"]
     removed = []
+    # 同时清理 config/ 子目录和根目录的旧配置文件,防止启动时自动迁移将旧文件恢复
     for name in files:
-        p = os.path.join(ROOT, name)
-        if os.path.exists(p):
-            os.remove(p)
-            removed.append(name)
+        for base in (CONFIG_DIR, ROOT):
+            p = os.path.join(base, name)
+            if os.path.exists(p):
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
+                removed.append(name)
     # 复位模板标记,下次启动自动进入向导重新配置
-    for tpl_path, tpl_pattern, tpl_repl in [
-        (CONFIG_EXAMPLE_JSON, r'"is_first_run"\s*:\s*(true|false)', '"is_first_run": true'),
-    ]:
-        try:
-            if not os.path.exists(tpl_path):
-                continue
-            with open(tpl_path, "r", encoding="utf-8") as f:
-                src = f.read()
-            next_ = re.sub(tpl_pattern, tpl_repl, src)
-            if next_ != src:
-                with open(tpl_path, "w", encoding="utf-8") as f:
-                    f.write(next_)
-        except Exception:
-            pass
+    try:
+        if os.path.exists(CONFIG_EXAMPLE_JSON):
+            with open(CONFIG_EXAMPLE_JSON, "r", encoding="utf-8") as f:
+                tpl = json.load(f)
+            if not tpl.get("is_first_run", False):
+                tpl["is_first_run"] = True
+                with open(CONFIG_EXAMPLE_JSON, "w", encoding="utf-8") as f:
+                    json.dump(tpl, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
     print("========================================")
     print("  配置已重置")
     print("========================================")
@@ -131,6 +209,14 @@ if WANT_RESET:
 # 查看版本并退出
 if WANT_VIEW_VERSION:
     print(f"EnderBridge {VERSION}")
+    sys.exit(0)
+
+# 显示描述并退出
+if WANT_VIEW_DESCRIPTION:
+    if DESCRIPTION is not None:
+        print(DESCRIPTION)
+    else:
+        print(f"No description available. Please check the GitHub repository for more information.")
     sys.exit(0)
 
 # 显示帮助并退出
@@ -151,6 +237,7 @@ if WANT_HELP:
     print("  --reset-all           一键重置所有配置")
     print("  --load-without-config 跳过配置直接启动(调试用)")
     print("  --system              启用系统保留账户模式")
+    print("  --goto-oobe           重新进入配置向导(保留当前配置)")
     print()
     print("示例:")
     print("  python main.py                           启动服务器")
@@ -177,12 +264,7 @@ if WANT_UPDATE:
         "logs",
         "resources",
         "structures",
-        "config.py",
-        "config.py.bak",
-        "config.json",
-        "permission.json",
-        "permission.json.bak",
-        "users.json",
+        "config",
     }
 
     def _load_github_token() -> str:
@@ -294,12 +376,29 @@ if WANT_UPDATE:
         if "main.py" not in members:
             _update_err("无法识别此更新包, 请确保你选择的是EnderBridge压缩包")
 
+        # 1.5 版本降级检查:从压缩包中读取新版本号并与最低允许版本比较
+        _check_minimum_version(new_version or "")
+        # 如果 new_version 未提供,尝试从压缩包的 main.py 中提取
+        if not new_version:
+            try:
+                for rel, fobj in _update_archive_members(archive):
+                    if rel == "main.py" and fobj is not None:
+                        _src = fobj.read().decode("utf-8", errors="replace")
+                        _m = re.search(r'^VERSION\s*=\s*"([^"]+)"', _src, re.MULTILINE)
+                        if _m:
+                            _check_minimum_version(_m.group(1))
+                        break
+            except Exception:
+                pass
+
         # 2. 解压到临时目录(跳过数据区)
+        # config/ 整体跳过,但模板文件必须带入以保证目标实例可首次运行
+        _UPDATE_CONFIG_ALLOW = {"config/config.example.json", "config/permission.example.json", "config/users.example.json"}
         tmp = tempfile.mkdtemp(prefix="enderbridge_update_")
         try:
             for rel, fobj in _update_archive_members(archive):
                 top = rel.split("/", 1)[0]
-                if top in UPDATE_KEEP:
+                if top in UPDATE_KEEP and rel not in _UPDATE_CONFIG_ALLOW:
                     continue
                 target = os.path.join(tmp, *rel.split("/"))
                 os.makedirs(os.path.dirname(target), exist_ok=True)
@@ -320,7 +419,9 @@ if WANT_UPDATE:
                 for fname in filenames:
                     src = os.path.join(dirpath, fname)
                     dst = os.path.join(ROOT, rel_dir, fname)
-                    if rel_dir.split(os.sep)[0] in UPDATE_KEEP:
+                    # 计算相对路径用于模板白名单检查
+                    _rel_from_root = os.path.relpath(dst, ROOT).replace(os.sep, "/")
+                    if rel_dir.split(os.sep)[0] in UPDATE_KEEP and _rel_from_root not in _UPDATE_CONFIG_ALLOW:
                         continue
                     os.makedirs(os.path.dirname(dst), exist_ok=True)
                     shutil.copy2(src, dst)
@@ -350,7 +451,7 @@ if WANT_UPDATE:
             # 6. 重新生成 requirements.txt 缺失依赖的自动安装由下次启动完成
             print("========================================")
             print("  升级完成!")
-            print("  已保留: config.py / permission.json 等设置与用户数据")
+            print("  已保留: config/ 目录等设置与用户数据")
             print("  请重新启动: py -B main.py")
             print("========================================")
         finally:
@@ -635,8 +736,10 @@ if os.path.isfile(UPDATE_MARKER) and not WANT_UPDATE:
         # 复用 UPDATE_KEEP(如果 WANT_UPDATE 已定义)或使用默认值
         _keep = locals().get("UPDATE_KEEP", {
             ".git", "logs", "resources", "structures",
-            "config.py", "config.py.bak", "permission.json", "permission.json.bak",
+            "config",
         })
+        # config/ 整体跳过,但模板文件必须带入(与命令行 update 保持一致)
+        _webui_config_allow = {"config/config.example.json", "config/permission.example.json", "config/users.example.json"}
 
         print("========================================")
         print(f"  WebUI 触发更新: {pending_path}")
@@ -673,7 +776,7 @@ if os.path.isfile(UPDATE_MARKER) and not WANT_UPDATE:
                         if not rel:
                             continue
                         top = rel.split("/", 1)[0]
-                        if top in _keep:
+                        if top in _keep and rel not in _webui_config_allow:
                             continue
                         target = os.path.join(tmp, *rel.split("/"))
                         os.makedirs(os.path.dirname(target), exist_ok=True)
@@ -696,7 +799,7 @@ if os.path.isfile(UPDATE_MARKER) and not WANT_UPDATE:
                         if not rel:
                             continue
                         top = rel.split("/", 1)[0]
-                        if top in _keep:
+                        if top in _keep and rel not in _webui_config_allow:
                             continue
                         target = os.path.join(tmp, *rel.split("/"))
                         os.makedirs(os.path.dirname(target), exist_ok=True)
@@ -720,7 +823,8 @@ if os.path.isfile(UPDATE_MARKER) and not WANT_UPDATE:
                     src = os.path.join(dirpath, fname)
                     dst = os.path.join(ROOT, rel_dir, fname)
                     top = rel_dir.split(os.sep)[0]
-                    if top in _keep:
+                    _rel_from_root = os.path.relpath(dst, ROOT).replace(os.sep, "/")
+                    if top in _keep and _rel_from_root not in _webui_config_allow:
                         continue
                     os.makedirs(os.path.dirname(dst), exist_ok=True)
                     shutil.copy2(src, dst)
@@ -761,13 +865,14 @@ if WANT_EXPORT:
         "logs",
         "resources",
         "structures",
-        "config.py",
-        "config.py.bak",
-        "config.json",
-        "permission.json",
-        "permission.json.bak",
-        "users.json",
+        "config",
         "node_modules",  # Bot 的 npm 依赖(约 500MB),用户需自行 npm install
+    }
+    # config/ 整体排除,但模板文件和权限模板必须随导出带出,否则目标实例无法首次运行
+    EXPORT_FORCE_INCLUDE = {
+        "config/config.example.json",
+        "config/permission.example.json",
+        "config/users.example.json",
     }
     EXPORT_SKIP_DIRS = {"__pycache__"}
     EXPORT_SKIP_EXTS = {".pyc", ".pyo"}
@@ -812,6 +917,11 @@ if WANT_EXPORT:
         _export_err("输出路径不能位于项目目录内,请放到上级目录或指定其他位置")
 
     files = list(_iter_export_files())
+    # 强制包含模板文件(即使 config/ 整体被排除)
+    for force_rel in EXPORT_FORCE_INCLUDE:
+        force_abs = os.path.join(ROOT, force_rel)
+        if os.path.isfile(force_abs) and force_rel not in [f[0] for f in files]:
+            files.append((force_rel, force_abs))
     if not files:
         _export_err("未找到可导出的文件")
 
@@ -834,8 +944,8 @@ if WANT_EXPORT:
     # export -clear:导出后自动执行 reset-all
     if WANT_EXPORT_CLEAR:
         print("  正在执行 --reset-all ...")
-        for name in ["config.py", "config.py.bak", "permission.json", "permission.json.bak", "users.json"]:
-            p = os.path.join(ROOT, name)
+        for name in ["config.py", "config.py.bak", "config.json", "config.json.bak", "permission.json", "permission.json.bak", "users.json", "banlist.json"]:
+            p = os.path.join(CONFIG_DIR, name)
             if os.path.exists(p):
                 os.remove(p)
         # 复位 JSON 模板标记
@@ -866,6 +976,8 @@ try:
 except Exception:
     _cfg = {}
     _cfg_format = "py"
+
+
 
 # 兼容路径适配函数:JSON 格式下 basePath/resolvePath 不存在,直接使用相对路径
 try:
@@ -903,6 +1015,12 @@ if not wsConfig:
     except Exception:
         wsConfig = {}
 
+# 安全网:如果 ARGV_NOT_EXIST 阶段因某种原因未创建 config.json,此处兜底
+if not os.path.exists(CONFIG_JSON) and not os.path.exists(CONFIG_PY) and os.path.exists(CONFIG_EXAMPLE_JSON) and ARGV_NOT_EXIST:
+    import shutil as _shutil_cfg2
+    _shutil_cfg2.copy2(CONFIG_EXAMPLE_JSON, CONFIG_JSON)
+    print("未找到 config.json, 已根据模板自动生成默认配置(安全网)")
+
 # is_first_run 检测:JSON 优先
 is_first_run = _cfg.get("is_first_run", None)
 if is_first_run is None:
@@ -913,18 +1031,16 @@ if is_first_run is None:
             is_first_run = _j.get("is_first_run", False)
         except Exception:
             is_first_run = False
+    elif os.path.exists(CONFIG_EXAMPLE_JSON):
+        # config.json 不存在或读取失败,从 config.example.json 兜底
+        try:
+            with open(CONFIG_EXAMPLE_JSON, "r", encoding="utf-8") as f:
+                _j = json.load(f)
+            is_first_run = _j.get("is_first_run", False)
+        except Exception:
+            is_first_run = False
     else:
         is_first_run = False
-
-# 旧版本配置迁移提醒
-if _cfg.get("_is_legacy", False) and _cfg.get("_config_format") == "py":
-    _ver = _cfg.get("_version", "unknown")
-    print("========================================")
-    print(f"  当前配置为旧版本格式 (v{_ver})")
-    print("  建议迁移到 config.json 格式以获得更好支持")
-    print("  运行 py main.py --migrate-config 可自动迁移")
-    print("  运行 py main.py --downgrade-config 可降级回 Python 格式")
-    print("========================================")
 
 # --migrate-config: 将 config.py 迁移到 config.json
 if "--migrate-config" in sys.argv:
@@ -943,6 +1059,22 @@ if "--downgrade-config" in sys.argv:
     else:
         print("降级失败: 未找到 config.json 或降级出错")
     sys.exit(0)
+
+# ===== 终极兜底:若 users.json 不存在,强制视为首次运行(向导会创建用户系统) =====
+USERS_JSON = os.path.join(CONFIG_DIR, "users.json")
+if not is_first_run and not os.path.exists(USERS_JSON):
+    is_first_run = True
+    # 同步写回 config.json,避免下次启动再次误判
+    if os.path.exists(CONFIG_JSON):
+        try:
+            with open(CONFIG_JSON, "r", encoding="utf-8") as f:
+                _j = json.load(f)
+            if not _j.get("is_first_run", False):
+                _j["is_first_run"] = True
+                with open(CONFIG_JSON, "w", encoding="utf-8") as f:
+                    json.dump(_j, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
 
 # ===== WebSocket 服务器 =====
 import websockets
@@ -964,6 +1096,17 @@ async def connection_handler(ws):
     global connections
     # 获取客户端 IP
     client_ip = ws.remote_address[0] if ws.remote_address else "unknown"
+
+    # 封禁检查:拒绝已封禁 IP 的连接
+    from lib import banlist
+    if banlist.is_banned(client_ip):
+        shared.logger.warning(f"封禁连接被拒绝: {client_ip}")
+        try:
+            await ws.close(1008, "你的 IP 已被封禁")
+        except Exception:
+            pass
+        return
+
     shared.logger.info(f"客户端 {client_ip} 已连接")
     from lib.logger import audit_log
     audit_log.append("connect", client_ip, "客户端已连接")
@@ -1195,6 +1338,11 @@ def _start_webui() -> None:
         # 加载用户系统(首次运行/升级时自动创建 admin + guest)
         from lib.users import user_manager
         user_manager.load()
+        # 加载 IP 封禁列表
+        from lib import banlist
+        banlist.load()
+        # 从配置加载自动封禁参数(window/threshold/duration)和开关
+        banlist.load_auto_ban_config()
         # 首次运行或升级:打印 admin 凭证到终端
         if user_manager._first_run_password:
             admin_pw = user_manager._first_run_password
@@ -1209,7 +1357,7 @@ def _start_webui() -> None:
         set_status_provider(_webui_status)
         set_restart_handler(_request_restart)
         set_event_loop(asyncio.get_running_loop())
-        set_app_info(GITHUB_REPO, VERSION, DESCRIPTION)
+        set_app_info(GITHUB_REPO, VERSION, DESCRIPTION, minimum_version=MINIMIUM_ALLOWED_VERSION)
         set_system_mode(WANT_SYSTEM_MODE)
         start_webui()
     except Exception as error:
@@ -1736,8 +1884,8 @@ if __name__ == "__main__":
     # 首次运行检查:is_first_run 为 True 时启动图形化配置向导(向导中可设置 Web 管理端口)
     # --load-without-config 模式跳过向导,直接使用默认配置运行
     # 放在 __main__ 块内:保证 import main 无副作用(CI 导入检查等场景可安全执行)
-    if is_first_run and not WANT_LOAD_WITHOUT_CONFIG:
-        shared.logger.info("检测到首次运行或是被更新/改动, 启动图形化配置向导...")
+    if (is_first_run or WANT_GOTO_OOBE) and not WANT_LOAD_WITHOUT_CONFIG:
+        shared.logger.info("检测到首次运行, 启动配置向导...")
         from lib.setup import start_setup_server
         try:
             asyncio.run(start_setup_server())

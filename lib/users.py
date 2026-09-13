@@ -16,7 +16,8 @@ import time
 from typing import Optional
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-USERS_JSON = os.path.join(ROOT, "users.json")
+CONFIG_DIR = os.path.join(ROOT, "config")
+USERS_JSON = os.path.join(CONFIG_DIR, "users.json")
 
 # ===== bcrypt 可选依赖 =====
 try:
@@ -34,7 +35,7 @@ def hash_password(password: str) -> str:
     # PBKDF2-SHA256 回退(stdlib,无额外依赖)
     salt = secrets.token_hex(16)
     dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 260000)
-    return f"pbkdf2:256:{salt}:{dk.hex()}"
+    return f"pbkdf2:sha256:{salt}:{dk.hex()}"
 
 
 def verify_password(password: str, password_hash: str) -> bool:
@@ -49,7 +50,9 @@ def verify_password(password: str, password_hash: str) -> bool:
         parts = password_hash.split(":")
         if len(parts) == 4:
             _, algo, salt, stored_hex = parts
-            dk = hashlib.pbkdf2_hmac(algo, password.encode("utf-8"), salt.encode("utf-8"), 260000)
+            # 兼容旧格式: 存储时误用 "256" 而非 "sha256"
+            digest = "sha256" if algo == "256" else algo
+            dk = hashlib.pbkdf2_hmac(digest, password.encode("utf-8"), salt.encode("utf-8"), 260000)
             return dk.hex() == stored_hex
     return False
 
@@ -61,13 +64,13 @@ DEFAULT_ROLES = {
         "label": "管理员",
         "permissions": [
             "dashboard", "config", "mods", "console",
-            "permissions", "audit", "update", "restart",
+            "permissions", "banlist", "audit", "update", "restart",
         ],
     },
     "operator": {
         "label": "操作员",
         "permissions": [
-            "dashboard", "mods", "console", "audit",
+            "dashboard", "mods", "console", "banlist", "audit",
         ],
     },
     "viewer": {
@@ -81,7 +84,7 @@ DEFAULT_ROLES = {
 # 所有可能的权限
 ALL_PERMISSIONS = [
     "dashboard", "config", "mods", "console",
-    "permissions", "audit", "update", "restart",
+    "permissions", "banlist", "audit", "update", "restart",
 ]
 
 
@@ -112,6 +115,15 @@ class UserManager:
                     data = json.load(f)
                 self._users = data.get("users", [])
                 if data.get("roles"):
+                    # 合并:确保新版本新增的权限不会因旧 users.json 而丢失
+                    for role_name, default_info in DEFAULT_ROLES.items():
+                        existing = data["roles"].get(role_name, {})
+                        existing_perms = set(existing.get("permissions", []))
+                        default_perms = set(default_info.get("permissions", []))
+                        merged = existing_perms | default_perms  # 并集,只增不减
+                        if merged != existing_perms:
+                            existing["permissions"] = sorted(merged)
+                        data["roles"][role_name] = existing
                     self._roles = data["roles"]
                 self._loaded = True
                 return
@@ -154,8 +166,8 @@ class UserManager:
         """尝试从旧配置读取 webuiConfig.token"""
         try:
             ns = {}
-            config_json = os.path.join(ROOT, "config.json")
-            config_py = os.path.join(ROOT, "config.py")
+            config_json = os.path.join(CONFIG_DIR, "config.json")
+            config_py = os.path.join(CONFIG_DIR, "config.py")
             if os.path.exists(config_json):
                 with open(config_json, "r", encoding="utf-8") as f:
                     ns = json.load(f)

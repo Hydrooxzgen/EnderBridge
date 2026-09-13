@@ -7,6 +7,7 @@ from pathlib import Path
 
 # 项目根目录
 ROOT = Path(__file__).parent.parent
+CONFIG_DIR = ROOT / "config"
 
 
 def parse_version(ver: str) -> tuple:
@@ -80,7 +81,7 @@ def detect_version() -> str:
         return v
 
     # 3. config.json 中的 _version
-    cj = ROOT / "config.json"
+    cj = CONFIG_DIR / "config.json"
     if cj.exists():
         try:
             with open(cj, "r", encoding="utf-8") as f:
@@ -99,9 +100,9 @@ def get_config_format() -> str:
 
     返回: "json" | "py" | "none"
     """
-    if (ROOT / "config.json").exists():
+    if (CONFIG_DIR / "config.json").exists():
         return "json"
-    if (ROOT / "config.py").exists():
+    if (CONFIG_DIR / "config.py").exists():
         return "py"
     return "none"
 
@@ -109,3 +110,6 @@ def get_config_format() -> str:
 def is_at_or_below(version: str, threshold: str) -> bool:
     """检查版本是否 <= 阈值"""
     return compare_versions(version, threshold) <= 0
+
+
+

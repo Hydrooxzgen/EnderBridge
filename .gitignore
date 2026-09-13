@@ -4,13 +4,10 @@ __pycache__/
 .pytest_cache/
 .venv./
 .idea/
-logs/*
-permission.json
-permission.json.bak
-config.json
-config.json.bak
-config.py
-config.py.bak
+logs/
+!config/config.example.json
+!config/permission.example.json
+!config/users.example.json
 # 资源目录: 忽略用户内容,保留目录结构(.gitkeep 占位)
 resources/midi/*
 resources/mcfunc/*
@@ -23,6 +20,6 @@ importtime.log
 mod/bot/node_modules/
 mod/bot/.minecraft/
 mod/bot/TheCandyBot/
-logs/
 CHANGELOG.md
 users.json
+security_audit.py

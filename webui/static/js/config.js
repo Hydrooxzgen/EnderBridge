@@ -124,7 +124,7 @@ function loadConfig() {
 
     $("cfg-webui").checked = webui.enabled !== false;
     $("cfg-webport").value = webui.port || 18888;
-    $("cfg-weblockal").checked = webui.localOnly !== false;
+    $("cfg-weblockal").checked = webui.localOnly === true || webui.localOnly === "true";
     toggleSub("webuiFields", $("cfg-webui").checked);
 
     $("cfg-github-token").value = data.config.githubToken || "";
@@ -608,3 +608,30 @@ function saveConfig() {
 
 var cs1 = $("configSave"); if (cs1) cs1.addEventListener("click", saveConfig);
 var cs2 = $("configSave2"); if (cs2) cs2.addEventListener("click", saveConfig);
+
+// ===== 防火墙放行 =====
+var fwBtn = $("cfg-addFirewall");
+if (fwBtn) fwBtn.addEventListener("click", function () {
+  fwBtn.disabled = true;
+  fwBtn.textContent = "⏳ 添加中...";
+  api("/firewall", { method: "POST" })
+    .then(function (data) {
+      if (data.ok) {
+        toast(data.message, "ok");
+      } else {
+        toast(data.message, "err");
+        if (data.command) {
+          navigator.clipboard.writeText(data.command).then(function () {
+            toast("命令已复制到剪贴板,请在管理员终端中粘贴执行", "ok");
+          }).catch(function () {
+            toast("请手动复制命令: " + data.command, "err");
+          });
+        }
+      }
+    })
+    .catch(function (e) { toast("请求失败: " + (e.message || e), "err"); })
+    .finally(function () {
+      fwBtn.disabled = false;
+      fwBtn.textContent = "🛡️ 一键放行防火墙";
+    });
+});

@@ -501,9 +501,7 @@ button[type=submit]:disabled { opacity: 0.7; cursor: wait; transform: none; }
             <p class="hint">关闭后绑定 0.0.0.0，允许局域网/远程设备访问。建议配合管理令牌使用。</p>
             <p class="hint">每次启动时监听该端口，可在浏览器中管理权限、功能开关与仪表盘。</p>
           </div>
-          <label for="githubToken">GitHub API Token（可选）</label>
-          <input id="githubToken" name="githubToken" type="password" autocomplete="off" placeholder="ghp_... 或留空">
-          <p class="hint">用于减少 GitHub API 速率限制。在 <a href="https://github.com/settings/tokens" target="_blank" style="color:#818cf8">github.com/settings/tokens</a> 创建，只需 public_repo 读取权限。⚠️ 请勿泄露此 Token。</p>
+
           <div class="grid">
             <div><label for="sapiGmsg">SAPI 群聊指令</label><input id="sapiGmsg" name="sapiGmsg" type="text"></div>
             <div><label for="sapiSmsg">SAPI 私聊指令</label><input id="sapiSmsg" name="sapiSmsg" type="text"></div>
@@ -714,7 +712,6 @@ function fill() {
   $("webuiPort").value = DEFAULTS.webuiPort;
   $("webuiToken").value = DEFAULTS.webuiToken;
   $("webuiLocalOnly").checked = DEFAULTS.webuiLocalOnly !== false;
-  $("githubToken").value = DEFAULTS.githubToken || "";
   $("botEnabled").checked = DEFAULTS.botEnabled !== false;
   var botMode = DEFAULTS.botMode || "server";
   $("botModeServer").checked = botMode === "server";
@@ -781,7 +778,6 @@ document.getElementById("cfg").addEventListener("submit", function (e) {
     webuiPort: parseInt($("webuiPort").value, 10),
     webuiToken: $("webuiToken").value.trim(),
     webuiLocalOnly: $("webuiLocalOnly").checked,
-    githubToken: $("githubToken").value.trim(),
     botEnabled: $("botEnabled").checked,
     botMode: $("botModeServer").checked ? "server" : "realm",
     botHost: $("botHost").value.trim(),

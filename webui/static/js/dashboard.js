@@ -4,7 +4,22 @@ requireAuth(function (role) {
   initTheme();
   refreshStatus();
   loadReleaseNotes();
+  checkAttackAlert();
 });
+
+var _attackToastShown = false;
+/** 检查是否有被封禁的 IP (攻击警报) */
+function checkAttackAlert() {
+  if (!hasPermission("banlist")) return;
+  api("/banlist").then(function (data) {
+    if (!data.ok) return;
+    var autoCount = data.autoBanCount || 0;
+    if (autoCount > 0 && !_attackToastShown) {
+      _attackToastShown = true;
+      toast("🚨 服务器正遭受攻击 — " + autoCount + " 个 IP 被自动封禁", "warn", 6000);
+    }
+  }).catch(function () {});
+}
 
 function formatDuration(seconds) {
   var h = Math.floor(seconds / 3600),
