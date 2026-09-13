@@ -118,6 +118,12 @@ def record_auth_failure(ip: str) -> dict:
         ban_dur_min = max(_BAN_DURATION // 60, 1) if _BAN_DURATION > 0 else 0
         ban(ip, reason=f"自动封禁: {_FAIL_WINDOW}秒内 {attempts} 次登录失败",
             duration=ban_dur_min)
+        try:
+            from lib.logger import audit_log
+            dur_text = "永久" if ban_dur_min <= 0 else f"{ban_dur_min} 分钟"
+            audit_log.append("ban", "System", f"自动封禁了 {ip} ({_FAIL_WINDOW}秒内 {attempts} 次登录失败, 时长: {dur_text})")
+        except Exception:
+            pass
         _fail_log.pop(ip, None)
         return {"banned": True, "attempts": attempts, "remaining": 0}
 

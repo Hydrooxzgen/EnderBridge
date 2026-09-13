@@ -39,6 +39,39 @@ for _fname in _OLD_CONFIG_FILES:
             pass
 
 VERSION = "b0.4.1 dev"
+MINIMIUM_ALLOWED_VERSION = "b0.4.0"
+
+
+def _parse_version(v: str) -> tuple:
+    """解析版本号字符串(如 'b0.4.1 dev', 'b0.4.1')为可比较的元组 (0, 4, 1)"""
+    v = v.strip().split()[0]  # 去掉 ' dev' 等后缀
+    v = v.lstrip('bBvV')      # 去掉前缀 b/B/v/V
+    parts = v.split('.')
+    result = []
+    for p in parts:
+        try:
+            result.append(int(p))
+        except ValueError:
+            break
+    return tuple(result)
+
+
+def _check_minimum_version(new_version: str) -> None:
+    """检查新版本是否低于最低允许版本,是则中止升级"""
+    if not new_version or not MINIMIUM_ALLOWED_VERSION:
+        return
+    try:
+        new_ver = _parse_version(new_version)
+        min_ver = _parse_version(MINIMIUM_ALLOWED_VERSION)
+        if new_ver < min_ver:
+            _update_err(
+                f"目标版本 {new_version} 低于最低允许版本 {MINIMIUM_ALLOWED_VERSION},\n"
+                f"  不允许降级! 如需降级请手动修改 main.py 中的 MINIMIUM_ALLOWED_VERSION"
+            )
+    except Exception:
+        pass  # 版本格式异常时跳过检查,不阻塞升级
+
+
 DESCRIPTION = """
 fix1: 修复仅本机访问开关无法关闭的BUG
 fix2: 修复无法绑定0.0.0.0的BUG
@@ -55,6 +88,9 @@ feat8: 权限管理页面添加ban权限
 feat9: 可自定义封禁时间单位
 feat10: 可自定义自动封禁规则
 feat11: banip现在无法ban127.0.0.1
+fix5: 修复无法更改自己密码的bug
+feat12: 降级现在会被限制
+feat13: 审计日志完善
 """ 
 # ↑仅当不为None时从Github拉取更新日志, 反之则直接显示该变量内容。
 GITHUB_REPO = "Hydrooxzgen/EnderBridge"  # You can edit this to your own repository if you fork it :)
@@ -327,6 +363,21 @@ if WANT_UPDATE:
             _update_err(f"读取压缩包失败: {e}")
         if "main.py" not in members:
             _update_err("无法识别此更新包, 请确保你选择的是EnderBridge压缩包")
+
+        # 1.5 版本降级检查:从压缩包中读取新版本号并与最低允许版本比较
+        _check_minimum_version(new_version or "")
+        # 如果 new_version 未提供,尝试从压缩包的 main.py 中提取
+        if not new_version:
+            try:
+                for rel, fobj in _update_archive_members(archive):
+                    if rel == "main.py" and fobj is not None:
+                        _src = fobj.read().decode("utf-8", errors="replace")
+                        _m = re.search(r'^VERSION\s*=\s*"([^"]+)"', _src, re.MULTILINE)
+                        if _m:
+                            _check_minimum_version(_m.group(1))
+                        break
+            except Exception:
+                pass
 
         # 2. 解压到临时目录(跳过数据区)
         tmp = tempfile.mkdtemp(prefix="enderbridge_update_")
