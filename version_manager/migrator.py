@@ -7,6 +7,7 @@
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
+CONFIG_DIR = ROOT / "config"
 
 # 迁移器注册表: (from_format, to_format) -> migrate_function
 # migrate_function 签名: (src_path: Path, dst_path: Path, **kwargs) -> bool
@@ -52,8 +53,8 @@ def migrate_py_to_json(src: Path = None, dst: Path = None, **kwargs) -> bool:
     """
     import json
 
-    src = src or ROOT / "config.py"
-    dst = dst or ROOT / "config.json"
+    src = src or CONFIG_DIR / "config.py"
+    dst = dst or CONFIG_DIR / "config.json"
 
     if not src.exists():
         print("[VersionManager] 未找到 config.py, 无法迁移")
@@ -126,8 +127,8 @@ def migrate_json_to_py(src: Path = None, dst: Path = None, **kwargs) -> bool:
     """
     import json
 
-    src = src or ROOT / "config.json"
-    dst = dst or ROOT / "config.py"
+    src = src or CONFIG_DIR / "config.json"
+    dst = dst or CONFIG_DIR / "config.py"
 
     if not src.exists():
         print("[VersionManager] 未找到 config.json，无法降级")

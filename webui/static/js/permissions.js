@@ -7,6 +7,7 @@ var _PERM_META = [
   { key: "mods",      label: "🧩 Mod 管理" },
   { key: "console",   label: "💻 控制台" },
   { key: "permissions", label: "👥 权限管理" },
+  { key: "banlist",   label: "🚫 封禁管理" },
   { key: "audit",     label: "📋 审计日志" },
   { key: "update",    label: "🔄 检查更新" },
   { key: "restart",   label: "🔁 重启服务器" }

@@ -17,11 +17,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-CONFIG_PY = os.path.join(ROOT, "config.py")
-CONFIG_JSON = os.path.join(ROOT, "config.json")
-CONFIG_EXAMPLE_JSON = os.path.join(ROOT, "config.example.json")
-PERMISSION_EXAMPLE = os.path.join(ROOT, "permission.example.json")
-PERMISSION_JSON = os.path.join(ROOT, "permission.json")
+CONFIG_DIR = os.path.join(ROOT, "config")
+CONFIG_PY = os.path.join(CONFIG_DIR, "config.py")
+CONFIG_JSON = os.path.join(CONFIG_DIR, "config.json")
+CONFIG_EXAMPLE_JSON = os.path.join(CONFIG_DIR, "config.example.json")
+PERMISSION_EXAMPLE = os.path.join(CONFIG_DIR, "permission.example.json")
+PERMISSION_JSON = os.path.join(CONFIG_DIR, "permission.json")
 
 SETUP_PORT_START = 18888
 SETUP_PORT_MAX = 18899
@@ -294,7 +295,7 @@ def save_config(f) -> None:
     f = _normalize(f)
 
     # 从 JSON 模板开始,逐层覆盖表单值
-    tpl_path = os.path.join(ROOT, "config.example.json")
+    tpl_path = os.path.join(CONFIG_DIR, "config.example.json")
     try:
         with open(tpl_path, "r", encoding="utf-8") as fp:
             cfg = json.load(fp)

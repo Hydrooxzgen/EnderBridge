@@ -9,8 +9,9 @@ from copy import deepcopy
 
 # 项目根目录(本文件位于 lib/ 下)
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PERMISSION_PATH = os.path.join(_PROJECT_ROOT, "permission.json")
-TEMP_PATH = os.path.join(_PROJECT_ROOT, "permission.json.tmp")
+_CONFIG_DIR = os.path.join(_PROJECT_ROOT, "config")
+PERMISSION_PATH = os.path.join(_CONFIG_DIR, "permission.json")
+TEMP_PATH = os.path.join(_CONFIG_DIR, "permission.json.tmp")
 
 
 class PermissionManager:

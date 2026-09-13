@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EnderBridge - 封禁管理</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<script>document.documentElement.setAttribute('data-theme',localStorage.getItem('enderbridge_theme')||(window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark'));</script>
+</head>
+<body>
+<aside class="sidebar">
+  <div class="brand">
+    <span class="logo">⛏️</span>
+    <div>
+      <div class="name" id="srvName">EnderBridge</div>
+      <div class="ver">Web 管理</div>
+    </div>
+  </div>
+  <div class="nav-item" data-page="dashboard"><span>📊</span><span>仪表盘</span></div>
+  <div class="nav-item" data-page="permissions"><span>👥</span><span>权限管理</span></div>
+  <div class="nav-item" data-page="config"><span>⚙️</span><span>功能设置</span></div>
+  <div class="nav-item" data-page="mods"><span>🧩</span><span>Mod 管理</span></div>
+  <div class="nav-item" data-page="console"><span>💻</span><span>控制台</span></div>
+  <div class="nav-item" data-page="audit"><span>📋</span><span>审计日志</span></div>
+  <div class="nav-item" data-page="update"><span>🔄</span><span>检查更新</span></div>
+  <div class="nav-item active" data-page="banlist"><span>🚫</span><span>封禁管理</span></div>
+  <div class="spacer"></div>
+  <button class="theme-toggle" id="themeToggle"><span class="theme-icon">🌙</span><span class="theme-label">深色模式</span></button>
+  <div class="guest-badge" id="guestBadge">👤 访客模式</div>
+  <div class="nav-item hidden" id="adminLoginBtn"><span>🔑</span><span>管理员登录</span></div>
+  <div class="logout" id="logoutBtn"><span>🚪</span><span>退出登录</span></div>
+</aside>
+<div class="main">
+  <h2>🚫 封禁管理</h2>
+
+  <!-- 攻击警报状态 -->
+  <div class="card" id="alertCard" style="display:none;border:1px solid var(--err,#ef4444);background:rgba(239,68,68,0.05);">
+    <div class="row" style="justify-content:space-between;align-items:center;">
+      <div>
+        <span style="font-size:20px;">🚨</span>
+        <span style="font-weight:600;color:var(--err,#ef4444);">服务器正遭受攻击</span>
+        <span class="muted" id="alertCount"></span>
+      </div>
+    </div>
+    <p class="hint" style="margin-top:8px;">检测到大量暴力破解尝试,相关 IP 已被自动封禁。请在下方查看封禁列表。</p>
+  </div>
+
+  <!-- 封禁操作 -->
+  <div class="card">
+    <div style="font-weight:600;margin-bottom:12px;">封禁 IP</div>
+    <div class="row gap-10" style="flex-wrap:wrap;">
+      <input type="text" id="banIpInput" placeholder="IP 地址 (如 192.168.1.100)" style="flex:1;min-width:180px;padding:8px 12px;border:1px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:14px;" autocomplete="off" />
+      <input type="text" id="banReasonInput" placeholder="封禁原因 (可选)" style="flex:2;min-width:200px;padding:8px 12px;border:1px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:14px;" autocomplete="off" />
+      <select id="banDurationSelect" style="padding:8px 12px;border:1px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:14px;min-width:120px;">
+        <option value="0">永久</option>
+        <option value="10">10 分钟</option>
+        <option value="30">30 分钟</option>
+        <option value="60">1 小时</option>
+        <option value="360">6 小时</option>
+        <option value="1440">1 天</option>
+        <option value="10080">7 天</option>
+        <option value="43200">30 天</option>
+        <option value="-1">自定义</option>
+      </select>
+      <input type="text" id="banCustomDuration" placeholder="分钟数" style="width:90px;padding:8px 12px;border:1px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:14px;display:none;" autocomplete="off" />
+      <button class="btn btn-primary btn-sm" id="banBtn">🚫 封禁</button>
+    </div>
+  </div>
+
+  <!-- 自动封禁设置 -->
+  <div class="card">
+    <div class="row" style="justify-content:space-between;align-items:center;">
+      <div>
+        <div style="font-weight:600;">🤖 自动封禁</div>
+        <div class="hint" style="margin-top:4px;">短时间内大量登录失败时自动封禁 IP，防止暴力破解</div>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="autoBanToggle" checked />
+        <span class="slider"></span>
+      </label>
+    </div>
+  </div>
+
+  <!-- 封禁列表 -->
+  <div class="card">
+    <div class="row" style="justify-content:space-between;align-items:center;">
+      <div style="font-weight:600;">封禁列表 <span class="muted" id="banCount"></span></div>
+      <button class="btn btn-sm" id="banRefreshBtn">🔄 刷新</button>
+    </div>
+    <div style="margin-top:12px;overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;">
+        <thead>
+          <tr style="border-bottom:1px solid #334155;color:var(--muted,#94a3b8);font-size:13px;text-align:left;">
+            <th style="padding:8px 12px;">IP 地址</th>
+            <th style="padding:8px 12px;">封禁原因</th>
+            <th style="padding:8px 12px;">封禁时间</th>
+            <th style="padding:8px 12px;">到期时间</th>
+            <th style="padding:8px 12px;text-align:right;">操作</th>
+          </tr>
+        </thead>
+        <tbody id="banTableBody">
+          <tr><td colspan="5" class="muted" style="text-align:center;padding:24px;">加载中...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+<script src="/static/js/app.js"></script>
+<script src="/static/js/banlist.js"></script>
+</body>
+</html>

@@ -23,6 +23,7 @@
   <div class="nav-item" data-page="console"><span>💻</span><span>控制台</span></div>
   <div class="nav-item" data-page="audit"><span>📋</span><span>审计日志</span></div>
   <div class="nav-item" data-page="update"><span>🔄</span><span>检查更新</span></div>
+  <div class="nav-item" data-page="banlist"><span>🚫</span><span>封禁管理</span></div>
   <div class="spacer"></div>
   <button class="theme-toggle" id="themeToggle"><span class="theme-icon">🌙</span><span class="theme-label">深色模式</span></button>
   <div class="guest-badge" id="guestBadge">👤 访客模式</div>
@@ -450,8 +451,17 @@
               <label class="switch"><input type="checkbox" id="cfg-weblockal"><span class="track"></span></label>
               <span class="switch-label">仅允许本机访问 (localOnly)</span>
             </div>
+            <div class="cfg-switch" style="margin-top:8px;">
+              <label class="switch"><input type="checkbox" id="cfg-autoBan" checked><span class="track"></span></label>
+              <span class="switch-label">自动封禁暴力破解 IP (autoBan)</span>
+            </div>
+            <p class="hint">开启后，短时间内大量登录失败的 IP 将被自动封禁。</p>
             <p class="hint">关闭后将绑定 0.0.0.0，允许局域网/远程设备访问管理界面。</p>
             <p class="hint">禁用 Web 管理界面后将不再启动 HTTP 服务。</p>
+            <div style="margin-top:8px;">
+              <button type="button" id="cfg-addFirewall" class="btn btn-sm">🛡️ 一键放行防火墙</button>
+              <span class="hint" style="margin-left:8px;">添加 Windows 防火墙入站规则，允许局域网设备访问本页面。</span>
+            </div>
           </div>
         </div>
 

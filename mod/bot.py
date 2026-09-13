@@ -24,6 +24,7 @@ from lib.command import apply_config_aliases
 
 # bot.js 路径
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CONFIG_DIR = os.path.join(ROOT, "config")
 _BOT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bot")
 _BOT_SCRIPT = os.path.join(_BOT_DIR, "bot.js")
 
@@ -502,7 +503,7 @@ class XboxLoginManager:
         try:
             import importlib.util
             ns = {}
-            spec = importlib.util.spec_from_file_location("config", os.path.join(ROOT, "config.py"))
+            spec = importlib.util.spec_from_file_location("config", os.path.join(CONFIG_DIR, "config.py"))
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
             ns = module.__dict__
@@ -524,7 +525,7 @@ class XboxLoginManager:
             bot_cfg["offline"] = False
 
             # 写回 config.py
-            config_path = os.path.join(ROOT, "config.py")
+            config_path = os.path.join(CONFIG_DIR, "config.py")
             from webui.server import _replace_block
             src = ""
             with open(config_path, "r", encoding="utf-8") as f:

@@ -10,9 +10,10 @@ import importlib.util
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
-CONFIG_JSON = ROOT / "config.json"
-CONFIG_PY = ROOT / "config.py"
-CONFIG_EXAMPLE_JSON = ROOT / "config.example.json"
+CONFIG_DIR = ROOT / "config"
+CONFIG_JSON = CONFIG_DIR / "config.json"
+CONFIG_PY = CONFIG_DIR / "config.py"
+CONFIG_EXAMPLE_JSON = CONFIG_DIR / "config.example.json"
 
 # 版本常量（供外部引用）
 CURRENT_VERSION = "b0.3.6"

@@ -14,22 +14,46 @@ from uuid import uuid4
 
 # 常量定义区
 ROOT = os.path.dirname(os.path.abspath(__file__))
-CONFIG_PY = os.path.join(ROOT, "config.py")
-CONFIG_JSON = os.path.join(ROOT, "config.json")
-CONFIG_EXAMPLE_JSON = os.path.join(ROOT, "config.example.json")
-VERSION = "b0.4.0"
-"""
-feat1: 在线玩家列表
-safefix1: 修复安全漏洞
-fix2: 完全使用EBC0.3.6格式配置文件, 丢弃0.1.0标准配置文件
-feat2: 日志实时查看器
-feat3: webui mod 管理页热重载按钮
-feat4: webui 权限精细化(用户名+bcrypt+角色权限)
-fix3: 修复$message指令无法使用的bug
-feat5: 新增py main.py --help(-h) 显示帮助信息
-feat6: 新建404页面 **并且更新到b0.4.0**
-"""
-DESCRIPTION = None # 仅当不为None时从Github拉取更新日志, 反之则直接显示该变量内容。
+CONFIG_DIR = os.path.join(ROOT, "config")
+CONFIG_PY = os.path.join(CONFIG_DIR, "config.py")
+CONFIG_JSON = os.path.join(CONFIG_DIR, "config.json")
+CONFIG_EXAMPLE_JSON = os.path.join(CONFIG_DIR, "config.example.json")
+
+# ===== 自动迁移:将根目录下的旧配置文件移动到 config/ 目录 =====
+_OLD_CONFIG_FILES = [
+    "config.py", "config.py.bak", "config.json", "config.json.bak",
+    "config.example.json",
+    "permission.json", "permission.json.bak", "permission.example.json",
+    "users.json", "users.example.json",
+    "banlist.json",
+]
+os.makedirs(CONFIG_DIR, exist_ok=True)
+for _fname in _OLD_CONFIG_FILES:
+    _old = os.path.join(ROOT, _fname)
+    _new = os.path.join(CONFIG_DIR, _fname)
+    if os.path.exists(_old) and not os.path.exists(_new):
+        try:
+            import shutil as _shutil_mv
+            _shutil_mv.move(_old, _new)
+        except Exception:
+            pass
+
+VERSION = "b0.4.1 dev"
+DESCRIPTION = """
+fix1: 修复仅本机访问开关无法关闭的BUG
+fix2: 修复无法绑定0.0.0.0的BUG
+feat1: 新增--description参数
+feat2: 新增一键添加防火墙排除项
+feat3: 修复在Termux中无法启动的BUG
+feat4: 新增banlist 添加服务器正被攻击提示, 并自动封禁(可选)
+feat5: version_manager可以自动迁移配置文件
+fix3: 修复无法取消系统保留用户属性的bug
+feat6: banip新增封禁时间
+feat7: 在被封禁页面也显示解禁时间
+fix4: 防止is_banned()方法死锁
+feat8: 权限管理页面添加ban权限
+""" 
+# ↑仅当不为None时从Github拉取更新日志, 反之则直接显示该变量内容。
 GITHUB_REPO = "Hydrooxzgen/EnderBridge"  # You can edit this to your own repository if you fork it :)
 WANT_RESET = "--reset-all" in sys.argv
 WANT_EXPORT = "export" in sys.argv
@@ -38,6 +62,7 @@ WANT_LOAD_WITHOUT_CONFIG = "--load-without-config" in sys.argv
 WANT_VIEW_VERSION = "--version" in sys.argv or "-v" in sys.argv
 WANT_SYSTEM_MODE = "--system" in sys.argv
 WANT_HELP = "--help" in sys.argv or "-h" in sys.argv
+WANT_VIEW_DESCRIPTION = "--description" in sys.argv
 
 # ===== 依赖检测(必须早于任何第三方mod使用) ===== 
 # websockets 使用动态导入:缺失时自动运行 setup.py 安装,成功后继续启动。
@@ -69,7 +94,10 @@ if not WANT_RESET and not WANT_EXPORT and not _dependencies_ok():
 # 依赖 config.json 的模块(lib/logger.py、lib/utils.py、lib/mods.py 等)均为延迟加载,
 # 因此 config.json 缺失时(如 --reset-all 之后)可先在此根据模板自动补全,保证程序可启动。
 # 此阶段判断启动参数并执行对应操作
-if not WANT_RESET and not os.path.exists(CONFIG_PY) and not os.path.exists(CONFIG_JSON) and not WANT_VIEW_VERSION and not WANT_EXPORT:
+ARGV_NOT_EXIST = not WANT_RESET\
+and not WANT_VIEW_VERSION and not WANT_EXPORT \
+and not WANT_VIEW_DESCRIPTION and not WANT_HELP
+if  not os.path.exists(CONFIG_PY) and not os.path.exists(CONFIG_JSON) and ARGV_NOT_EXIST:
     # 优先生成 config.json, 若无模板则回退到 config.py
     if os.path.exists(CONFIG_EXAMPLE_JSON):
         import shutil as _shutil_cfg
@@ -89,9 +117,9 @@ if not WANT_RESET and not os.path.exists(CONFIG_PY) and not os.path.exists(CONFI
         print("未找到 config.json, 已根据模板自动生成默认配置(可在向导中修改)")
 
 # permission.json 缺失时从模板复制(权限系统依赖该文件)
-PERMISSION_JSON = os.path.join(ROOT, "permission.json")
-PERMISSION_EXAMPLE = os.path.join(ROOT, "permission.example.json")
-if not WANT_RESET and not os.path.exists(PERMISSION_JSON) and os.path.exists(PERMISSION_EXAMPLE) and not WANT_VIEW_VERSION and not WANT_EXPORT:
+PERMISSION_JSON = os.path.join(CONFIG_DIR, "permission.json")
+PERMISSION_EXAMPLE = os.path.join(CONFIG_DIR, "permission.example.json")
+if not os.path.exists(PERMISSION_JSON) and os.path.exists(PERMISSION_EXAMPLE) and ARGV_NOT_EXIST:
     with open(PERMISSION_EXAMPLE, "r", encoding="utf-8") as f:
         content = f.read()
     with open(PERMISSION_JSON, "w", encoding="utf-8") as f:
@@ -101,10 +129,10 @@ if not WANT_RESET and not os.path.exists(PERMISSION_JSON) and os.path.exists(PER
 # ===== 一键重置:python main.py --reset-all =====
 # 清除所有配置文件(不启动服务器),并将模板 config.example.json 的 is_first_run 复位为 True
 if WANT_RESET:
-    files = ["config.py", "config.py.bak", "config.json", "config.json.bak", "permission.json", "permission.json.bak", "users.json"]
+    files = ["config.py", "config.py.bak", "config.json", "config.json.bak", "permission.json", "permission.json.bak", "users.json", "banlist.json"]
     removed = []
     for name in files:
-        p = os.path.join(ROOT, name)
+        p = os.path.join(CONFIG_DIR, name)
         if os.path.exists(p):
             os.remove(p)
             removed.append(name)
@@ -131,6 +159,14 @@ if WANT_RESET:
 # 查看版本并退出
 if WANT_VIEW_VERSION:
     print(f"EnderBridge {VERSION}")
+    sys.exit(0)
+
+# 显示描述并退出
+if WANT_VIEW_DESCRIPTION:
+    if DESCRIPTION is not None:
+        print(DESCRIPTION)
+    else:
+        print(f"No description available. Please check the GitHub repository for more information.")
     sys.exit(0)
 
 # 显示帮助并退出
@@ -177,12 +213,7 @@ if WANT_UPDATE:
         "logs",
         "resources",
         "structures",
-        "config.py",
-        "config.py.bak",
-        "config.json",
-        "permission.json",
-        "permission.json.bak",
-        "users.json",
+        "config",
     }
 
     def _load_github_token() -> str:
@@ -350,7 +381,7 @@ if WANT_UPDATE:
             # 6. 重新生成 requirements.txt 缺失依赖的自动安装由下次启动完成
             print("========================================")
             print("  升级完成!")
-            print("  已保留: config.py / permission.json 等设置与用户数据")
+            print("  已保留: config/ 目录等设置与用户数据")
             print("  请重新启动: py -B main.py")
             print("========================================")
         finally:
@@ -635,7 +666,7 @@ if os.path.isfile(UPDATE_MARKER) and not WANT_UPDATE:
         # 复用 UPDATE_KEEP(如果 WANT_UPDATE 已定义)或使用默认值
         _keep = locals().get("UPDATE_KEEP", {
             ".git", "logs", "resources", "structures",
-            "config.py", "config.py.bak", "permission.json", "permission.json.bak",
+            "config",
         })
 
         print("========================================")
@@ -761,12 +792,7 @@ if WANT_EXPORT:
         "logs",
         "resources",
         "structures",
-        "config.py",
-        "config.py.bak",
-        "config.json",
-        "permission.json",
-        "permission.json.bak",
-        "users.json",
+        "config",
         "node_modules",  # Bot 的 npm 依赖(约 500MB),用户需自行 npm install
     }
     EXPORT_SKIP_DIRS = {"__pycache__"}
@@ -834,8 +860,8 @@ if WANT_EXPORT:
     # export -clear:导出后自动执行 reset-all
     if WANT_EXPORT_CLEAR:
         print("  正在执行 --reset-all ...")
-        for name in ["config.py", "config.py.bak", "permission.json", "permission.json.bak", "users.json"]:
-            p = os.path.join(ROOT, name)
+        for name in ["config.py", "config.py.bak", "config.json", "config.json.bak", "permission.json", "permission.json.bak", "users.json", "banlist.json"]:
+            p = os.path.join(CONFIG_DIR, name)
             if os.path.exists(p):
                 os.remove(p)
         # 复位 JSON 模板标记
@@ -866,6 +892,16 @@ try:
 except Exception:
     _cfg = {}
     _cfg_format = "py"
+
+# ===== 版本变迁配置文件位置迁移 =====
+try:
+    from version_manager.detector import migrate_config_location, detect_version
+    _saved_ver = _cfg.get("_version", "")
+    _cur_ver = VERSION.replace(" dev", "")
+    if _saved_ver and _saved_ver != _cur_ver:
+        migrate_config_location(_saved_ver, _cur_ver)
+except Exception:
+    pass
 
 # 兼容路径适配函数:JSON 格式下 basePath/resolvePath 不存在,直接使用相对路径
 try:
@@ -964,6 +1000,17 @@ async def connection_handler(ws):
     global connections
     # 获取客户端 IP
     client_ip = ws.remote_address[0] if ws.remote_address else "unknown"
+
+    # 封禁检查:拒绝已封禁 IP 的连接
+    from lib import banlist
+    if banlist.is_banned(client_ip):
+        shared.logger.warning(f"封禁连接被拒绝: {client_ip}")
+        try:
+            await ws.close(1008, "你的 IP 已被封禁")
+        except Exception:
+            pass
+        return
+
     shared.logger.info(f"客户端 {client_ip} 已连接")
     from lib.logger import audit_log
     audit_log.append("connect", client_ip, "客户端已连接")
@@ -1195,6 +1242,15 @@ def _start_webui() -> None:
         # 加载用户系统(首次运行/升级时自动创建 admin + guest)
         from lib.users import user_manager
         user_manager.load()
+        # 加载 IP 封禁列表
+        from lib import banlist
+        banlist.load()
+        # 从配置加载自动封禁开关
+        try:
+            _wb = _cfg.get("webuiConfig", {})
+            banlist.set_auto_ban(_wb.get("autoBan", True))
+        except Exception:
+            pass
         # 首次运行或升级:打印 admin 凭证到终端
         if user_manager._first_run_password:
             admin_pw = user_manager._first_run_password
