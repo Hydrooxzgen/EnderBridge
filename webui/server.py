@@ -2253,9 +2253,9 @@ class _FastHTTPServer(ThreadingHTTPServer):
 
     def handle_error(self, request, client_address):
         """静默连接断开类错误,避免 Ctrl+C / SSE 断开时打印 traceback"""
-        import traceback as _tb
         _, exc, _ = sys.exc_info()
-        if exc in (ConnectionAbortedError, BrokenPipeError, ConnectionResetError, OSError):
+        # 注意:exc 是异常实例,必须用 isinstance 判断(旧代码用 in 比较类,永远为 False)
+        if isinstance(exc, (ConnectionAbortedError, BrokenPipeError, ConnectionResetError, OSError)):
             return
         super().handle_error(request, client_address)
 

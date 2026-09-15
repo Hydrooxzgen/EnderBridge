@@ -1,4 +1,4 @@
-// ===== 审计日志页面逻辑 =====
+﻿// ===== 审计日志页面逻辑 =====
 
 var PAGE_SIZE = 50;
 var _auditOffset = 0;
@@ -6,13 +6,10 @@ var _auditTotal = 0;
 var _autoRefresh = false;
 var _autoTimer = null;
 
-var TYPE_LABELS = {
-  chat: "💬 聊天",
-  command: "⚡ 命令",
-  terminal: "🖥️ 终端",
-  connect: "🟢 连接",
-  disconnect: "🔴 断开"
-};
+function typeLabel(key) {
+  var map = { chat: "audit.typeChat", command: "audit.typeCommand", terminal: "audit.typeTerminal", connect: "audit.typeConnect", disconnect: "audit.typeDisconnect" };
+  return t(map[key] || key);
+}
 
 function fetchLogs() {
   var typeFilter = $("auditTypeFilter").value;
@@ -25,15 +22,15 @@ function fetchLogs() {
   var qs = params.length ? "?" + params.join("&") : "";
 
   var statusEl = $("auditStatus");
-  if (statusEl) statusEl.textContent = "加载中…";
+  if (statusEl) statusEl.textContent = t("audit.loading");
 
   api("/audit-logs" + qs).then(function (d) {
     if (statusEl) statusEl.textContent = "";
-    if (!d.ok) { toast(d.message || "加载失败", "err"); return; }
+    if (!d.ok) { toast(d.message || t("audit.loadFail"), "err"); return; }
     _auditTotal = d.total || 0;
     renderLogs(d.records || []);
   }).catch(function () {
-    if (statusEl) statusEl.textContent = "请求失败";
+    if (statusEl) statusEl.textContent = t("audit.reqFail");
   });
 }
 
@@ -41,7 +38,7 @@ function renderLogs(records) {
   var body = $("auditLogBody");
   var empty = $("auditEmpty");
   var countEl = $("auditCount");
-  if (countEl) countEl.textContent = "共 " + _auditTotal + " 条";
+  if (countEl) countEl.textContent = t("audit.totalPrefix") + _auditTotal + t("audit.totalSuffix");
 
   if (!records.length) {
     if (body) body.innerHTML = "";
@@ -52,7 +49,7 @@ function renderLogs(records) {
   if (empty) empty.style.display = "none";
 
   var html = records.map(function (r) {
-    var typeLabel = TYPE_LABELS[r.type] || r.type;
+    var typeLabel = typeLabel(r.type);
     var ts = r.ts ? r.ts.replace("T", " ").replace(/\+.+$/, "") : "";
     var msg = escapeHtml(r.message || "");
     if (r.type === "command") {
@@ -74,7 +71,7 @@ function updatePagination() {
   var totalPages = Math.max(1, Math.ceil(_auditTotal / PAGE_SIZE));
   var currentPage = Math.floor(_auditOffset / PAGE_SIZE) + 1;
   var info = $("auditPageInfo");
-  if (info) info.textContent = "第 " + currentPage + " / " + totalPages + " 页";
+  if (info) info.textContent = t("audit.pageMid1") + currentPage + t("audit.pageMid2") + totalPages + t("audit.pageSuffix");
   var prev = $("auditPrevBtn");
   var next = $("auditNextBtn");
   if (prev) prev.disabled = currentPage <= 1;
@@ -89,6 +86,7 @@ function doQuery() {
 requireAuth(function (role) {
   initSidebar("audit", role);
   initTheme();
+  initLang();
   fetchLogs();
 
   $("auditQueryBtn").addEventListener("click", doQuery);
@@ -110,7 +108,7 @@ requireAuth(function (role) {
 
   $("auditAutoBtn").addEventListener("click", function () {
     _autoRefresh = !_autoRefresh;
-    this.textContent = "🔄 自动刷新: " + (_autoRefresh ? "开" : "关");
+    this.textContent = _autoRefresh ? t("audit.autoOn") : t("audit.autoOff");
     this.style.borderColor = _autoRefresh ? "#6366f1" : "";
     if (_autoRefresh) {
       _autoTimer = setInterval(fetchLogs, 3000);

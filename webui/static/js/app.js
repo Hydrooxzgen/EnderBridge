@@ -48,7 +48,7 @@ function api(path, options) {
   return fetch("/api" + path, options).then(function (res) {
     return res.json().then(function (data) {
       if (res.status === 401) { clearAuth(); location.href = "/login"; return Promise.reject(data); }
-      if (res.status === 403) { toast(data.message || "无权限", "err"); return Promise.reject(data); }
+      if (res.status === 403) { var _t = (typeof t === "function") ? t : function (k) { return k; }; toast(data.message || _t("common.noPermission"), "err"); return Promise.reject(data); }
       return data;
     });
   });
@@ -156,6 +156,9 @@ function requireAuth(callback) {
 
 // ===== 侧边栏 =====
 function initSidebar(activePage, role) {
+  // 动态侧边栏:先生成再高亮(页面只需留 <aside class="sidebar" data-auto-sidebar>)
+  if (typeof renderSidebar === "function") renderSidebar(activePage);
+  if (typeof initLang === "function") initLang();
   var nav = document.querySelector('.nav-item[data-page="' + activePage + '"]');
   if (nav) nav.classList.add("active");
   document.querySelectorAll(".nav-item[data-page]").forEach(function (el) {
@@ -197,10 +200,11 @@ function initSidebar(activePage, role) {
       // 插入无权限提示
       var noPermDiv = document.createElement("div");
       noPermDiv.style.cssText = "display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;text-align:center;padding:40px;";
+      var _t2 = (typeof t === "function") ? t : function (k) { return k; };
       noPermDiv.innerHTML = '<div style="font-size:48px;margin-bottom:16px;">🔒</div>'
-        + '<h2 style="margin-bottom:8px;">你的账户没有权限</h2>'
-        + '<p class="muted" style="margin-bottom:20px;">当前账户没有任何已授权的权限,请联系管理员或登录其他账户。</p>'
-        + '<button class="btn btn-primary" onclick="clearAuth();location.href=\'/login\'">切换账户</button>';
+        + '<h2 style="margin-bottom:8px;">' + _t2("dash.noPermTitle") + '</h2>'
+        + '<p class="muted" style="margin-bottom:20px;">' + _t2("dash.noPermMsg") + '</p>'
+        + '<button class="btn btn-primary" onclick="clearAuth();location.href=\'/login\'">' + _t2("dash.switchAccount") + '</button>';
       mainEl.appendChild(noPermDiv);
     }
     // 隐藏侧边栏所有导航项(仅保留品牌和退出)
@@ -259,12 +263,13 @@ function updateThemeIcon(theme) {
   if (!btn) return;
   var icon = btn.querySelector(".theme-icon");
   var label = btn.querySelector(".theme-label");
+  var getText = (typeof t === "function") ? t : function (k) { return k; };
   if (theme === "light") {
     icon.textContent = "☀️";
-    label.textContent = "浅色模式";
+    label.textContent = getText("nav.lightMode");
   } else {
     icon.textContent = "🌙";
-    label.textContent = "深色模式";
+    label.textContent = getText("nav.darkMode");
   }
 }
 

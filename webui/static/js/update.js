@@ -1,4 +1,4 @@
-// ===== 检查更新页面逻辑 =====
+﻿// ===== 检查更新页面逻辑 =====
 var _releasesPage = 1;
 var _selectedUpdateFile = null;
 var _userRole = "guest";
@@ -27,7 +27,7 @@ function _isBelowMin(tag) {
 function _pollAndRedirect(btn, restoreText) {
   var basePort = parseInt(location.port) || 18888;
   console.log("[update] 开始轮询,基础端口: " + basePort);
-  toast("服务器正在重启,请稍候...", "ok");
+  toast(t("upd.restartWait"), "ok");
 
   // 带超时的 fetch,防止某个端口卡住导致整个 probe 挂起
   function fetchWithTimeout(url, ms) {
@@ -99,11 +99,11 @@ function _pollAndRedirect(btn, restoreText) {
               var finalPort = d.webPort || port;
               var url = location.protocol + "//" + host + ":" + finalPort;
               console.log("[update] 服务器已恢复,3秒后跳转到 " + url);
-              toast("服务器已恢复,正在跳转...", "ok");
+              toast(t("upd.recovered"), "ok");
               setTimeout(function () { location.href = url; }, 3000);
             }).catch(function () {
               var url = location.protocol + "//" + location.hostname + ":" + port;
-              toast("服务器已恢复,正在跳转...", "ok");
+              toast(t("upd.recovered"), "ok");
               setTimeout(function () { location.href = url; }, 3000);
             });
         }
@@ -112,7 +112,7 @@ function _pollAndRedirect(btn, restoreText) {
         clearInterval(phase2);
         btn.disabled = false;
         btn.textContent = restoreText;
-        toast("等待服务器恢复超时", "err");
+        toast(t("upd.recoverTimeout"), "err");
         console.log("[update] 轮询超时");
       }
     }, 2000);
@@ -123,23 +123,23 @@ function checkUpdate() {
   var btn = $("updateCheckBtn");
   if (!btn) return;
   btn.disabled = true;
-  btn.textContent = "⏳ 检查中...";
+  btn.textContent = t("upd.checking");
   api("/update/check").then(function (data) {
     btn.disabled = false;
     if (data.ok && data.update_available && _userRole !== "guest") {
-      btn.textContent = "🚀 立刻更新";
+      btn.textContent = t("upd.installNow");
       btn.classList.remove("btn-primary");
       btn.classList.add("btn-danger");
       btn.dataset.tag = data.latest || "";
       // 版本低于最低允许版本时禁止安装
       if (data.minimum_version && _isBelowMin(data.latest)) {
         btn.disabled = true;
-        btn.textContent = "🚫 版本过低,禁止降级";
+        btn.textContent = t("upd.tooLow");
         btn.classList.remove("btn-danger");
         delete btn.dataset.tag;
       }
     } else {
-      btn.textContent = "🔍 检查更新";
+      btn.textContent = t("upd.checkBtn");
       btn.classList.add("btn-primary");
       btn.classList.remove("btn-danger");
       delete btn.dataset.tag;
@@ -148,27 +148,27 @@ function checkUpdate() {
     $("updateCheckResult").style.display = "";
     $("updateCurVer").textContent = data.current || "?";
     if (!data.ok) {
-      $("updateLatestInfo").innerHTML = '<div class="update-msg err">' + escapeHtml(data.message || "检查失败") + '</div>';
+      $("updateLatestInfo").innerHTML = '<div class="update-msg err">' + escapeHtml(data.message || t("upd.checkFail")) + '</div>';
       return;
     }
     if (!data.latest) {
-      $("updateLatestInfo").innerHTML = '<div class="update-msg info">暂无 Release</div>';
+      $("updateLatestInfo").innerHTML = '<div class="update-msg info">' + t("upd.noRelease") + '</div>';
       return;
     }
     var badge = data.is_prerelease
-      ? '<span class="release-badge badge-prerelease">预览版</span>'
-      : '<span class="release-badge badge-stable">正式版</span>';
-    var assetHint = data.has_asset ? "" : '<span class="update-msg warn" style="display:inline;margin-left:6px;">⚠ 无压缩包附件</span>';
+      ? '<span class="release-badge badge-prerelease">' + t("upd.prerelease") + '</span>'
+      : '<span class="release-badge badge-stable">' + t("upd.stable") + '</span>';
+    var assetHint = data.has_asset ? "" : '<span class="update-msg warn" style="display:inline;margin-left:6px;">' + t("upd.noAsset") + '</span>';
     var html = '<div class="update-latest-row"><div class="update-latest-name">' + badge + ' ' + escapeHtml(data.latest_name || data.latest) + '</div>' + assetHint + '</div>';
     html += data.update_available
-      ? '<div class="update-msg ok">🎉 有新版本可用!</div>'
-      : '<div class="update-msg info">✅ 已是最新版本</div>';
-    if (data.html_url) html += '<a href="' + data.html_url + '" target="_blank" class="release-link">在 GitHub 上查看 →</a>';
+      ? '<div class="update-msg ok">' + t("upd.hasUpdate") + '</div>'
+      : '<div class="update-msg info">' + t("upd.latest") + '</div>';
+    if (data.html_url) html += '<a href="' + data.html_url + '" target="_blank" class="release-link">' + t("upd.viewGithub") + '</a>';
     $("updateLatestInfo").innerHTML = html;
   }).catch(function () {
     btn.disabled = false;
-    btn.textContent = "🔍 检查更新";
-    toast("检查更新失败", "err");
+    btn.textContent = t("upd.checkBtn");
+    toast(t("upd.checkFailToast"), "err");
   });
 }
 
@@ -176,6 +176,7 @@ requireAuth(function (role) {
   _userRole = role;
   initSidebar("update", role);
   initTheme();
+  initLang();
   checkUpdate();
   loadReleases(1);
   // 访客:隐藏本地更新卡片
@@ -192,23 +193,23 @@ if (checkBtn) {
     if (checkBtn.dataset.tag) {
       // 立刻更新模式
       var tag = checkBtn.dataset.tag;
-      if (!confirm("确定要更新到 " + tag + " 吗？\n将从 GitHub 下载并更新,服务器会自动重启。")) return;
+      if (!confirm(t("upd.confirmUpdatePrefix") + tag + t("upd.confirmUpdate"))) return;
       checkBtn.disabled = true;
-      checkBtn.textContent = "⏳ 更新中...";
+      checkBtn.textContent = t("upd.updating");
       api("/update/install", { method: "POST", body: JSON.stringify({ github_tag: tag }) })
         .then(function (result) {
           if (!result.ok) {
-            toast(result.message || "更新失败", "err");
+            toast(result.message || t("upd.updateFail"), "err");
             checkBtn.disabled = false;
-            checkBtn.textContent = "🚀 立刻更新";
+            checkBtn.textContent = t("upd.installNow");
           } else {
-            toast("服务器正在更新并重启...", "ok");
-            _pollAndRedirect(checkBtn, "🚀 立刻更新");
+            toast(t("upd.updatingRestart"), "ok");
+            _pollAndRedirect(checkBtn, t("upd.installNow"));
           }
         }).catch(function () {
-          toast("更新失败", "err");
+          toast(t("upd.updateFail"), "err");
           checkBtn.disabled = false;
-          checkBtn.textContent = "🚀 立刻更新";
+          checkBtn.textContent = t("upd.installNow");
         });
     } else {
       checkUpdate();
@@ -240,12 +241,12 @@ var localBtn = $("updateLocalBtn");
 if (localBtn) {
   localBtn.addEventListener("click", function () {
     if (!_selectedUpdateFile) return;
-    if (!confirm("确定要执行本地更新吗？\n将使用选中的压缩包替换项目文件(保留配置),服务器会自动重启。")) return;
+    if (!confirm(t("upd.confirmLocal"))) return;
     var formData = new FormData();
     formData.append("file", _selectedUpdateFile);
     var btn = this;
     btn.disabled = true;
-    btn.textContent = "⏳ 上传中...";
+    btn.textContent = t("upd.uploading");
     // 构建认证头
     var uploadHeaders = {};
     var role = sessionStorage.getItem(ROLE_KEY) || "";
@@ -259,26 +260,26 @@ if (localBtn) {
       .then(function (res) { return res.json(); })
       .then(function (data) {
         if (!data.ok) {
-          toast(data.message || "上传失败", "err");
+          toast(data.message || t("upd.uploadFail"), "err");
           btn.disabled = false;
-          btn.textContent = "🚀 执行更新";
+          btn.textContent = t("upd.doUpdate");
           return;
         }
         return api("/update/install", { method: "POST", body: JSON.stringify({ path: data.path }) })
           .then(function (result) {
             if (!result.ok) {
-              toast(result.message || "更新失败", "err");
+              toast(result.message || t("upd.updateFail"), "err");
               btn.disabled = false;
-              btn.textContent = "🚀 执行更新";
+              btn.textContent = t("upd.doUpdate");
             } else {
-              toast("服务器正在更新并重启...", "ok");
-              _pollAndRedirect(btn, "🚀 执行更新");
+              toast(t("upd.updatingRestart"), "ok");
+              _pollAndRedirect(btn, t("upd.doUpdate"));
             }
           });
       }).catch(function () {
-        toast("上传失败", "err");
+        toast(t("upd.uploadFail"), "err");
         btn.disabled = false;
-        btn.textContent = "🚀 执行更新";
+        btn.textContent = t("upd.doUpdate");
       });
   });
 }
@@ -303,36 +304,36 @@ function loadReleases(page) {
   $("releasesPager").style.display = "";
   $("releasesPageNum").textContent = _releasesPage;
   $("releasesPrevBtn").disabled = _releasesPage <= 1;
-  $("releasesList").innerHTML = '<div class="td-dim" style="padding:12px 0;">加载中...</div>';
+  $("releasesList").innerHTML = '<div class="td-dim" style="padding:12px 0;">' + t("upd.loading") + '</div>';
   api("/update/releases?page=" + _releasesPage).then(function (data) {
     if (!data.ok) {
-      $("releasesList").innerHTML = '<div class="update-msg err">' + escapeHtml(data.message || "加载失败") + '</div>';
+      $("releasesList").innerHTML = '<div class="update-msg err">' + escapeHtml(data.message || t("upd.loadFail")) + '</div>';
       return;
     }
     var list = data.releases || [];
     if (!list.length) {
-      $("releasesList").innerHTML = '<div class="td-dim" style="padding:12px 0;">暂无更多版本</div>';
+      $("releasesList").innerHTML = '<div class="td-dim" style="padding:12px 0;">' + t("upd.noMore") + '</div>';
       $("releasesNextBtn").disabled = true;
       return;
     }
     $("releasesNextBtn").disabled = list.length < 3;
     $("releasesList").innerHTML = list.map(function (r) {
       var badge = r.prerelease
-        ? '<span class="release-badge badge-prerelease">预览版</span>'
-        : '<span class="release-badge badge-stable">正式版</span>';
-      var currentTag = r.current ? ' <span class="release-badge badge-current">当前</span>' : "";
-      var assetTag = r.has_asset ? "" : '<span class="td-dim" style="margin-left:6px;font-size:12px;">(无附件)</span>';
+        ? '<span class="release-badge badge-prerelease">' + t("upd.prerelease") + '</span>'
+        : '<span class="release-badge badge-stable">' + t("upd.stable") + '</span>';
+      var currentTag = r.current ? ' <span class="release-badge badge-current">' + t("upd.current") + '</span>' : "";
+      var assetTag = r.has_asset ? "" : '<span class="td-dim" style="margin-left:6px;font-size:12px;">' + t("upd.noAssetShort") + '</span>';
       var date = r.published_at ? new Date(r.published_at).toLocaleDateString("zh-CN") : "";
-      var bodyHtml = r.body ? renderMarkdown(r.body) : '<span class="td-dim">无描述</span>';
+      var bodyHtml = r.body ? renderMarkdown(r.body) : '<span class="td-dim">' + t("upd.noDesc") + '</span>';
       _minimumVersion = r.below_min !== undefined ? (data.minimum_version || _minimumVersion) : _minimumVersion;
       var belowMin = r.below_min || _isBelowMin(r.tag);
       var actionBtn = (!r.current && r.has_asset && _userRole !== "guest" && !belowMin)
-        ? '<button class="btn btn-sm release-install-btn" data-tag="' + escapeHtml(r.tag) + '">安装此版本</button>'
-        : (belowMin && !r.current ? '<span class="td-dim" style="font-size:12px;">🚫 版本过低</span>' : "");
+        ? '<button class="btn btn-sm release-install-btn" data-tag="' + escapeHtml(r.tag) + '">' + t("upd.installVer") + '</button>'
+        : (belowMin && !r.current ? '<span class="td-dim" style="font-size:12px;">' + t("upd.tooLowShort") + '</span>' : "");
       return '<div class="release-item">' +
         '<div class="release-header">' + badge + ' <b>' + escapeHtml(r.name || r.tag) + '</b>' + currentTag + assetTag +
         ' <span class="td-dim" style="margin-left:8px;font-size:12px;">' + date + '</span>' +
-        (r.html_url ? ' <a href="' + r.html_url + '" target="_blank" class="release-link" style="margin-left:8px">查看</a>' : "") +
+        (r.html_url ? ' <a href="' + r.html_url + '" target="_blank" class="release-link" style="margin-left:8px">' + t("upd.view") + '</a>' : "") +
         '</div>' +
         '<div class="release-body">' + bodyHtml + '</div>' +
         (actionBtn ? '<div style="margin-top:8px">' + actionBtn + '</div>' : "") +
@@ -342,34 +343,34 @@ function loadReleases(page) {
     document.querySelectorAll('.release-install-btn').forEach(function (btn) {
       btn.addEventListener("click", function () {
         var tag = btn.getAttribute("data-tag");
-        if (!confirm("确定要安装 " + tag + " 吗？\n将从 GitHub 下载并更新,服务器会自动重启。")) return;
+        if (!confirm(t("upd.confirmInstallPrefix") + tag + t("upd.confirmUpdate"))) return;
         btn.disabled = true;
-        btn.textContent = "⏳ 安装中...";
+        btn.textContent = t("upd.installing");
         api("/update/install", { method: "POST", body: JSON.stringify({ github_tag: tag }) })
           .then(function (result) {
             if (!result.ok) {
-              toast(result.message || "安装失败", "err");
+              toast(result.message || t("upd.installFail"), "err");
               btn.disabled = false;
-              btn.textContent = "安装此版本";
+              btn.textContent = t("upd.installVer");
             } else {
-              toast("服务器正在更新并重启...", "ok");
+              toast(t("upd.updatingRestart"), "ok");
               var tries = 0;
               var timer = setInterval(function () {
                 tries++;
                 fetch("/api/status").then(function (r) { return r.json(); })
                   .then(function (d) { if (d.ok) { clearInterval(timer); location.reload(); } })
                   .catch(function () {});
-                if (tries >= 60) { clearInterval(timer); btn.disabled = false; btn.textContent = "安装此版本"; toast("等待服务器恢复超时", "err"); }
+                if (tries >= 60) { clearInterval(timer); btn.disabled = false; btn.textContent = t("upd.installVer"); toast(t("upd.recoverTimeout"), "err"); }
               }, 2000);
             }
           }).catch(function () {
-            toast("安装失败", "err");
+            toast(t("upd.installFail"), "err");
             btn.disabled = false;
-            btn.textContent = "安装此版本";
+            btn.textContent = t("upd.installVer");
           });
       });
     });
   }).catch(function () {
-    $("releasesList").innerHTML = '<div class="update-msg err">加载失败</div>';
+    $("releasesList").innerHTML = '<div class="update-msg err">' + t("upd.loadFail") + '</div>';
   });
 }

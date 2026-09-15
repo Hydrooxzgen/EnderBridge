@@ -11,23 +11,27 @@
 <div id="loginView" class="show">
   <div class="login-card">
     <div class="logo">⛏️</div>
-    <h1>EnderBridge Web 管理</h1>
-    <p class="sub" id="loginSub">请输入用户名和密码以继续</p>
+    <h1 data-i18n="login.title">EnderBridge Web 管理</h1>
+    <p class="sub" id="loginSub" data-i18n="login.sub">请输入用户名和密码以继续</p>
     <div id="userPassForm">
-      <label for="usernameInput">用户名</label>
-      <input id="usernameInput" type="text" placeholder="用户名" autocomplete="username">
-      <label for="passwordInput">密码</label>
-      <input id="passwordInput" type="password" placeholder="密码" autocomplete="current-password">
-      <button id="loginBtn" type="button">登 录</button>
+      <label for="usernameInput" data-i18n="login.username">用户名</label>
+      <input id="usernameInput" type="text" data-i18n-ph="login.usernamePh" placeholder="用户名" autocomplete="username">
+      <label for="passwordInput" data-i18n="login.password">密码</label>
+      <input id="passwordInput" type="password" data-i18n-ph="login.passwordPh" placeholder="密码" autocomplete="current-password">
+      <button id="loginBtn" type="button" data-i18n="login.submit">登 录</button>
     </div>
-    <button id="guestBtn" type="button" class="guest-btn">以访客身份浏览 (Guest)</button>
+    <button id="guestBtn" type="button" class="guest-btn" data-i18n="login.guest">以访客身份浏览 (Guest)</button>
     <div class="login-msg" id="loginMsg"></div>
-    <div class="login-hint" id="loginHint">首次启动时终端会显示 admin 的随机密码。<br>访客账号 guest 无需密码,仅可查看仪表盘和 Mod 列表。</div>
-    <button class="theme-toggle" id="themeToggle" style="margin-top:12px;justify-content:center;"><span class="theme-icon">🌙</span><span class="theme-label">深色模式</span></button>
+    <div class="login-hint" id="loginHint" data-i18n="login.hint">首次启动时终端会显示 admin 的随机密码。<br>访客账号 guest 无需密码,仅可查看仪表盘和 Mod 列表。</div>
+    <div class="row gap-10" style="margin-top:12px;justify-content:center;">
+      <button class="theme-toggle" id="themeToggle" style="justify-content:center;"><span class="theme-icon">🌙</span><span class="theme-label">深色模式</span></button>
+      <button class="theme-toggle lang-toggle" style="justify-content:center;"><span class="lang-label">🌐 EN</span></button>
+    </div>
   </div>
 </div>
 <div id="toast"></div>
 <script src="/static/js/app.js"></script>
+<script src="/static/js/i18n.js"></script>
 <script>
 (function() {
   var role = sessionStorage.getItem(ROLE_KEY) || "";
@@ -49,29 +53,30 @@
           }));
           location.href = "/";
         } else {
-          $("loginMsg").textContent = data.message || "访客登录失败";
+          $("loginMsg").textContent = data.message || t("login.guestFail");
         }
       }).catch(function() {
         $("loginBtn").disabled = false;
-        $("loginMsg").textContent = "无法连接服务器";
+        $("loginMsg").textContent = t("login.noConn");
       });
   });
   $("passwordInput").addEventListener("keydown", function(e) { if (e.key === "Enter") doLogin(); });
   initTheme();
+  initLang();
 
   function doLogin() {
     var username = $("usernameInput").value.trim();
     var password = $("passwordInput").value;
     if (!username || !password) {
-      $("loginMsg").textContent = "请输入用户名和密码";
+      $("loginMsg").textContent = t("login.needBoth");
       return;
     }
     $("loginBtn").disabled = true;
-    $("loginBtn").textContent = "登录中...";
+    $("loginBtn").textContent = t("login.loggingIn");
     api("/auth", { method: "POST", body: JSON.stringify({ username: username, password: password }) })
       .then(function(data) {
         $("loginBtn").disabled = false;
-        $("loginBtn").textContent = "登 录";
+        $("loginBtn").textContent = t("login.submit");
         if (data.ok) {
           sessionStorage.setItem(TOKEN_KEY, data.token);
           sessionStorage.setItem(ROLE_KEY, data.role);
@@ -80,12 +85,12 @@
           }));
           location.href = "/";
         } else {
-          $("loginMsg").textContent = data.message || "登录失败";
+          $("loginMsg").textContent = data.message || t("login.fail");
         }
       }).catch(function() {
         $("loginBtn").disabled = false;
-        $("loginBtn").textContent = "登 录";
-        $("loginMsg").textContent = "无法连接服务器";
+        $("loginBtn").textContent = t("login.submit");
+        $("loginMsg").textContent = t("login.noConn");
       });
   }
 })();

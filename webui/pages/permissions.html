@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -8,44 +8,23 @@
 <script>document.documentElement.setAttribute('data-theme',localStorage.getItem('enderbridge_theme')||(window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark'));</script>
 </head>
 <body>
-<aside class="sidebar">
-  <div class="brand">
-    <span class="logo">⛏️</span>
-    <div>
-      <div class="name" id="srvName">EnderBridge</div>
-      <div class="ver">Web 管理</div>
-    </div>
-  </div>
-  <div class="nav-item" data-page="dashboard"><span>📊</span><span>仪表盘</span></div>
-  <div class="nav-item" data-page="permissions"><span>👥</span><span>权限管理</span></div>
-  <div class="nav-item" data-page="config"><span>⚙️</span><span>功能设置</span></div>
-  <div class="nav-item" data-page="mods"><span>🧩</span><span>Mod 管理</span></div>
-  <div class="nav-item" data-page="console"><span>💻</span><span>控制台</span></div>
-  <div class="nav-item" data-page="audit"><span>📋</span><span>审计日志</span></div>
-  <div class="nav-item" data-page="update"><span>🔄</span><span>检查更新</span></div>
-  <div class="nav-item" data-page="banlist"><span>🚫</span><span>封禁管理</span></div>
-  <div class="spacer"></div>
-  <button class="theme-toggle" id="themeToggle"><span class="theme-icon">🌙</span><span class="theme-label">深色模式</span></button>
-  <div class="guest-badge" id="guestBadge">👤 访客模式</div>
-  <div class="nav-item hidden" id="adminLoginBtn"><span>🔑</span><span>管理员登录</span></div>
-  <div class="logout" id="logoutBtn"><span>🚪</span><span>退出登录</span></div>
-</aside>
+<aside class="sidebar" data-auto-sidebar></aside>
 <div class="main">
-  <h2>👥 权限管理</h2>
+  <h2 data-i18n="perm.title">👥 权限管理</h2>
 
   <!-- ===== 用户管理 ===== -->
   <div class="card card-gap">
     <div class="row" style="justify-content:space-between;align-items:center;">
-      <div style="font-weight:600">用户</div>
-      <button class="btn btn-primary btn-sm" id="userAddBtn">添加用户</button>
+      <div style="font-weight:600" data-i18n="perm.users">用户</div>
+      <button class="btn btn-primary btn-sm" id="userAddBtn" data-i18n="perm.addUser">添加用户</button>
     </div>
-    <div class="muted" style="margin:6px 0 12px">管理 WebUI 登录账号,每个用户可分配不同角色。</div>
+    <div class="muted" style="margin:6px 0 12px" data-i18n="perm.usersHint">管理 WebUI 登录账号,每个用户可分配不同角色。</div>
     <table class="table" id="userTable">
       <thead>
-        <tr><th>用户名</th><th>角色</th><th>状态</th><th>操作</th></tr>
+        <tr><th data-i18n="perm.thUsername">用户名</th><th data-i18n="perm.thRole">角色</th><th data-i18n="perm.thStatus">状态</th><th data-i18n="perm.thOp">操作</th></tr>
       </thead>
       <tbody id="userTableBody">
-        <tr><td colspan="4" class="muted" style="text-align:center;padding:20px">加载中...</td></tr>
+        <tr><td colspan="4" class="muted" style="text-align:center;padding:20px" data-i18n="perm.loading">加载中...</td></tr>
       </tbody>
     </table>
   </div>
@@ -53,25 +32,25 @@
   <!-- ===== 角色权限 ===== -->
   <div class="card card-gap">
     <div class="row" style="justify-content:space-between;align-items:center;">
-      <div style="font-weight:600">🔐 角色权限配置</div>
+      <div style="font-weight:600" data-i18n="perm.roleTitle">🔐 角色权限配置</div>
       <div class="row gap-10">
-        <button class="btn btn-sm" id="roleAddBtn">➕ 新建角色</button>
-        <button class="btn btn-primary btn-sm" id="roleSaveBtn">💾 保存角色配置</button>
+        <button class="btn btn-sm" id="roleAddBtn" data-i18n="perm.newRole">➕ 新建角色</button>
+        <button class="btn btn-primary btn-sm" id="roleSaveBtn" data-i18n="perm.saveRoles">💾 保存角色配置</button>
       </div>
     </div>
-    <div class="muted" style="margin:6px 0 12px">定义每个角色可以访问的页面和操作权限。修改后需保存才能生效。</div>
+    <div class="muted" style="margin:6px 0 12px" data-i18n="perm.roleHint">定义每个角色可以访问的页面和操作权限。修改后需保存才能生效。</div>
     <div id="roleList"></div>
     <!-- 新建角色弹窗 -->
     <div class="modal-overlay" id="roleModal" style="display:none;">
       <div class="modal-card">
-        <h3 id="roleModalTitle">新建角色</h3>
-        <label>角色标识(英文)</label>
-        <input id="roleNameInput" class="input" placeholder="如: editor" autocomplete="off">
-        <label>显示名称</label>
-        <input id="roleLabelInput" class="input" placeholder="如: 编辑员" autocomplete="off">
+        <h3 id="roleModalTitle" data-i18n="perm.newRoleTitle">新建角色</h3>
+        <label data-i18n="perm.roleId">角色标识(英文)</label>
+        <input id="roleNameInput" class="input" data-i18n-ph="perm.roleIdPh" placeholder="如: editor" autocomplete="off">
+        <label data-i18n="perm.roleLabel">显示名称</label>
+        <input id="roleLabelInput" class="input" data-i18n-ph="perm.roleLabelPh" placeholder="如: 编辑员" autocomplete="off">
         <div class="row gap-10" style="margin-top:16px;justify-content:flex-end;">
-          <button class="btn" id="roleModalCancel">取消</button>
-          <button class="btn btn-primary" id="roleModalConfirm">创建</button>
+          <button class="btn" id="roleModalCancel" data-i18n="perm.cancel">取消</button>
+          <button class="btn btn-primary" id="roleModalConfirm" data-i18n="perm.create">创建</button>
         </div>
       </div>
     </div>
@@ -80,42 +59,42 @@
   <!-- ===== Minecraft 玩家权限(保留原有) ===== -->
   <div class="card card-gap">
     <div class="row" style="justify-content:space-between;align-items:center;">
-      <div style="font-weight:600">⚙️ 玩家权限列表</div>
+      <div style="font-weight:600" data-i18n="perm.playerTitle">⚙️ 玩家权限列表</div>
       <div class="row gap-10">
-        <button class="btn btn-sm" id="permReload">🔄 刷新</button>
-        <button class="btn btn-primary btn-sm" id="permSave">💾 保存修改到服务器</button>
+        <button class="btn btn-sm" id="permReload" data-i18n="perm.refresh">🔄 刷新</button>
+        <button class="btn btn-primary btn-sm" id="permSave" data-i18n="perm.saveToServer">💾 保存修改到服务器</button>
       </div>
     </div>
-    <div class="muted" style="margin:6px 0 12px">
+    <div class="muted" style="margin:6px 0 12px" data-i18n="perm.playerHint">
       添加或移除玩家后请<b>保存修改</b>。owner 仅可在下方单独修改。
     </div>
     <div class="perm-group" style="margin-bottom:12px">
-      <label style="font-weight:600;margin-bottom:4px;display:block;">👑 Owner（唯一拥有者）</label>
+      <label style="font-weight:600;margin-bottom:4px;display:block;" data-i18n="perm.owner">👑 Owner（唯一拥有者）</label>
       <input id="perm-owner" class="input" placeholder="YourXboxName" />
     </div>
     <div class="perm-group" data-group="op">
-      <label>🛡️ OP 管理员</label>
+      <label data-i18n="perm.op">🛡️ OP 管理员</label>
       <div class="row gap-10" style="margin:6px 0 10px">
-        <input id="input-op" class="input" placeholder="输入玩家名添加 OP" style="flex:1" />
-        <button class="btn btn-primary btn-sm" data-group="op">添加</button>
+        <input id="input-op" class="input" data-i18n-ph="perm.opPh" placeholder="输入玩家名添加 OP" style="flex:1" />
+        <button class="btn btn-primary btn-sm" data-group="op" data-i18n="perm.add">添加</button>
         <span class="muted" id="count-op"></span>
       </div>
       <div class="chips" id="chips-op"></div>
     </div>
     <div class="perm-group" data-group="user">
-      <label>👤 User 普通用户</label>
+      <label data-i18n="perm.user">👤 User 普通用户</label>
       <div class="row gap-10" style="margin:6px 0 10px">
-        <input id="input-user" class="input" placeholder="输入玩家名添加 User" style="flex:1" />
-        <button class="btn btn-primary btn-sm" data-group="user">添加</button>
+        <input id="input-user" class="input" data-i18n-ph="perm.userPh" placeholder="输入玩家名添加 User" style="flex:1" />
+        <button class="btn btn-primary btn-sm" data-group="user" data-i18n="perm.add">添加</button>
         <span class="muted" id="count-user"></span>
       </div>
       <div class="chips" id="chips-user"></div>
     </div>
     <div class="perm-group" data-group="blocker">
-      <label>🚫 Blocker 屏蔽名单</label>
+      <label data-i18n="perm.blocker">🚫 Blocker 屏蔽名单</label>
       <div class="row gap-10" style="margin:6px 0 10px">
-        <input id="input-blocker" class="input" placeholder="输入玩家名添加 Blocker" style="flex:1" />
-        <button class="btn btn-primary btn-sm" data-group="blocker">添加</button>
+        <input id="input-blocker" class="input" data-i18n-ph="perm.blockerPh" placeholder="输入玩家名添加 Blocker" style="flex:1" />
+        <button class="btn btn-primary btn-sm" data-group="blocker" data-i18n="perm.add">添加</button>
         <span class="muted" id="count-blocker"></span>
       </div>
       <div class="chips" id="chips-blocker"></div>
@@ -125,31 +104,31 @@
   <!-- ===== 添加/编辑用户弹窗 ===== -->
   <div class="modal-overlay" id="userModal" style="display:none;">
     <div class="modal-card" style="max-width:520px;">
-      <h3 id="userModalTitle">添加用户</h3>
-      <label>用户名</label>
-      <input id="modalUsername" class="input" placeholder="用户名" autocomplete="off">
-      <label>密码</label>
-      <input id="modalPassword" class="input" type="password" placeholder="密码" autocomplete="new-password">
-      <label>角色</label>
+      <h3 id="userModalTitle" data-i18n="perm.addUser">添加用户</h3>
+      <label data-i18n="perm.thUsername">用户名</label>
+      <input id="modalUsername" class="input" data-i18n-ph="perm.thUsername" placeholder="用户名" autocomplete="off">
+      <label data-i18n="perm.password">密码</label>
+      <input id="modalPassword" class="input" type="password" data-i18n-ph="perm.passwordPh" placeholder="密码" autocomplete="new-password">
+      <label data-i18n="perm.thRole">角色</label>
       <select id="modalRole" class="input"></select>
       <!-- 系统保留账户(仅 --system 模式) -->
       <div id="systemReservedRow" style="margin-top:10px;display:none;">
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.88em;">
           <input type="checkbox" id="modalSystemReserved">
-          <span>🛡️ 系统保留账户</span>
+          <span data-i18n="perm.systemReserved">🛡️ 系统保留账户</span>
         </label>
-        <div class="muted" style="margin:2px 0 0 24px;font-size:0.8em;">标记后非 admin 用户无法编辑此账户</div>
+        <div class="muted" style="margin:2px 0 0 24px;font-size:0.8em;" data-i18n="perm.systemReservedHint">标记后非 admin 用户无法编辑此账户</div>
       </div>
       <!-- 用户权限覆盖 -->
       <div style="margin-top:12px;">
-        <label style="font-weight:600;">用户权限覆盖</label>
-        <div class="muted" style="margin:4px 0 8px;font-size:0.85em;">单独覆盖此用户的权限。开启"不继承"可完全自定义。拒绝优先于允许。<span style="color:var(--err)">❌ 拒绝</span> &gt; <span style="color:var(--ok)">✅ 允许</span> &gt; 继承角色。可用上方按钮批量设置。</div>
+        <label style="font-weight:600;" data-i18n="perm.overrideTitle">用户权限覆盖</label>
+        <div class="muted" style="margin:4px 0 8px;font-size:0.85em;" data-i18n="perm.overrideHint">单独覆盖此用户的权限。开启"不继承"可完全自定义。拒绝优先于允许。<span style="color:var(--err)">❌ 拒绝</span> &gt; <span style="color:var(--ok)">✅ 允许</span> &gt; 继承角色。可用上方按钮批量设置。</div>
         <div id="userPermOverrides"></div>
       </div>
       <div class="login-msg" id="userModalMsg"></div>
       <div class="row gap-10" style="margin-top:16px;justify-content:flex-end;">
-        <button class="btn" id="modalCancel">取消</button>
-        <button class="btn btn-primary" id="modalConfirm">确认</button>
+        <button class="btn" id="modalCancel" data-i18n="perm.cancel">取消</button>
+        <button class="btn btn-primary" id="modalConfirm" data-i18n="perm.confirm">确认</button>
       </div>
     </div>
   </div>
@@ -157,19 +136,20 @@
   <!-- ===== Admin 密码验证弹窗 ===== -->
   <div class="modal-overlay" id="adminPwModal" style="display:none;">
     <div class="modal-card" style="max-width:400px;">
-      <h3>🔐 验证 admin 密码</h3>
-      <p class="muted" style="margin-bottom:12px;">非 admin 账户编辑其他用户时需要验证 admin 密码。</p>
-      <input id="adminPwInput" class="input" type="password" placeholder="admin 密码" autocomplete="current-password">
+      <h3 data-i18n="perm.verifyAdminTitle">🔐 验证 admin 密码</h3>
+      <p class="muted" style="margin-bottom:12px;" data-i18n="perm.verifyAdminHint">非 admin 账户编辑其他用户时需要验证 admin 密码。</p>
+      <input id="adminPwInput" class="input" type="password" data-i18n-ph="perm.adminPwPh" placeholder="admin 密码" autocomplete="current-password">
       <div class="login-msg" id="adminPwMsg"></div>
       <div class="row gap-10" style="margin-top:16px;justify-content:flex-end;">
-        <button class="btn" id="adminPwCancel">取消</button>
-        <button class="btn btn-primary" id="adminPwConfirm">验证</button>
+        <button class="btn" id="adminPwCancel" data-i18n="perm.cancel">取消</button>
+        <button class="btn btn-primary" id="adminPwConfirm" data-i18n="perm.verify">验证</button>
       </div>
     </div>
   </div>
 </div>
 <div id="toast"></div>
 <script src="/static/js/app.js"></script>
+<script src="/static/js/i18n.js"></script>
 <script src="/static/js/permissions.js"></script>
 </body>
 </html>

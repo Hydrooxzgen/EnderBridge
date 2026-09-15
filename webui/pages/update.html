@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -8,38 +8,17 @@
 <script>document.documentElement.setAttribute('data-theme',localStorage.getItem('enderbridge_theme')||(window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark'));</script>
 </head>
 <body>
-<aside class="sidebar">
-  <div class="brand">
-    <span class="logo">⛏️</span>
-    <div>
-      <div class="name" id="srvName">EnderBridge</div>
-      <div class="ver">Web 管理</div>
-    </div>
-  </div>
-  <div class="nav-item" data-page="dashboard"><span>📊</span><span>仪表盘</span></div>
-  <div class="nav-item" data-page="permissions"><span>👥</span><span>权限管理</span></div>
-  <div class="nav-item" data-page="config"><span>⚙️</span><span>功能设置</span></div>
-  <div class="nav-item" data-page="mods"><span>🧩</span><span>Mod 管理</span></div>
-  <div class="nav-item" data-page="console"><span>💻</span><span>控制台</span></div>
-  <div class="nav-item" data-page="audit"><span>📋</span><span>审计日志</span></div>
-  <div class="nav-item" data-page="update"><span>🔄</span><span>检查更新</span></div>
-  <div class="nav-item" data-page="banlist"><span>🚫</span><span>封禁管理</span></div>
-  <div class="spacer"></div>
-  <button class="theme-toggle" id="themeToggle"><span class="theme-icon">🌙</span><span class="theme-label">深色模式</span></button>
-  <div class="guest-badge" id="guestBadge">👤 访客模式</div>
-  <div class="nav-item hidden" id="adminLoginBtn"><span>🔑</span><span>管理员登录</span></div>
-  <div class="logout" id="logoutBtn"><span>🚪</span><span>退出登录</span></div>
-</aside>
+<aside class="sidebar" data-auto-sidebar></aside>
 <div class="main">
-  <h2>🔄 检查更新</h2>
+  <h2 data-i18n="upd.title">🔄 检查更新</h2>
 
   <div class="card card-gap">
     <div class="row" style="justify-content:space-between;align-items:center;">
-      <div style="font-weight:600">🔍 当前版本</div>
-      <button class="btn btn-primary btn-sm" id="updateCheckBtn">🔍 检查更新</button>
+      <div style="font-weight:600" data-i18n="upd.curVer">🔍 当前版本</div>
+      <button class="btn btn-primary btn-sm" id="updateCheckBtn" data-i18n="upd.checkBtn">🔍 检查更新</button>
     </div>
     <div class="update-ver" style="margin:8px 0">
-      当前版本：<code id="updateCurVer" style="padding:2px 6px;background:var(--input-bg);border-radius:4px;color:var(--text);">...</code>
+      <span data-i18n="upd.curVerLabel">当前版本：</span><code id="updateCurVer" style="padding:2px 6px;background:var(--input-bg);border-radius:4px;color:var(--text);">...</code>
     </div>
     <div id="updateCheckResult" style="display:none;">
       <div id="updateLatestInfo"></div>
@@ -47,30 +26,31 @@
   </div>
 
   <div class="card card-gap" id="updateLocalCard">
-    <div style="font-weight:600;margin-bottom:8px;">📦 本地文件更新</div>
-    <p class="desc">从本地选择 EnderBridge 压缩包进行更新（zip / tar.gz / 7z / xz）。<br>
+    <div style="font-weight:600;margin-bottom:8px;" data-i18n="upd.localTitle">📦 本地文件更新</div>
+    <p class="desc" data-i18n="upd.localDesc">从本地选择 EnderBridge 压缩包进行更新（zip / tar.gz / 7z / xz）。<br>
       服务器会先校验文件名与版本号，通过后自动备份并替换项目文件，然后重启。</p>
     <div class="row gap-10" style="flex-wrap:wrap;align-items:center">
-      <button class="btn btn-sm" id="updateChooseFileBtn">📂 选择压缩包</button>
+      <button class="btn btn-sm" id="updateChooseFileBtn" data-i18n="upd.chooseFile">📂 选择压缩包</button>
       <input type="file" id="updateFileInput" accept=".zip,.tar.gz,.tgz,.7z,.xz" style="display:none" />
-      <span id="updateFileName" class="muted" style="flex:1">未选择文件</span>
-      <button class="btn btn-primary btn-sm" id="updateLocalBtn" disabled>🚀 执行更新</button>
+      <span id="updateFileName" class="muted" style="flex:1" data-i18n="upd.noFile">未选择文件</span>
+      <button class="btn btn-primary btn-sm" id="updateLocalBtn" disabled data-i18n="upd.doUpdate">🚀 执行更新</button>
     </div>
   </div>
 
   <div class="card card-gap">
-    <div style="font-weight:600;margin-bottom:8px;">📜 所有版本 (GitHub Releases)</div>
-    <button class="btn btn-sm" id="releasesLoadBtn" style="margin-bottom:8px">加载版本历史</button>
+    <div style="font-weight:600;margin-bottom:8px;" data-i18n="upd.allVersions">📜 所有版本 (GitHub Releases)</div>
+    <button class="btn btn-sm" id="releasesLoadBtn" style="margin-bottom:8px" data-i18n="upd.loadHistory">加载版本历史</button>
     <div id="releasesPager" style="display:none;margin-bottom:8px">
-      <span class="muted" style="margin:0 8px">第 <span id="releasesPageNum">1</span> 页</span>
-      <button class="btn btn-sm" id="releasesPrevBtn" disabled>← 上一页</button>
-      <button class="btn btn-sm" id="releasesNextBtn">下一页 →</button>
+      <span class="muted" style="margin:0 8px"><span data-i18n="upd.pagePrefix">第 </span><span id="releasesPageNum">1</span><span data-i18n="upd.pageSuffix"> 页</span></span>
+      <button class="btn btn-sm" id="releasesPrevBtn" disabled data-i18n="upd.prevPage">← 上一页</button>
+      <button class="btn btn-sm" id="releasesNextBtn" data-i18n="upd.nextPage">下一页 →</button>
     </div>
     <div id="releasesList"></div>
   </div>
 </div>
 <div id="toast"></div>
 <script src="/static/js/app.js"></script>
+<script src="/static/js/i18n.js"></script>
 <script src="/static/js/update.js"></script>
 </body>
 </html>

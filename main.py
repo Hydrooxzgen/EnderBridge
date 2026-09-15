@@ -105,7 +105,7 @@ def _check_minimum_version(new_version: str) -> None:
         if new_ver < min_ver:
             _update_err(
                 f"目标版本 {new_version} 低于最低允许版本 {MINIMIUM_ALLOWED_VERSION},\n"
-                f"  不允许降级! 如需降级请手动修改 main.py 中的 MINIMIUM_ALLOWED_VERSION"
+                f"  不允许降级"
             )
     except Exception:
         pass  # 版本格式异常时跳过检查,不阻塞升级
@@ -308,7 +308,7 @@ if WANT_UPDATE:
 
     def _update_err(msg):
         print("========================================")
-        print(f"  升级失败: {msg}")
+        print(f"    失败: {msg}")
         print("  当前版本未做任何改动,可继续正常启动")
         print("========================================")
         sys.exit(1)

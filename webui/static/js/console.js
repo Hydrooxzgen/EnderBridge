@@ -1,4 +1,4 @@
-// ===== 控制台页面逻辑(统一终端视图) =====
+﻿// ===== 控制台页面逻辑(统一终端视图) =====
 var _logLines = [];
 var MAX_LOG_LINES = 1000;
 var _logPaused = false;
@@ -75,7 +75,7 @@ function renderAll() {
 
 function updateLogCount() {
   var el = $("logCount");
-  if (el) el.textContent = _logLines.length + " 条";
+  if (el) el.textContent = _logLines.length + t("console.countSuffix");
 }
 
 function updateLogStatus(connected) {
@@ -83,10 +83,10 @@ function updateLogStatus(connected) {
   var el = $("logStatus");
   if (!el) return;
   if (connected) {
-    el.textContent = "● 已连接";
+    el.textContent = t("console.connected");
     el.style.color = "#4ade80";
   } else {
-    el.textContent = "● 已断开";
+    el.textContent = t("console.disconnected");
     el.style.color = "#f87171";
   }
 }
@@ -106,21 +106,21 @@ function sendCommand() {
   // 命令输入行
   addEntry({ _type: "cmd", _ts: nowTs(), _text: "> " + cmd });
   var execBtn = $("consoleExecBtn");
-  if (execBtn) { execBtn.disabled = true; execBtn.textContent = "⏳ 执行中..."; }
+  if (execBtn) { execBtn.disabled = true; execBtn.textContent = t("console.execing"); }
   api("/console", { method: "POST", body: JSON.stringify({ command: cmd }) })
     .then(function (data) {
-      if (execBtn) { execBtn.disabled = false; execBtn.textContent = "▶ 执行"; }
+      if (execBtn) { execBtn.disabled = false; execBtn.textContent = t("console.exec"); }
       if (!data.ok) {
-        addEntry({ _type: "cmd-result", _ts: nowTs(), _ok: false, _text: data.message || "执行失败" });
+        addEntry({ _type: "cmd-result", _ts: nowTs(), _ok: false, _text: data.message || t("console.execFail") });
       } else {
-        var msg = data.statusMessage || "(无返回消息)";
+        var msg = data.statusMessage || t("console.noReturn");
         var code = data.statusCode !== undefined ? " [" + data.statusCode + "]" : "";
         addEntry({ _type: "cmd-result", _ts: nowTs(), _ok: true, _text: msg + code });
       }
     })
     .catch(function () {
-      if (execBtn) { execBtn.disabled = false; execBtn.textContent = "▶ 执行"; }
-      addEntry({ _type: "cmd-result", _ts: nowTs(), _ok: false, _text: "请求失败:网络错误或服务器未响应" });
+      if (execBtn) { execBtn.disabled = false; execBtn.textContent = t("console.exec"); }
+      addEntry({ _type: "cmd-result", _ts: nowTs(), _ok: false, _text: t("console.netFail") });
     });
 }
 
@@ -165,6 +165,7 @@ function connectLogStream() {
 requireAuth(function (role) {
   initSidebar("console", role);
   initTheme();
+  initLang();
   // 访客隐藏命令输入
   if (role === "guest") {
     var cmdCard = $("consoleCmdCard");
@@ -217,7 +218,7 @@ var pauseBtn = $("logPauseBtn");
 if (pauseBtn) {
   pauseBtn.addEventListener("click", function () {
     _logPaused = !_logPaused;
-    this.textContent = _logPaused ? "▶ 继续" : "⏸ 暂停";
+    this.textContent = _logPaused ? t("console.resume") : t("console.pause");
     this.className = _logPaused ? "btn btn-sm btn-primary" : "btn btn-sm";
   });
 }

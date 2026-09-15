@@ -1,7 +1,8 @@
-// ===== Mod 管理页面逻辑 =====
+﻿// ===== Mod 管理页面逻辑 =====
 requireAuth(function (role) {
   initSidebar("mods", role);
   initTheme();
+  initLang();
   loadMods();
   // 访客隐藏重载按钮
   if (role === "guest") {
@@ -20,13 +21,13 @@ function loadMods() {
 
 function renderModRows(mods, side) {
   var keys = Object.keys(mods || {});
-  if (!keys.length) return '<tr><td colspan="4" class="td-faint">无</td></tr>';
+  if (!keys.length) return '<tr><td colspan="4" class="td-faint">' + t("mods.empty") + '</td></tr>';
   return keys.map(function (name) {
     var info = mods[name];
     var ok = info.importable;
     return '<tr><td>' + escapeHtml(name) + '</td><td class="td-dim">' + escapeHtml(info.path) +
-      '</td><td><span class="status-dot ' + (ok ? "ok" : "bad") + '"></span>' + (ok ? "可导入" : "导入失败") +
-      '</td><td><button class="btn btn-sm mod-reload-btn" data-name="' + escapeHtml(name) + '" data-side="' + side + '">🔄 重载</button></td></tr>';
+      '</td><td><span class="status-dot ' + (ok ? "ok" : "bad") + '"></span>' + (ok ? t("mods.importOk") : t("mods.importFail")) +
+      '</td><td><button class="btn btn-sm mod-reload-btn" data-name="' + escapeHtml(name) + '" data-side="' + side + '">' + t("mods.reload") + '</button></td></tr>';
   }).join("");
 }
 
@@ -34,9 +35,9 @@ function reloadMod(name, side, btn) {
   btn.disabled = true;
   btn.textContent = "⏳";
   api("/mods/reload", { method: "POST", body: JSON.stringify({ name: name, side: side }) })
-    .then(function (data) { toast(data.message || "重载完成", data.ok ? "ok" : "err"); })
-    .catch(function () { toast("请求失败", "err"); })
-    .finally(function () { btn.disabled = false; btn.textContent = "🔄 重载"; });
+    .then(function (data) { toast(data.message || t("mods.reloadDone"), data.ok ? "ok" : "err"); })
+    .catch(function () { toast(t("mods.reqFail"), "err"); })
+    .finally(function () { btn.disabled = false; btn.textContent = t("mods.reload"); });
 }
 
 // 刷新按钮
@@ -50,7 +51,7 @@ if (modReloadAllBtn) {
     var btn = this;
     btn.disabled = true;
     api("/mods/reload-all", { method: "POST" })
-      .then(function (data) { toast(data.message || "重载完成", data.ok ? "ok" : "err"); })
+      .then(function (data) { toast(data.message || t("mods.reloadDone"), data.ok ? "ok" : "err"); })
       .catch(function () {})
       .finally(function () { btn.disabled = false; });
   });

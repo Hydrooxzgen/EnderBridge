@@ -1,4 +1,4 @@
-// Author: Hydrooxzgen (Hydrooxygen)
+﻿// Author: Hydrooxzgen (Hydrooxygen)
 // Github: https://github.com/Hydrooxzgen
 // This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 // 功能设置页面逻辑
@@ -18,6 +18,7 @@ var MOD_CATALOG = {
 requireAuth(function (role) {
   initSidebar("config", role);
   initTheme();
+  initLang();
   loadConfig();
   initCategoryNav();
 });
@@ -222,11 +223,11 @@ function renderAliasList() {
     html += '<div class="alias-item" style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;margin-bottom:8px;">' +
       '<span style="font-weight:600;min-width:100px;">' + escapeHtml(cmd) + '</span>' +
       '<span style="flex:1;color:var(--text-dim);font-size:13px;">' + escapeHtml(aliasList) + '</span>' +
-      '<button class="btn btn-sm btn-ghost edit-alias" data-cmd="' + escapeHtml(cmd) + '" data-aliases="' + escapeHtml(aliases[cmd].join(",")) + '">✏️ 编辑</button>' +
+      '<button class="btn btn-sm btn-ghost edit-alias" data-cmd="' + escapeHtml(cmd) + '" data-aliases="' + escapeHtml(aliases[cmd].join(",")) + '">' + t("cfg.jsEdit") + '</button>' +
       '<button class="btn btn-sm btn-ghost remove-alias" data-cmd="' + escapeHtml(cmd) + '">🗑️</button>' +
       '</div>';
   }
-  if (!html) html = '<p class="hint" style="text-align:center;padding:16px;">暂无自定义别名，点击上方按钮添加</p>';
+  if (!html) html = '<p class="hint" style="text-align:center;padding:16px;">' + t("cfg.jsNoAlias") + '</p>';
   container.innerHTML = html;
   // 绑定编辑事件
   container.querySelectorAll(".edit-alias").forEach(function (btn) {
@@ -240,35 +241,35 @@ function renderAliasList() {
   container.querySelectorAll(".remove-alias").forEach(function (btn) {
     btn.addEventListener("click", function () {
       var cmd = this.getAttribute("data-cmd");
-      if (confirm("确定要删除 " + cmd + " 的所有别名吗？")) {
+      if (confirm(t("cfg.jsConfirmDelAliasPrefix") + cmd + t("cfg.jsConfirmDelAliasSuffix"))) {
         delete cfgData.commandAliases[cmd];
         renderAliasList();
-        toast("已删除 " + cmd + " 的别名", "ok");
+        toast(t("cfg.jsDeletedPrefix") + cmd + t("cfg.jsDeletedSuffix"), "ok");
       }
     });
   });
 }
 
 function showAddAliasModal() {
-  var cmd = prompt("请输入主命令名（如 message, bot, function 等）：");
+  var cmd = prompt(t("cfg.jsPromptCmd"));
   if (!cmd) return;
-  var aliases = prompt("请输入别名，多个用逗号分隔（如 msg, m）：");
+  var aliases = prompt(t("cfg.jsPromptAliases"));
   if (!aliases) return;
   var aliasArr = aliases.split(",").map(function (s) { return s.trim(); }).filter(Boolean);
   if (!aliasArr.length) return;
   cfgData.commandAliases = cfgData.commandAliases || {};
   cfgData.commandAliases[cmd] = aliasArr;
   renderAliasList();
-  toast("已添加别名: " + cmd + " → " + aliasArr.join(", "), "ok");
+  toast(t("cfg.jsAddedPrefix") + cmd + " → " + aliasArr.join(", "), "ok");
 }
 
 function showEditAliasModal(cmd, currentAliases) {
-  var newAliases = prompt("编辑 " + cmd + " 的别名（多个用逗号分隔）：", currentAliases);
+  var newAliases = prompt(t("cfg.jsEditPromptPrefix") + cmd + t("cfg.jsEditPromptSuffix"), currentAliases);
   if (newAliases === null) return; // 用户取消
   var aliasArr = newAliases.split(",").map(function (s) { return s.trim(); }).filter(Boolean);
   if (!aliasArr.length) {
     // 别名清空则删除该命令
-    if (confirm("别名为空，确定要删除 " + cmd + " 的所有别名吗？")) {
+    if (confirm(t("cfg.jsEmptyConfirmPrefix") + cmd + t("cfg.jsConfirmDelAliasSuffix"))) {
       delete cfgData.commandAliases[cmd];
     }
     renderAliasList();
@@ -277,7 +278,7 @@ function showEditAliasModal(cmd, currentAliases) {
   cfgData.commandAliases = cfgData.commandAliases || {};
   cfgData.commandAliases[cmd] = aliasArr;
   renderAliasList();
-  toast("已更新别名: " + cmd + " → " + aliasArr.join(", "), "ok");
+  toast(t("cfg.jsUpdatedPrefix") + cmd + " → " + aliasArr.join(", "), "ok");
 }
 
 var addAliasBtn = $("addAliasBtn");
@@ -320,7 +321,7 @@ if (aliasToggle) {
       // 开启别名:若当前为空则填充默认值
       if (!cfgData.commandAliases || Object.keys(cfgData.commandAliases).length === 0) {
         cfgData.commandAliases = JSON.parse(JSON.stringify(DEFAULT_COMMAND_ALIASES));
-        toast("已加载默认别名配置", "ok");
+        toast(t("cfg.jsDefaultLoaded"), "ok");
       }
     } else {
       cfgData.commandAliases = {};
@@ -371,7 +372,7 @@ function loadXboxAccounts() {
     var activeEl = $("cfg-bot-xbox-active");
     var badgeEl = $("cfg-bot-xbox-badge");
     if (activeEl) {
-      activeEl.textContent = active || "未登录";
+      activeEl.textContent = active || t("cfg.botXboxNotLogged");
     }
     if (badgeEl) {
       badgeEl.style.display = active ? "inline" : "none";
@@ -419,13 +420,13 @@ function startLoginProcess() {
   var step2 = $("cfgBotXboxLoginStep2");
   api("/bot/xbox-login", { method: "POST", body: JSON.stringify({}) })
     .then(function (data) {
-      if (!data.ok) { toast(data.message || "启动失败", "err"); return; }
+      if (!data.ok) { toast(data.message || t("cfg.jsStartFail"), "err"); return; }
       if (step1) step1.style.display = "none";
       if (step2) step2.style.display = "";
       // 开始轮询登录状态
       pollXboxLoginStatus();
     })
-    .catch(function (e) { toast("启动失败: " + (e.message || e), "err"); });
+    .catch(function (e) { toast(t("cfg.jsStartFailPrefix") + (e.message || e), "err"); });
 }
 
 function pollXboxLoginStatus() {
@@ -443,7 +444,7 @@ function pollXboxLoginStatus() {
         var result = $("cfgBotXboxLoginResult");
         var step2 = $("cfgBotXboxLoginStep2");
         if (step2) step2.style.display = "none";
-        if (result) { result.style.display = ""; result.innerHTML = '<p style="color:var(--accent);">✅ 登录成功! 账号 ' + escapeHtml(data.username) + ' 已保存。</p>'; }
+        if (result) { result.style.display = ""; result.innerHTML = '<p style="color:var(--accent);">' + t("cfg.jsLoginOkPrefix") + escapeHtml(data.username) + t("cfg.jsLoginOkSuffix") + '</p>'; }
         loadXboxAccounts();
         setTimeout(closeXboxLoginModal, 2000);
       } else if (data.status === "error") {
@@ -451,7 +452,7 @@ function pollXboxLoginStatus() {
         var result2 = $("cfgBotXboxLoginResult");
         var step2b = $("cfgBotXboxLoginStep2");
         if (step2b) step2b.style.display = "none";
-        if (result2) { result2.style.display = ""; result2.innerHTML = '<p style="color:var(--danger,#ef4444);">❌ 登录失败: ' + escapeHtml(data.error || "未知错误") + '</p>'; }
+        if (result2) { result2.style.display = ""; result2.innerHTML = '<p style="color:var(--danger,#ef4444);">' + t("cfg.jsLoginFailPrefix") + escapeHtml(data.error || t("cfg.jsUnknownError")) + '</p>'; }
       }
     }).catch(function () {});
   }, 2000);
@@ -478,22 +479,22 @@ function switchXboxAccount() {
       toast(data.message, data.ok ? "ok" : "err");
       if (data.ok) loadXboxAccounts();
     })
-    .catch(function (e) { toast("切换失败: " + (e.message || e), "err"); });
+    .catch(function (e) { toast(t("cfg.jsSwitchFailPrefix") + (e.message || e), "err"); });
 }
 
 function removeXboxAccount() {
   var active = ($("cfg-bot-xbox-active").textContent || "").trim();
-  if (!active || active === "未登录") { toast("没有可移除的账号", "err"); return; }
+  if (!active || active === t("cfg.botXboxNotLogged")) { toast(t("cfg.jsNoAccount"), "err"); return; }
   var select = $("cfg-bot-xbox-switch");
   var username = (select && select.style.display !== "none") ? select.value : active;
   if (!username) return;
-  if (!confirm("确定要移除账号 " + username + " 吗?")) return;
+  if (!confirm(t("cfg.jsRemoveConfirmPrefix") + username + t("cfg.jsRemoveConfirmSuffix"))) return;
   api("/bot/xbox-account/remove", { method: "POST", body: JSON.stringify({ username: username }) })
     .then(function (data) {
       toast(data.message, data.ok ? "ok" : "err");
       if (data.ok) loadXboxAccounts();
     })
-    .catch(function (e) { toast("移除失败: " + (e.message || e), "err"); });
+    .catch(function (e) { toast(t("cfg.jsRemoveFailPrefix") + (e.message || e), "err"); });
 }
 
 // 绑定 Xbox 账号按钮事件
@@ -603,7 +604,7 @@ function saveConfig() {
   };
   api("/config", { method: "PUT", body: JSON.stringify(payload) })
     .then(function (data) { toast(data.message, data.ok ? "ok" : "err"); if (data.ok) loadConfig(); })
-    .catch(function (e) { toast("保存失败: " + (e.message || e), "err"); });
+    .catch(function (e) { toast(t("cfg.jsSaveFailPrefix") + (e.message || e), "err"); });
 }
 
 var cs1 = $("configSave"); if (cs1) cs1.addEventListener("click", saveConfig);
@@ -613,7 +614,7 @@ var cs2 = $("configSave2"); if (cs2) cs2.addEventListener("click", saveConfig);
 var fwBtn = $("cfg-addFirewall");
 if (fwBtn) fwBtn.addEventListener("click", function () {
   fwBtn.disabled = true;
-  fwBtn.textContent = "⏳ 添加中...";
+  fwBtn.textContent = t("cfg.jsFwAdding");
   api("/firewall", { method: "POST" })
     .then(function (data) {
       if (data.ok) {
@@ -622,16 +623,16 @@ if (fwBtn) fwBtn.addEventListener("click", function () {
         toast(data.message, "err");
         if (data.command) {
           navigator.clipboard.writeText(data.command).then(function () {
-            toast("命令已复制到剪贴板,请在管理员终端中粘贴执行", "ok");
+            toast(t("cfg.jsFwCopied"), "ok");
           }).catch(function () {
-            toast("请手动复制命令: " + data.command, "err");
+            toast(t("cfg.jsFwCopyManualPrefix") + data.command, "err");
           });
         }
       }
     })
-    .catch(function (e) { toast("请求失败: " + (e.message || e), "err"); })
+    .catch(function (e) { toast(t("cfg.jsReqFailPrefix") + (e.message || e), "err"); })
     .finally(function () {
       fwBtn.disabled = false;
-      fwBtn.textContent = "🛡️ 一键放行防火墙";
+      fwBtn.textContent = t("cfg.webFirewall");
     });
 });
