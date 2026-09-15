@@ -30,6 +30,9 @@ VERSION = "b0.4.2 dev"
 DESCRIPTION = """
 safefix1: 修复了14个漏洞
 codechange1: 把update/export等逻辑放入version_manager中
+feat1: rollback功能,可回滚到指定备份包
+fix1: 日志轮转防撑爆磁盘
+feat2: 多语言支持
 """
 MINIMIUM_ALLOWED_VERSION = "b0.4.0" # 因为b0.4.0版本大量重写了账户登录逻辑, 所以, 我设置了拒绝降级到b0.4.0-的版本
                                     # 但是如果你需要降级低于b0.4.0的版本，请更改这里的值为b0.0.0以删除限制
@@ -52,9 +55,11 @@ WANT_HELP = "--help" in sys.argv or "-h" in sys.argv
 WANT_VIEW_DESCRIPTION = "--description" in sys.argv
 WANT_GOTO_OOBE = "--goto-oobe" in sys.argv
 WANT_UPDATE = "update" in sys.argv
+WANT_ROLLBACK = "--rollback" in sys.argv
 ARGV_NOT_EXIST = not WANT_RESET\
 and not WANT_VIEW_VERSION and not WANT_EXPORT \
-and not WANT_VIEW_DESCRIPTION and not WANT_HELP
+and not WANT_VIEW_DESCRIPTION and not WANT_HELP \
+and not WANT_ROLLBACK
 
 # --- 终端提示符常量 ---
 CONSOLE_PROMPT = "EnderBridge> "
@@ -216,8 +221,9 @@ if WANT_HELP:
     print()
     print("命令:")
     print("  (无参数)              正常启动服务器")
-    print("  update <压缩包>       一键升级(保留配置)")
+    print("  update <压缩包>       一键升级(保留配置,自动备份)")
     print("  export [输出路径]     一键导出为zip")
+    print("  --rollback [备份包]   回滚到指定备份(默认最新)")
     print()
     print("选项:")
     print("  --help, -h            显示此帮助信息")
@@ -236,9 +242,37 @@ if WANT_HELP:
     print("  python main.py --version                 查看版本")
     sys.exit(0)
 
+# ===== 回滚:python main.py --rollback [备份包] =====
+# 用更新前自动生成的备份覆盖当前项目(默认用最新备份),完成后退出不启动服务器。
+# (WANT_ROLLBACK 开关常量见顶部)
+if WANT_ROLLBACK:
+    from version_manager.package import rollback, PackageError
+
+    idx = sys.argv.index("--rollback")
+    backup_arg = sys.argv[idx + 1] if len(sys.argv) > idx + 1 and not sys.argv[idx + 1].startswith("-") else None
+    print("========================================")
+    print("  正在回滚 EnderBridge ...")
+    print(f"  当前版本: {VERSION}")
+    if backup_arg:
+        print(f"  指定备份: {backup_arg}")
+    print("========================================")
+    try:
+        used = rollback(ROOT, backup_arg)
+    except PackageError as e:
+        print("========================================")
+        print(f"  回滚失败: {e}")
+        print("========================================")
+        sys.exit(1)
+    print("========================================")
+    print(f"  回滚完成: {used}")
+    print("  请重新启动: py -B main.py")
+    print("========================================")
+    sys.exit(0)
+
 # ===== 一键升级:python main.py update <新版本压缩包> =====
 # 从压缩包(zip / tar.gz)升级当前版本,保留 config.py / permission.json
 # 等设置与 resources / structures / logs 等用户数据,完成后退出不启动服务器。
+# 更新前自动备份到上级目录(保留最近 3 个),可用 --rollback 回滚。
 # (WANT_UPDATE 开关常量见顶部)
 if WANT_UPDATE:
     import shutil
@@ -246,6 +280,7 @@ if WANT_UPDATE:
 
     from version_manager.package import (
         apply_archive,
+        backup_dir,
         iter_archive_members,
         PackageError,
     )
@@ -322,6 +357,13 @@ if WANT_UPDATE:
                         break
             except Exception:
                 pass
+
+        # 1.6 更新前自动备份(失败则中止,不动现有文件)
+        try:
+            backup_path = backup_dir(ROOT)
+        except PackageError as e:
+            _update_err(str(e))
+        print(f"  已备份当前版本: {backup_path}")
 
         # 2-4. 解压到临时目录(跳过数据区,模板放行) → 校验 → 覆盖到项目根目录
         try:
@@ -628,7 +670,7 @@ if os.path.isfile(UPDATE_MARKER) and not WANT_UPDATE:
         except Exception:
             pass
     if pending_path and os.path.isfile(pending_path):
-        from version_manager.package import apply_archive, PackageError
+        from version_manager.package import apply_archive, backup_dir, PackageError
 
         print("========================================")
         print(f"  WebUI 触发更新: {pending_path}")
@@ -637,6 +679,8 @@ if os.path.isfile(UPDATE_MARKER) and not WANT_UPDATE:
 
         try:
             try:
+                backup_path = backup_dir(ROOT)
+                print(f"  已备份当前版本: {backup_path}")
                 copied = apply_archive(pending_path, ROOT)
             except PackageError as e:
                 print(f"  更新失败: {e}")

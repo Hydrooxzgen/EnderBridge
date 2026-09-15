@@ -12,6 +12,10 @@ from datetime import datetime, timezone, timedelta
 # 日志输出目录
 LOG_DIR = "./logs"
 
+# 日志轮转:单个文件超过该大小则轮转,保留最近 N 个历史文件
+LOG_MAX_BYTES = 5 * 1024 * 1024  # 5MB
+LOG_BACKUP_COUNT = 5
+
 # 日志等级数值映射(数字越大越严重)
 LOG_LEVELS = {
     "debug": 0,
@@ -59,9 +63,40 @@ def set_console_hooks(before=None, after=None):
     _after_console_output = after
 
 
+def _rotate_if_needed(name: str) -> None:
+    """检查日志文件大小,超限则轮转(name.log → name.log.1 → ... → name.log.N)"""
+    log_path = os.path.join(LOG_DIR, f"{name}.log")
+    try:
+        if not os.path.isfile(log_path) or os.path.getsize(log_path) < LOG_MAX_BYTES:
+            return
+    except OSError:
+        return
+    # 先关闭旧句柄(轮转时重命名需要)
+    old = _log_streams.pop(name, None)
+    if old is not None:
+        try:
+            old.flush()
+            old.close()
+        except Exception:
+            pass
+    # 删除最旧的,依次后移
+    try:
+        oldest = f"{log_path}.{LOG_BACKUP_COUNT}"
+        if os.path.exists(oldest):
+            os.remove(oldest)
+        for i in range(LOG_BACKUP_COUNT - 1, 0, -1):
+            src = f"{log_path}.{i}"
+            if os.path.exists(src):
+                os.rename(src, f"{log_path}.{i + 1}")
+        os.rename(log_path, f"{log_path}.1")
+    except OSError:
+        pass
+
+
 def get_log_stream(name: str):
-    """获取或创建日志文件句柄"""
+    """获取或创建日志文件句柄(写入前自动检查轮转)"""
     if name not in _log_streams:
+        _rotate_if_needed(name)
         log_path = os.path.join(LOG_DIR, f"{name}.log")
         _log_streams[name] = open(log_path, "a", encoding="utf-8")
     return _log_streams[name]
@@ -123,9 +158,10 @@ class Logger:
             if _after_console_output:
                 _after_console_output()
 
-        # 写入日志文件
+        # 写入日志文件(每次写入前检查大小,超限则轮转)
         if self.file:
             try:
+                _rotate_if_needed(self.name)
                 stream = get_log_stream(self.name)
                 stream.write(log_message + "\n")
                 stream.flush()

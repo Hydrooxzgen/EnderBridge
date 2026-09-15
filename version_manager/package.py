@@ -41,6 +41,10 @@ EXPORT_SKIP_EXTS = {".pyc", ".pyo"}
 _ZIP_SUFFIX = (".zip",)
 _TAR_SUFFIXES = (".tar.gz", ".tgz", ".tar.bz2", ".tar.xz", ".tar")
 
+# 更新前自动备份:保留最近 N 个备份,存放在项目上级目录避免被打包/覆盖
+BACKUP_KEEP_COUNT = 3
+BACKUP_PREFIX = "EnderBridge_backup_"
+
 
 class PackageError(Exception):
     """更新包处理失败(格式不支持 / 读取失败 / 校验不通过)"""
@@ -218,3 +222,83 @@ def create_export_zip(root, out_path) -> str:
         for rel, abspath in files:
             z.write(abspath, rel)
     return out_path
+
+
+def backup_dir(root, dest_dir=None, keep=BACKUP_KEEP_COUNT) -> str:
+    """更新前备份:将项目目录整体打包为 zip,返回备份路径,失败抛 PackageError
+
+    备份默认存放在项目上级目录(避免被打包/覆盖/删除),只保留最近 keep 个。
+    """
+    from datetime import datetime
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    parent = os.path.dirname(os.path.abspath(root))
+    dest_dir = dest_dir or parent
+    os.makedirs(dest_dir, exist_ok=True)
+    out_path = os.path.join(dest_dir, f"{BACKUP_PREFIX}{stamp}.zip")
+    try:
+        with zipfile.ZipFile(out_path, "w", zipfile.ZIP_DEFLATED) as z:
+            for dirpath, dirnames, filenames in os.walk(root):
+                dirnames[:] = [d for d in dirnames if d != "__pycache__"]
+                for fname in filenames:
+                    if os.path.splitext(fname)[1].lower() in EXPORT_SKIP_EXTS:
+                        continue
+                    abspath = os.path.join(dirpath, fname)
+                    rel = os.path.relpath(abspath, root).replace(os.sep, "/")
+                    z.write(abspath, rel)
+    except Exception as e:
+        try:
+            os.unlink(out_path)
+        except OSError:
+            pass
+        raise PackageError(f"备份失败: {e}")
+    prune_backups(dest_dir, keep)
+    return out_path
+
+
+def list_backups(dest_dir) -> list:
+    """列出备份目录下的备份包(按时间从旧到新排序)"""
+    try:
+        names = os.listdir(dest_dir)
+    except OSError:
+        return []
+    found = [os.path.join(dest_dir, n) for n in names
+             if n.startswith(BACKUP_PREFIX) and n.endswith(".zip")]
+    found.sort()
+    return found
+
+
+def prune_backups(dest_dir, keep=BACKUP_KEEP_COUNT) -> None:
+    """只保留最近 keep 个备份,删除多余的旧备份"""
+    found = list_backups(dest_dir)
+    for old in found[:-keep] if keep > 0 else found:
+        try:
+            os.remove(old)
+        except OSError:
+            pass
+
+
+def rollback(root, backup_path=None, dest_dir=None) -> str:
+    """回滚:用指定备份(默认最新)覆盖项目目录,返回使用的备份路径
+
+    失败抛 PackageError。回滚同样先备份当前状态,避免回滚本身造成数据丢失。
+    """
+    dest_dir = dest_dir or os.path.dirname(os.path.abspath(root))
+    if backup_path is None:
+        found = list_backups(dest_dir)
+        if not found:
+            raise PackageError(f"未找到可用备份(目录: {dest_dir})")
+        backup_path = found[-1]
+    if not os.path.isfile(backup_path):
+        raise PackageError(f"找不到备份文件: {backup_path}")
+    # 回滚前先备份当前状态
+    backup_dir(root, dest_dir)
+    # 备份包是全量打包(含 config/ 等数据区),回滚时全量覆盖
+    tmp = tempfile.mkdtemp(prefix="enderbridge_rollback_")
+    try:
+        extract_archive(backup_path, tmp, keep=set(), allow=set())
+        copied = overlay_dir(tmp, root, keep=set(), allow=set())
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    if copied == 0:
+        raise PackageError("回滚失败: 备份包为空或无法解压")
+    return backup_path
