@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -14,28 +14,55 @@
 
   <!-- 封禁操作 -->
   <div class="card">
-    <div style="font-weight:600;margin-bottom:12px;" data-i18n="ban.banIp">封禁 IP</div>
-    <div class="row gap-10" style="flex-wrap:wrap;">
-      <input type="text" id="banIpInput" data-i18n-ph="ban.ipPh" placeholder="IP 地址 (如 192.168.1.100)" style="flex:1;min-width:180px;padding:8px 12px;border:1px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:14px;" autocomplete="off" />
-      <input type="text" id="banReasonInput" data-i18n-ph="ban.reasonPh" placeholder="封禁原因 (可选)" style="flex:2;min-width:200px;padding:8px 12px;border:1px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:14px;" autocomplete="off" />
-      <select id="banDurationSelect" style="padding:8px 12px;border:1px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:14px;min-width:120px;">
-        <option value="0" data-i18n="ban.permanent">永久</option>
-        <option value="10" data-i18n="ban.min10">10 分钟</option>
-        <option value="30" data-i18n="ban.min30">30 分钟</option>
-        <option value="60" data-i18n="ban.hour1">1 小时</option>
-        <option value="360" data-i18n="ban.hour6">6 小时</option>
-        <option value="1440" data-i18n="ban.day1">1 天</option>
-        <option value="10080" data-i18n="ban.day7">7 天</option>
-        <option value="43200" data-i18n="ban.day30">30 天</option>
-        <option value="-1" data-i18n="ban.custom">自定义</option>
-      </select>
-      <input type="text" id="banCustomDuration" data-i18n-ph="ban.durationPh" placeholder="时长" style="width:80px;padding:8px 12px;border:1px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:14px;display:none;" autocomplete="off" />
-      <select id="banDurationUnit" style="padding:8px 8px;border:1px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:14px;display:none;min-width:60px;">
-        <option value="s" data-i18n="ban.unitSecond">秒</option>
-        <option value="m" selected data-i18n="ban.unitMinute">分</option>
-        <option value="h" data-i18n="ban.unitHour">时</option>
-      </select>
-      <button class="btn btn-primary btn-sm" id="banBtn" data-i18n="ban.banBtn">🚫 封禁</button>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+      <span style="font-weight:600;" data-i18n="ban.banIp">封禁 IP</span>
+      <div style="display:inline-flex;border:1px solid #334155;border-radius:6px;overflow:hidden;font-size:12px;">
+        <button class="btn btn-sm btn-primary" id="banTabSingleBtn" style="border-radius:0;padding:4px 10px;" data-i18n="ban.tabSingle">单个封禁</button>
+        <button class="btn btn-sm" id="banTabBatchBtn" style="border-radius:0;padding:4px 10px;" data-i18n="ban.tabBatch">批量导入</button>
+      </div>
+    </div>
+
+    <!-- 单个封禁面板 -->
+    <div id="banSinglePanel">
+      <div class="row gap-10" style="flex-wrap:wrap;">
+        <input type="text" id="banIpInput" data-i18n-ph="ban.ipPh" placeholder="IP 地址 (如 192.168.1.100)" style="flex:1;min-width:180px;padding:8px 12px;border:1px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:14px;" autocomplete="off" />
+        <input type="text" id="banReasonInput" data-i18n-ph="ban.reasonPh" placeholder="封禁原因 (可选)" style="flex:2;min-width:200px;padding:8px 12px;border:1px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:14px;" autocomplete="off" />
+        <select id="banDurationSelect" style="padding:8px 12px;border:1px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:14px;min-width:120px;">
+          <option value="0" data-i18n="ban.permanent">永久</option>
+          <option value="10" data-i18n="ban.min10">10 分钟</option>
+          <option value="30" data-i18n="ban.min30">30 分钟</option>
+          <option value="60" data-i18n="ban.hour1">1 小时</option>
+          <option value="360" data-i18n="ban.hour6">6 小时</option>
+          <option value="1440" data-i18n="ban.day1">1 天</option>
+          <option value="10080" data-i18n="ban.day7">7 天</option>
+          <option value="43200" data-i18n="ban.day30">30 天</option>
+          <option value="-1" data-i18n="ban.custom">自定义</option>
+        </select>
+        <input type="text" id="banCustomDuration" data-i18n-ph="ban.durationPh" placeholder="时长" style="width:80px;padding:8px 12px;border:1px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:14px;display:none;" autocomplete="off" />
+        <select id="banDurationUnit" style="padding:8px 8px;border:1px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:14px;display:none;min-width:60px;">
+          <option value="s" data-i18n="ban.unitSecond">秒</option>
+          <option value="m" selected data-i18n="ban.unitMinute">分</option>
+          <option value="h" data-i18n="ban.unitHour">时</option>
+        </select>
+        <button class="btn btn-primary btn-sm" id="banBtn" data-i18n="ban.banBtn">🚫 封禁</button>
+      </div>
+    </div>
+
+    <!-- 批量封禁面板 -->
+    <div id="banBatchPanel" style="display:none;">
+      <textarea id="banBatchIpsInput" data-i18n-ph="ban.batchIpsPh" placeholder="每行一个 IP，或用逗号/分号隔开&#10;支持 CIDR 子网 (如 192.168.1.0/24)" style="width:100%;height:85px;padding:8px 12px;border:1px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:13px;font-family:monospace;resize:vertical;box-sizing:border-box;margin-bottom:10px;"></textarea>
+      <div class="row gap-10" style="flex-wrap:wrap;align-items:center;">
+        <input type="text" id="banBatchReasonInput" data-i18n-ph="ban.reasonPh" placeholder="封禁原因 (可选)" style="flex:2;min-width:180px;padding:8px 12px;border:1px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:14px;" autocomplete="off" />
+        <select id="banBatchDurationSelect" style="padding:8px 12px;border:1px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:14px;min-width:110px;">
+          <option value="0" data-i18n="ban.permanent">永久</option>
+          <option value="10" data-i18n="ban.min10">10 分钟</option>
+          <option value="30" data-i18n="ban.min30">30 分钟</option>
+          <option value="60" data-i18n="ban.hour1">1 小时</option>
+          <option value="1440" data-i18n="ban.day1">1 天</option>
+          <option value="10080" data-i18n="ban.day7">7 天</option>
+        </select>
+        <button class="btn btn-primary btn-sm" id="banBatchBtn" data-i18n="ban.batchBtn">🚫 批量封禁</button>
+      </div>
     </div>
   </div>
 
@@ -84,12 +111,19 @@
   <div class="card">
     <div class="row" style="justify-content:space-between;align-items:center;">
       <div style="font-weight:600;"><span data-i18n="ban.list">封禁列表</span> <span class="muted" id="banCount"></span></div>
-      <button class="btn btn-sm" id="banRefreshBtn" data-i18n="ban.refresh">🔄 刷新</button>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div id="banBatchToolbar" style="display:none;align-items:center;gap:8px;">
+          <span id="banSelectedCount" style="font-size:12px;color:var(--muted,#94a3b8);">已选 0 项</span>
+          <button class="btn btn-sm" id="banBatchDeleteBtn" style="color:var(--err,#ef4444);border-color:rgba(239,68,68,0.3);" data-i18n="ban.batchDeleteBtn">🗑️ 批量解封</button>
+        </div>
+        <button class="btn btn-sm" id="banRefreshBtn" data-i18n="ban.refresh">🔄 刷新</button>
+      </div>
     </div>
     <div style="margin-top:12px;overflow-x:auto;">
       <table style="width:100%;border-collapse:collapse;">
         <thead>
           <tr style="border-bottom:1px solid #334155;color:var(--muted,#94a3b8);font-size:13px;text-align:left;">
+            <th style="padding:8px 12px;width:36px;"><input type="checkbox" id="banSelectAll" title="全选" /></th>
             <th style="padding:8px 12px;" data-i18n="ban.thIp">IP 地址</th>
             <th style="padding:8px 12px;" data-i18n="ban.thReason">封禁原因</th>
             <th style="padding:8px 12px;" data-i18n="ban.thTime">封禁时间</th>
@@ -98,7 +132,7 @@
           </tr>
         </thead>
         <tbody id="banTableBody">
-          <tr><td colspan="5" class="muted" style="text-align:center;padding:24px;" data-i18n="ban.loading">加载中...</td></tr>
+          <tr><td colspan="6" class="muted" style="text-align:center;padding:24px;" data-i18n="ban.loading">加载中...</td></tr>
         </tbody>
       </table>
     </div>

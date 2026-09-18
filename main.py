@@ -37,6 +37,7 @@ feat1-1: webui rollback入口
 fix2: 完整的中英双语显示
 feat3: console界面支持↑/↓键的历史命令切换
 feat4: 更新安装与上传进度反馈
+feat5: Banlist 批量操作
 """
 MINIMIUM_ALLOWED_VERSION = "b0.4.0" # 因为b0.4.0版本大量重写了账户登录逻辑, 所以, 我设置了拒绝降级到b0.4.0-的版本
                                     # 但是如果你需要降级低于b0.4.0的版本，请更改这里的值为b0.0.0以删除限制

@@ -967,6 +967,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/banlist":
             self._api_banlist_add()
             return
+        if parsed.path == "/api/banlist/batch":
+            self._api_banlist_batch_add()
+            return
         if parsed.path == "/api/banlist/auto-ban":
             self._api_banlist_auto_ban_toggle()
             return
@@ -2063,16 +2066,88 @@ class WebUIHandler(BaseHTTPRequestHandler):
         else:
             self._respond({"ok": False, "message": f"{ip} 已在封禁列表中"})
 
-    def _api_banlist_remove(self) -> None:
-        """解封 IP(需要 banlist 权限)"""
+    def _api_banlist_batch_add(self) -> None:
+        """批量封禁 IP(需要 banlist 权限)"""
         if not _require_permission("banlist")(self):
             return
         body = self._read_body()
+        raw_ips = body.get("ips") or []
+        reason = (body.get("reason") or "管理员批量封禁").strip()
+        duration = int(body.get("duration", 0))  # 分钟, 0=永久
+        if isinstance(raw_ips, str):
+            import re
+            raw_ips = re.split(r"[\r\n,;\s]+", raw_ips)
+        from lib import banlist
+        import ipaddress
+        banned = []
+        skipped = []
+        invalid = []
+        for raw in raw_ips:
+            text = str(raw).strip()
+            if not text:
+                continue
+            if ":" in text and not text.startswith("[") and text.count(":") == 1:
+                text = text.split(":", 1)[0]
+            try:
+                if "/" in text:
+                    net = ipaddress.ip_network(text, strict=False)
+                    if net.num_addresses > 1024:
+                        invalid.append(f"{text}(子网超1024)")
+                        continue
+                    candidates = [str(h) for h in net.hosts()] if net.num_addresses > 1 else [str(net.network_address)]
+                else:
+                    ipaddress.ip_address(text)
+                    candidates = [text]
+            except ValueError:
+                invalid.append(text)
+                continue
+
+            for cand in candidates:
+                if cand in banlist._PROTECTED_IPS or cand in skipped or cand in banned:
+                    skipped.append(cand)
+                    continue
+                if banlist.ban(cand, reason, duration=duration):
+                    self._disconnect_banned_ip(cand)
+                    banned.append(cand)
+                else:
+                    skipped.append(cand)
+
+        dur_text = "永久" if duration <= 0 else f"{duration} 分钟"
+        _audit(self, "ban", f"批量封禁了 {len(banned)} 个 IP (原因: {reason}, 时长: {dur_text})")
+        msg = f"成功封禁 {len(banned)} 个 IP"
+        if skipped:
+            msg += f"，跳过 {len(skipped)} 个已存在或受保护的 IP"
+        if invalid:
+            msg += f"，忽略 {len(invalid)} 个无效输入"
+        self._respond({
+            "ok": True,
+            "banned_count": len(banned),
+            "skipped_count": len(skipped),
+            "invalid_count": len(invalid),
+            "message": msg,
+        })
+
+    def _api_banlist_remove(self) -> None:
+        """解封 IP(单条或批量，需要 banlist 权限)"""
+        if not _require_permission("banlist")(self):
+            return
+        body = self._read_body()
+        from lib import banlist
+        # 支持批量解封
+        ips = body.get("ips")
+        if isinstance(ips, list):
+            removed = []
+            for ip_item in ips:
+                ip_clean = str(ip_item).strip()
+                if ip_clean and banlist.unban(ip_clean):
+                    removed.append(ip_clean)
+            _audit(self, "ban", f"批量解封了 {len(removed)} 个 IP")
+            self._respond({"ok": True, "count": len(removed), "message": f"已批量解封 {len(removed)} 个 IP"})
+            return
         ip = (body.get("ip") or "").strip()
         if not ip:
             self._respond({"ok": False, "message": "请输入 IP 地址"})
             return
-        from lib import banlist
         if banlist.unban(ip):
             _audit(self, "ban", f"解封了 {ip}")
             self._respond({"ok": True, "message": f"已解封 {ip}"})

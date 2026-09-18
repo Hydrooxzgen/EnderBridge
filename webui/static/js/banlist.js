@@ -1,4 +1,4 @@
-﻿// 封禁管理页面逻辑
+// 封禁管理页面逻辑
 requireAuth(function (role) {
   initSidebar("banlist", role);
   initTheme();
@@ -6,14 +6,31 @@ requireAuth(function (role) {
   loadBanlist();
 });
 
+function _updateBatchToolbar() {
+  var allChecks = document.querySelectorAll(".ban-row-checkbox");
+  var checked = document.querySelectorAll(".ban-row-checkbox:checked");
+  var toolbar = $("banBatchToolbar");
+  var countEl = $("banSelectedCount");
+  var selectAll = $("banSelectAll");
+  if (toolbar) toolbar.style.display = checked.length > 0 ? "inline-flex" : "none";
+  if (countEl) countEl.textContent = t("ban.selectedCount").replace("{n}", checked.length);
+  if (selectAll && allChecks.length > 0) {
+    selectAll.checked = (checked.length === allChecks.length);
+    selectAll.indeterminate = (checked.length > 0 && checked.length < allChecks.length);
+  }
+}
+
 function loadBanlist() {
+  var selectAll = $("banSelectAll");
+  if (selectAll) { selectAll.checked = false; selectAll.indeterminate = false; }
+  _updateBatchToolbar();
   api("/banlist").then(function (data) {
     if (!data.ok) return;
     var bans = data.bans || {};
     var keys = Object.keys(bans);
     $("banCount").textContent = "(" + keys.length + t("ban.countSuffix");
     if (keys.length === 0) {
-      $("banTableBody").innerHTML = '<tr><td colspan="5" class="muted" style="text-align:center;padding:24px;">' + t("ban.empty") + '</td></tr>';
+      $("banTableBody").innerHTML = '<tr><td colspan="6" class="muted" style="text-align:center;padding:24px;">' + t("ban.empty") + '</td></tr>';
       return;
     }
     // 只有自动封禁的 IP 才触发攻击警报 toast(管理员手动封的不算)
@@ -33,6 +50,7 @@ function loadBanlist() {
         expiresText = d.toLocaleString();
       }
       return '<tr style="border-bottom:1px solid #1e293b;">'
+        + '<td style="padding:10px 12px;"><input type="checkbox" class="ban-row-checkbox" value="' + escapeHtml(ip) + '" /></td>'
         + '<td style="padding:10px 12px;font-family:monospace;">' + escapeHtml(ip) + '</td>'
         + '<td style="padding:10px 12px;">' + escapeHtml(info.reason || "—") + '</td>'
         + '<td style="padding:10px 12px;font-size:13px;" class="muted">' + escapeHtml(info.time || "—") + '</td>'
@@ -42,8 +60,13 @@ function loadBanlist() {
         + '<button class="btn btn-sm" style="color:var(--err,#ef4444);" onclick="unbanIp(\'' + escapeHtml(ip) + '\')">' + t("ban.unban") + '</button>'
         + '</td></tr>';
     }).join("");
+
+    // 绑定行勾选
+    document.querySelectorAll(".ban-row-checkbox").forEach(function (cb) {
+      cb.addEventListener("change", _updateBatchToolbar);
+    });
   }).catch(function () {
-    $("banTableBody").innerHTML = '<tr><td colspan="5" class="muted" style="text-align:center;padding:24px;">' + t("ban.loadFail") + '</td></tr>';
+    $("banTableBody").innerHTML = '<tr><td colspan="6" class="muted" style="text-align:center;padding:24px;">' + t("ban.loadFail") + '</td></tr>';
   });
 }
 
@@ -190,3 +213,92 @@ if (abSaveBtn) abSaveBtn.addEventListener("click", function () {
     }
   }).catch(function (e) { toast(t("ban.opFail") + (e.message || e), "err"); });
 });
+
+// ===== 单个 / 批量封禁 Tab 切换 =====
+var tabSingleBtn = $("banTabSingleBtn");
+var tabBatchBtn = $("banTabBatchBtn");
+var singlePanel = $("banSinglePanel");
+var batchPanel = $("banBatchPanel");
+
+if (tabSingleBtn && tabBatchBtn) {
+  tabSingleBtn.addEventListener("click", function () {
+    if (singlePanel) singlePanel.style.display = "";
+    if (batchPanel) batchPanel.style.display = "none";
+    tabSingleBtn.className = "btn btn-sm btn-primary";
+    tabBatchBtn.className = "btn btn-sm";
+  });
+  tabBatchBtn.addEventListener("click", function () {
+    if (singlePanel) singlePanel.style.display = "none";
+    if (batchPanel) batchPanel.style.display = "";
+    tabBatchBtn.className = "btn btn-sm btn-primary";
+    tabSingleBtn.className = "btn btn-sm";
+  });
+}
+
+// ===== 批量封禁提交 =====
+var batchBtn = $("banBatchBtn");
+if (batchBtn) {
+  batchBtn.addEventListener("click", function () {
+    var raw = ($("banBatchIpsInput").value || "").trim();
+    if (!raw) { toast(t("ban.needBatchIps"), "err"); return; }
+    var reason = ($("banBatchReasonInput").value || "").trim();
+    var duration = parseInt($("banBatchDurationSelect").value, 10) || 0;
+    // 粗略统计行数供二次确认
+    var lines = raw.split(/[\r\n,;\s]+/).filter(Boolean);
+    if (!lines.length) { toast(t("ban.needBatchIps"), "err"); return; }
+    if (!confirm(t("ban.batchConfirmPrefix") + lines.length + t("ban.batchConfirmSuffix"))) return;
+    batchBtn.disabled = true;
+    api("/banlist/batch", {
+      method: "POST",
+      body: JSON.stringify({ ips: raw, reason: reason, duration: duration })
+    }).then(function (data) {
+      batchBtn.disabled = false;
+      toast(data.message, data.ok ? "ok" : "err");
+      if (data.ok) {
+        $("banBatchIpsInput").value = "";
+        $("banBatchReasonInput").value = "";
+        loadBanlist();
+      }
+    }).catch(function (e) {
+      batchBtn.disabled = false;
+      toast(t("ban.opFail") + (e.message || e), "err");
+    });
+  });
+}
+
+// ===== 表格全选 / 取消全选 =====
+var selectAllBox = $("banSelectAll");
+if (selectAllBox) {
+  selectAllBox.addEventListener("change", function () {
+    var checked = this.checked;
+    document.querySelectorAll(".ban-row-checkbox").forEach(function (cb) {
+      cb.checked = checked;
+    });
+    _updateBatchToolbar();
+  });
+}
+
+// ===== 批量解封提交 =====
+var batchDeleteBtn = $("banBatchDeleteBtn");
+if (batchDeleteBtn) {
+  batchDeleteBtn.addEventListener("click", function () {
+    var checkedBoxes = document.querySelectorAll(".ban-row-checkbox:checked");
+    var ips = [];
+    checkedBoxes.forEach(function (cb) { ips.push(cb.value); });
+    if (!ips.length) { toast(t("ban.noSelected"), "err"); return; }
+    if (!confirm(t("ban.batchDeleteConfirmPrefix") + ips.length + t("ban.batchDeleteConfirmSuffix"))) return;
+    batchDeleteBtn.disabled = true;
+    api("/banlist", {
+      method: "DELETE",
+      body: JSON.stringify({ ips: ips })
+    }).then(function (data) {
+      batchDeleteBtn.disabled = false;
+      toast(data.message, data.ok ? "ok" : "err");
+      if (data.ok) loadBanlist();
+    }).catch(function (e) {
+      batchDeleteBtn.disabled = false;
+      toast(t("ban.opFail") + (e.message || e), "err");
+    });
+  });
+}
+
