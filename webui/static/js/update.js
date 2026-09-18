@@ -23,11 +23,79 @@ function _isBelowMin(tag) {
   return false;
 }
 
+// ===== 进度弹窗与步骤控制 =====
+function showProgressModal(titleKey) {
+  var modal = $("updateProgressModal");
+  if (!modal) return;
+  modal.style.display = "flex";
+  var titleEl = $("updateModalTitle");
+  if (titleEl) titleEl.textContent = t(titleKey || "upd.progressTitle");
+  var actions = $("updateModalActions");
+  if (actions) actions.style.display = "none";
+  setModalMessage("");
+  ["stepUpload", "stepValidate", "stepInstall", "stepRestart"].forEach(function (id, idx) {
+    var el = $(id);
+    if (!el) return;
+    el.className = "step-item";
+    var icon = el.querySelector(".step-icon");
+    if (icon) icon.textContent = (idx + 1);
+  });
+  setProgress(0, t("upd.processing"), false);
+}
+
+function hideProgressModal() {
+  var modal = $("updateProgressModal");
+  if (modal) modal.style.display = "none";
+}
+
+function setStep(stepId, state) {
+  var el = $(stepId);
+  if (!el) return;
+  el.className = "step-item " + state;
+  var icon = el.querySelector(".step-icon");
+  if (icon) {
+    if (state === "done") icon.textContent = "✔";
+    else if (state === "error") icon.textContent = "✖";
+  }
+}
+
+function setProgress(percent, text, isIndeterminate) {
+  var bar = $("updateProgressBar");
+  var pctEl = $("updateProgressPercent");
+  var txtEl = $("updateProgressText");
+  if (bar) {
+    if (isIndeterminate) {
+      bar.classList.add("indeterminate");
+      bar.style.width = "";
+    } else {
+      bar.classList.remove("indeterminate");
+      bar.style.width = Math.min(100, Math.max(0, percent)) + "%";
+    }
+  }
+  if (pctEl) pctEl.textContent = isIndeterminate ? "" : Math.round(percent) + "%";
+  if (txtEl) txtEl.textContent = text || "";
+}
+
+function setModalMessage(msg, isError) {
+  var el = $("updateModalMsg");
+  if (!el) return;
+  el.textContent = msg || "";
+  el.style.color = isError ? "var(--danger)" : "var(--text-faint)";
+  var actions = $("updateModalActions");
+  if (actions && isError) {
+    actions.style.display = "block";
+  }
+}
+
 /** 轮询服务器状态,恢复后跳转到正确地址 */
 function _pollAndRedirect(btn, restoreText) {
   var basePort = parseInt(location.port) || 18888;
   console.log("[update] 开始轮询,基础端口: " + basePort);
   toast(t("upd.restartWait"), "ok");
+
+  setStep("stepRestart", "active");
+  setProgress(100, t("upd.reconnecting"), true);
+  setModalMessage(t("upd.waitingDead") + " (0s)");
 
   // 带超时的 fetch,防止某个端口卡住导致整个 probe 挂起
   function fetchWithTimeout(url, ms) {
@@ -62,6 +130,7 @@ function _pollAndRedirect(btn, restoreText) {
   var waitDead = 0;
   var phase1 = setInterval(function () {
     waitDead++;
+    setModalMessage(t("upd.waitingDead") + " (" + waitDead + "s)");
     console.log("[update] 等待服务器关闭... (" + waitDead + ")");
     probe().then(function (port) {
       if (started) return;
@@ -85,12 +154,17 @@ function _pollAndRedirect(btn, restoreText) {
   // Phase 2: 等服务器重新上线,然后跳转
   function startPhase2() {
     var waitLive = 0;
+    setModalMessage(t("upd.waitingLive") + " (1)");
     var phase2 = setInterval(function () {
       waitLive++;
+      setModalMessage(t("upd.waitingLive") + " (" + waitLive + ")");
       console.log("[update] 轮询第 " + waitLive + " 次...");
       probe().then(function (port) {
         if (port !== null) {
           clearInterval(phase2);
+          setStep("stepRestart", "done");
+          setProgress(100, t("upd.recoveredRedirect"), false);
+          setModalMessage(t("upd.recoveredRedirect"));
           // 用 /api/status 返回的 webPort 做最终跳转
           fetchWithTimeout(location.protocol + "//" + location.hostname + ":" + port + "/api/status", 3000)
             .then(function (r) { return r.json(); })
@@ -110,8 +184,12 @@ function _pollAndRedirect(btn, restoreText) {
       });
       if (waitLive >= 60) {
         clearInterval(phase2);
-        btn.disabled = false;
-        btn.textContent = restoreText;
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = restoreText;
+        }
+        setStep("stepRestart", "error");
+        setModalMessage(t("upd.recoverTimeout"), true);
         toast(t("upd.recoverTimeout"), "err");
         console.log("[update] 轮询超时");
       }
@@ -196,17 +274,29 @@ if (checkBtn) {
       if (!confirm(t("upd.confirmUpdatePrefix") + tag + t("upd.confirmUpdate"))) return;
       checkBtn.disabled = true;
       checkBtn.textContent = t("upd.updating");
+      showProgressModal("upd.progressTitle");
+      var step1Text = $("stepUploadText");
+      if (step1Text) step1Text.textContent = t("upd.step1Online");
+      setStep("stepUpload", "active");
+      setProgress(0, t("upd.installingAsset"), true);
       api("/update/install", { method: "POST", body: JSON.stringify({ github_tag: tag }) })
         .then(function (result) {
           if (!result.ok) {
+            setStep("stepUpload", "error");
+            setModalMessage(result.message || t("upd.updateFail"), true);
             toast(result.message || t("upd.updateFail"), "err");
             checkBtn.disabled = false;
             checkBtn.textContent = t("upd.installNow");
           } else {
+            setStep("stepUpload", "done");
+            setStep("stepValidate", "done");
+            setStep("stepInstall", "done");
             toast(t("upd.updatingRestart"), "ok");
             _pollAndRedirect(checkBtn, t("upd.installNow"));
           }
         }).catch(function () {
+          setStep("stepUpload", "error");
+          setModalMessage(t("upd.updateFail"), true);
           toast(t("upd.updateFail"), "err");
           checkBtn.disabled = false;
           checkBtn.textContent = t("upd.installNow");
@@ -247,40 +337,79 @@ if (localBtn) {
     var btn = this;
     btn.disabled = true;
     btn.textContent = t("upd.uploading");
-    // 构建认证头
-    var uploadHeaders = {};
+
+    showProgressModal("upd.progressTitle");
+    var step1Text = $("stepUploadText");
+    if (step1Text) step1Text.textContent = t("upd.step1");
+    setStep("stepUpload", "active");
+    setProgress(0, t("upd.uploadingMeta"), false);
+
+    var xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/update/upload");
     var role = sessionStorage.getItem(ROLE_KEY) || "";
     if (role === "guest") {
-      uploadHeaders["X-Auth-Guest"] = "1";
+      xhr.setRequestHeader("X-Auth-Guest", "1");
     } else {
       var token = sessionStorage.getItem(TOKEN_KEY) || "";
-      if (token) uploadHeaders["X-Auth-Token"] = token;
+      if (token) xhr.setRequestHeader("X-Auth-Token", token);
     }
-    fetch("/api/update/upload", { method: "POST", headers: uploadHeaders, body: formData })
-      .then(function (res) { return res.json(); })
-      .then(function (data) {
-        if (!data.ok) {
-          toast(data.message || t("upd.uploadFail"), "err");
-          btn.disabled = false;
-          btn.textContent = t("upd.doUpdate");
-          return;
-        }
-        return api("/update/install", { method: "POST", body: JSON.stringify({ path: data.path }) })
-          .then(function (result) {
-            if (!result.ok) {
-              toast(result.message || t("upd.updateFail"), "err");
-              btn.disabled = false;
-              btn.textContent = t("upd.doUpdate");
-            } else {
-              toast(t("upd.updatingRestart"), "ok");
-              _pollAndRedirect(btn, t("upd.doUpdate"));
-            }
-          });
-      }).catch(function () {
-        toast(t("upd.uploadFail"), "err");
+    xhr.upload.onprogress = function (e) {
+      if (e.lengthComputable) {
+        var pct = Math.round((e.loaded / e.total) * 100);
+        var loadedMB = (e.loaded / 1048576).toFixed(1);
+        var totalMB = (e.total / 1048576).toFixed(1);
+        setProgress(pct, t("upd.uploadingMeta") + " (" + loadedMB + " MB / " + totalMB + " MB)", false);
+      }
+    };
+    xhr.onload = function () {
+      var data;
+      try {
+        data = JSON.parse(xhr.responseText);
+      } catch (err) {
+        data = { ok: false, message: t("upd.uploadFail") };
+      }
+      if (!data.ok) {
+        setStep("stepUpload", "error");
+        setModalMessage(data.message || t("upd.uploadFail"), true);
+        toast(data.message || t("upd.uploadFail"), "err");
         btn.disabled = false;
         btn.textContent = t("upd.doUpdate");
-      });
+        return;
+      }
+      setStep("stepUpload", "done");
+      setStep("stepValidate", "active");
+      setProgress(100, t("upd.uploadDone"), true);
+
+      api("/update/install", { method: "POST", body: JSON.stringify({ path: data.path }) })
+        .then(function (result) {
+          if (!result.ok) {
+            setStep("stepValidate", "error");
+            setModalMessage(result.message || t("upd.updateFail"), true);
+            toast(result.message || t("upd.updateFail"), "err");
+            btn.disabled = false;
+            btn.textContent = t("upd.doUpdate");
+          } else {
+            setStep("stepValidate", "done");
+            setStep("stepInstall", "done");
+            toast(t("upd.updatingRestart"), "ok");
+            _pollAndRedirect(btn, t("upd.doUpdate"));
+          }
+        }).catch(function () {
+          setStep("stepValidate", "error");
+          setModalMessage(t("upd.updateFail"), true);
+          toast(t("upd.updateFail"), "err");
+          btn.disabled = false;
+          btn.textContent = t("upd.doUpdate");
+        });
+    };
+    xhr.onerror = function () {
+      setStep("stepUpload", "error");
+      setModalMessage(t("upd.uploadFail"), true);
+      toast(t("upd.uploadFail"), "err");
+      btn.disabled = false;
+      btn.textContent = t("upd.doUpdate");
+    };
+    xhr.send(formData);
   });
 }
 
@@ -346,17 +475,29 @@ function loadReleases(page) {
         if (!confirm(t("upd.confirmInstallPrefix") + tag + t("upd.confirmUpdate"))) return;
         btn.disabled = true;
         btn.textContent = t("upd.installing");
+        showProgressModal("upd.progressTitle");
+        var step1Text = $("stepUploadText");
+        if (step1Text) step1Text.textContent = t("upd.step1Online");
+        setStep("stepUpload", "active");
+        setProgress(0, t("upd.installingAsset"), true);
         api("/update/install", { method: "POST", body: JSON.stringify({ github_tag: tag }) })
           .then(function (result) {
             if (!result.ok) {
+              setStep("stepUpload", "error");
+              setModalMessage(result.message || t("upd.installFail"), true);
               toast(result.message || t("upd.installFail"), "err");
               btn.disabled = false;
               btn.textContent = t("upd.installVer");
             } else {
+              setStep("stepUpload", "done");
+              setStep("stepValidate", "done");
+              setStep("stepInstall", "done");
               toast(t("upd.updatingRestart"), "ok");
               _pollAndRedirect(btn, t("upd.installVer"));
             }
           }).catch(function () {
+            setStep("stepUpload", "error");
+            setModalMessage(t("upd.installFail"), true);
             toast(t("upd.installFail"), "err");
             btn.disabled = false;
             btn.textContent = t("upd.installVer");
@@ -406,17 +547,29 @@ function loadBackups() {
         if (!confirm(t("upd.backupConfirm"))) return;
         btn.disabled = true;
         btn.textContent = t("upd.backupRollingBack");
+        showProgressModal("upd.rollbackTitle");
+        var step1Text = $("stepUploadText");
+        if (step1Text) step1Text.textContent = t("upd.step1Rollback");
+        setStep("stepUpload", "done");
+        setStep("stepValidate", "done");
+        setStep("stepInstall", "active");
+        setProgress(50, t("upd.backupRollingBack"), true);
         api("/update/rollback", { method: "POST", body: JSON.stringify({ path: path }) })
           .then(function (result) {
             if (!result.ok) {
+              setStep("stepInstall", "error");
+              setModalMessage(result.message || t("upd.backupRollbackFail"), true);
               toast(result.message || t("upd.backupRollbackFail"), "err");
               btn.disabled = false;
               btn.textContent = t("upd.backupRollback");
             } else {
+              setStep("stepInstall", "done");
               toast(t("upd.backupRollbackOk"), "ok");
               _pollAndRedirect(btn, t("upd.backupRollback"));
             }
           }).catch(function () {
+            setStep("stepInstall", "error");
+            setModalMessage(t("upd.backupRollbackFail"), true);
             toast(t("upd.backupRollbackFail"), "err");
             btn.disabled = false;
             btn.textContent = t("upd.backupRollback");
@@ -437,3 +590,10 @@ if (_userRole === "guest") {
   var backupsCard = $("updateBackupsCard");
   if (backupsCard) backupsCard.style.display = "none";
 }
+
+// 弹窗关闭按钮
+var modalCloseBtn = $("updateModalCloseBtn");
+if (modalCloseBtn) {
+  modalCloseBtn.addEventListener("click", hideProgressModal);
+}
+
