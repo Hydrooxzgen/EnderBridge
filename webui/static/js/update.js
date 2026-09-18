@@ -250,6 +250,130 @@ function checkUpdate() {
   });
 }
 
+// ===== 依赖安全审计与 CVE 检测 =====
+function loadSecurityAudit() {
+  var loading = $("secAuditLoading");
+  var content = $("secAuditContent");
+  var btn = $("secAuditRefreshBtn");
+  if (loading) {
+    loading.style.display = "block";
+    loading.textContent = t("sec.scanning");
+    loading.style.color = "";
+  }
+  if (content) content.style.display = "none";
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = t("upd.checking");
+  }
+
+  api("/security/audit")
+    .then(function (res) {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = t("sec.rescanBtn");
+      }
+      if (!res.ok) {
+        if (loading) {
+          loading.textContent = res.message || t("sec.loadFail");
+          loading.style.color = "var(--danger)";
+        }
+        return;
+      }
+
+      if (loading) loading.style.display = "none";
+      if (content) content.style.display = "block";
+
+      // 总体状态徽章
+      var overallBadge = $("secAuditOverallBadge");
+      if (overallBadge) {
+        if (res.status === "safe") {
+          overallBadge.className = "badge-sec-safe";
+          overallBadge.textContent = "🛡️ " + t("sec.statusSafe");
+        } else if (res.status === "danger") {
+          overallBadge.className = "badge-sec-danger";
+          overallBadge.textContent = "🚨 " + t("sec.statusDanger");
+        } else {
+          overallBadge.className = "badge-sec-warn";
+          overallBadge.textContent = "⚠️ " + t("sec.statusWarning");
+        }
+      }
+
+      // 环境信息
+      var envEl = $("secAuditEnv");
+      if (envEl && res.environment) {
+        var envParts = [];
+        if (res.environment.python_version) envParts.push("Python " + res.environment.python_version);
+        if (res.environment.platform) envParts.push(res.environment.platform);
+        envEl.textContent = "(" + envParts.join(" / ") + ")";
+      }
+
+      // 统计数字
+      var summary = res.summary || {};
+      if ($("secStatTotal")) $("secStatTotal").textContent = summary.total_packages || 0;
+      if ($("secStatSafe")) $("secStatSafe").textContent = summary.safe_count || 0;
+      if ($("secStatMissing")) $("secStatMissing").textContent = summary.missing_count || 0;
+      if ($("secStatVuln")) $("secStatVuln").textContent = summary.vulnerable_count || 0;
+
+      // 依赖包列表
+      var tbody = $("secAuditList");
+      if (tbody) {
+        tbody.innerHTML = "";
+        var packages = res.packages || [];
+        packages.forEach(function (pkg) {
+          var tr = document.createElement("tr");
+
+          // 状态徽章
+          var statusHtml = "";
+          if (pkg.status === "safe") {
+            statusHtml = '<span class="badge-sec-safe">✔ ' + t("sec.badgeSafe") + '</span>';
+          } else if (pkg.status === "missing") {
+            statusHtml = '<span class="badge-sec-warn">✖ ' + t("sec.badgeMissing") + '</span>';
+          } else {
+            statusHtml = '<span class="badge-sec-danger">⚠ ' + t("sec.badgeVuln") + '</span>';
+          }
+
+          // 详情与建议
+          var detailHtml = "";
+          if (pkg.status === "vulnerable" && pkg.vulnerabilities && pkg.vulnerabilities.length > 0) {
+            pkg.vulnerabilities.forEach(function (v) {
+              var cveTags = (v.cves || []).map(function (c) {
+                return '<code style="background:rgba(244,63,94,0.15);color:var(--danger);padding:1px 5px;border-radius:3px;margin-right:4px;">' + escapeHtml(c) + '</code>';
+              }).join("");
+              detailHtml += '<div class="vuln-item">' +
+                '<div style="font-weight:600;margin-bottom:2px;">' + cveTags + escapeHtml(v.title) + '</div>' +
+                '<div class="muted" style="font-size:11px;">💡 ' + escapeHtml(v.recommendation) + '</div>' +
+                '</div>';
+            });
+          } else if (pkg.status === "missing") {
+            detailHtml = '<span class="muted" style="font-size:12px;">未在当前环境安装此依赖 (pip install ' + escapeHtml(pkg.name) + ')</span>';
+          } else {
+            detailHtml = '<span class="muted" style="color:var(--ok);font-size:12px;">✔ 符合安全基线规范</span>';
+          }
+
+          var instVer = pkg.installed ? '<code>' + escapeHtml(pkg.version) + '</code>' : '<span class="muted">-</span>';
+          var specVer = pkg.spec ? '<code>' + escapeHtml(pkg.spec) + '</code>' : '<span class="muted">*</span>';
+
+          tr.innerHTML =
+            '<td><strong>' + escapeHtml(pkg.name) + '</strong></td>' +
+            '<td>' + instVer + '</td>' +
+            '<td>' + specVer + '</td>' +
+            '<td>' + statusHtml + '</td>' +
+            '<td>' + detailHtml + '</td>';
+          tbody.appendChild(tr);
+        });
+      }
+    }).catch(function (err) {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = t("sec.rescanBtn");
+      }
+      if (loading) {
+        loading.textContent = t("sec.loadFail");
+        loading.style.color = "var(--danger)";
+      }
+    });
+}
+
 requireAuth(function (role) {
   _userRole = role;
   initSidebar("update", role);
@@ -257,12 +381,18 @@ requireAuth(function (role) {
   initLang();
   checkUpdate();
   loadReleases(1);
+  loadSecurityAudit();
   // 访客:隐藏本地更新卡片
   if (role === "guest") {
     var localCard = $("updateLocalCard");
     if (localCard) localCard.style.display = "none";
   }
 });
+
+var secRefreshBtn = $("secAuditRefreshBtn");
+if (secRefreshBtn) {
+  secRefreshBtn.addEventListener("click", loadSecurityAudit);
+}
 
 // 检查更新按钮
 var checkBtn = $("updateCheckBtn");

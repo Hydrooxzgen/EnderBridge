@@ -841,6 +841,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if path == "/api/update/backups":
             self._api_update_backups()
             return
+        if path == "/api/security/audit":
+            self._api_security_audit()
+            return
         if path == "/api/config":
             self._api_get_config()
             return
@@ -1856,6 +1859,15 @@ class WebUIHandler(BaseHTTPRequestHandler):
             _restart_handler()
         except Exception:
             pass
+
+    def _api_security_audit(self) -> None:
+        """执行依赖包安全健康检查与已知 CVE 比对"""
+        try:
+            from lib.security_audit import run_security_audit
+            report = run_security_audit()
+            self._respond(report)
+        except Exception as e:
+            self._respond({"ok": False, "message": f"依赖安全审计失败: {e}"})
 
     def _api_get_config(self) -> None:
         if not _require_permission("config")(self):

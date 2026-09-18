@@ -25,6 +25,57 @@
     </div>
   </div>
 
+  <div class="card card-gap" id="securityAuditCard">
+    <div class="row" style="justify-content:space-between;align-items:center;">
+      <div style="font-weight:600" data-i18n="sec.title">🛡️ 依赖安全态势与已知 CVE 漏洞检测</div>
+      <button class="btn btn-sm" id="secAuditRefreshBtn" data-i18n="sec.rescanBtn">🔄 重新检测</button>
+    </div>
+    <p class="desc" data-i18n="sec.desc" style="margin:6px 0 12px 0;">自动对项目 requirements.txt 依赖及当前运行环境安装版本进行深度健康审计，检测已知 CVE 安全漏洞与版本隐患。</p>
+    
+    <div id="secAuditLoading" class="muted" style="padding:12px 0;" data-i18n="sec.scanning">正在扫描依赖项安全态势...</div>
+    
+    <div id="secAuditContent" style="display:none;">
+      <div class="row" style="align-items:center;gap:10px;margin-bottom:12px;">
+        <span id="secAuditOverallBadge"></span>
+        <span class="muted" style="font-size:12px;" id="secAuditEnv"></span>
+      </div>
+
+      <div class="sec-stat-grid">
+        <div class="sec-stat-box">
+          <span class="sec-num" id="secStatTotal">-</span>
+          <span class="sec-label" data-i18n="sec.summaryTotal">检测依赖项</span>
+        </div>
+        <div class="sec-stat-box safe">
+          <span class="sec-num" id="secStatSafe">-</span>
+          <span class="sec-label" data-i18n="sec.summarySafe">安全无虞</span>
+        </div>
+        <div class="sec-stat-box warn" id="secStatMissingBox">
+          <span class="sec-num" id="secStatMissing">-</span>
+          <span class="sec-label" data-i18n="sec.summaryMissing">未安装</span>
+        </div>
+        <div class="sec-stat-box danger" id="secStatVulnBox">
+          <span class="sec-num" id="secStatVuln">-</span>
+          <span class="sec-label" data-i18n="sec.summaryVuln">漏洞风险</span>
+        </div>
+      </div>
+
+      <div style="overflow-x:auto;margin-top:12px;">
+        <table class="table" id="secAuditTable">
+          <thead>
+            <tr>
+              <th data-i18n="sec.colPkg">依赖包名</th>
+              <th data-i18n="sec.colInstalled">已安装版本</th>
+              <th data-i18n="sec.colReq">规范版本</th>
+              <th data-i18n="sec.colStatus">安全状态</th>
+              <th data-i18n="sec.colDetail">风险与 CVE 详情 / 修复建议</th>
+            </tr>
+          </thead>
+          <tbody id="secAuditList"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <div class="card card-gap" id="updateLocalCard">
     <div style="font-weight:600;margin-bottom:8px;" data-i18n="upd.localTitle">📦 本地文件更新</div>
     <p class="desc" data-i18n="upd.localDesc">从本地选择 EnderBridge 压缩包进行更新（zip / tar.gz / 7z / xz）。<br>

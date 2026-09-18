@@ -883,3 +883,76 @@ a.nav-item { text-decoration: none; }
   0%, 100% { transform: scale(1); }
   50% { transform: scale(1.1); }
 }
+
+/* ===== 依赖安全审计组件 ===== */
+.sec-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+  margin: 12px 0;
+}
+.sec-stat-box {
+  background: var(--input-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sec-stat-box .sec-num {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.sec-stat-box .sec-label {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.sec-stat-box.safe .sec-num { color: var(--ok); }
+.sec-stat-box.warn .sec-num { color: var(--warn); }
+.sec-stat-box.danger .sec-num { color: var(--danger); }
+.badge-sec-safe {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--ok);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.badge-sec-warn {
+  background: rgba(234, 179, 8, 0.15);
+  color: var(--warn);
+  border: 1px solid rgba(234, 179, 8, 0.3);
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.badge-sec-danger {
+  background: rgba(244, 63, 94, 0.15);
+  color: var(--danger);
+  border: 1px solid rgba(244, 63, 94, 0.3);
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.vuln-item {
+  margin-top: 4px;
+  padding: 6px 8px;
+  background: rgba(244, 63, 94, 0.08);
+  border-left: 3px solid var(--danger);
+  border-radius: 4px;
+  font-size: 11px;
+}
