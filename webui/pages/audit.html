@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -21,10 +21,16 @@
         <option value="terminal" data-i18n="audit.typeTerminal">🖥️ 终端</option>
         <option value="connect" data-i18n="audit.typeConnect">🟢 连接</option>
         <option value="disconnect" data-i18n="audit.typeDisconnect">🔴 断开</option>
+        <option value="ban" data-i18n="audit.typeBan">🚫 封禁</option>
+        <option value="config" data-i18n="audit.typeConfig">⚙️ 配置</option>
+        <option value="user" data-i18n="audit.typeUser">👥 用户</option>
+        <option value="update" data-i18n="audit.typeUpdate">🔄 更新</option>
       </select>
       <input type="text" id="auditSenderFilter" data-i18n-ph="audit.senderPh" placeholder="按玩家名过滤…" style="flex:1;min-width:160px;padding:8px 12px;border:1px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:14px;" autocomplete="off" />
       <button class="btn btn-sm btn-primary" id="auditQueryBtn" data-i18n="audit.query">🔍 查询</button>
       <button class="btn btn-sm" id="auditAutoBtn" data-i18n="audit.autoOff">🔄 自动刷新: 关</button>
+      <button class="btn btn-sm" id="auditExportCsvBtn" data-i18n="audit.exportCsv">📥 导出 CSV</button>
+      <button class="btn btn-sm" id="auditExportJsonBtn" data-i18n="audit.exportJson">📥 导出 JSON</button>
     </div>
   </div>
   <div class="card" style="margin-top:12px;">

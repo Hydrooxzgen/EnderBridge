@@ -865,6 +865,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if path == "/api/audit-logs":
             self._api_audit_logs()
             return
+        if path == "/api/audit-logs/export":
+            self._api_audit_logs_export()
+            return
         if path == "/api/logs/recent":
             self._api_logs_recent()
             return
@@ -2009,12 +2012,24 @@ class WebUIHandler(BaseHTTPRequestHandler):
                     f"localport={port}",
                     "enable=yes",
                 ],
-                capture_output=True, text=True, timeout=10,
+                capture_output=True, timeout=10,
             )
-            if result.returncode == 0 and "确定" in result.stdout or "ok" in result.stdout.lower():
+            def _decode_output(data: bytes) -> str:
+                if not data:
+                    return ""
+                for enc in ("gbk", "utf-8", "cp936", "latin1"):
+                    try:
+                        return data.decode(enc)
+                    except (UnicodeDecodeError, LookupError):
+                        pass
+                return data.decode("utf-8", errors="replace")
+
+            stdout_str = _decode_output(result.stdout)
+            stderr_str = _decode_output(result.stderr)
+            if result.returncode == 0 and ("确定" in stdout_str or "ok" in stdout_str.lower()):
                 self._respond({"ok": True, "message": f"已添加防火墙规则: {rule_name} (端口 {port})"})
             else:
-                err = result.stdout.strip() + result.stderr.strip()
+                err = stdout_str.strip() + stderr_str.strip()
                 if "需要提升" in err or "Run as administrator" in err or "拒绝访问" in err or result.returncode == 5:
                     self._respond({"ok": False, "message": "需要管理员权限,请在管理员终端中手动执行", "command": f'netsh advfirewall firewall add rule name="{rule_name}" dir=in action=allow protocol=TCP localport={port}'})
                 else:
@@ -2275,6 +2290,57 @@ class WebUIHandler(BaseHTTPRequestHandler):
         from lib.logger import audit_log
         result = audit_log.query(sender=sender, type_=type_, limit=limit, offset=offset)
         self._respond({"ok": True, **result})
+
+    def _api_audit_logs_export(self) -> None:
+        """导出审计日志(需要 audit 权限, 支持 format=csv|json)"""
+        if not _require_permission("audit")(self):
+            return
+        import csv
+        import io
+        import json
+        from datetime import datetime
+
+        parsed = urllib.parse.urlparse(self.path)
+        qs = urllib.parse.parse_qs(parsed.query)
+        format_ = (qs.get("format", ["csv"])[0] or "csv").lower()
+        sender = qs.get("sender", [None])[0]
+        type_ = qs.get("type", [None])[0]
+
+        from lib.logger import audit_log
+        # 查询所有匹配记录, 导出上限 10000 条
+        result = audit_log.query(sender=sender, type_=type_, limit=10000, offset=0)
+        records = result.get("records", [])
+
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        if format_ == "json":
+            filename = f"audit_log_{stamp}.json"
+            content = json.dumps(records, ensure_ascii=False, indent=2).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+            self.send_header("Content-Length", str(len(content)))
+            self.end_headers()
+            self.wfile.write(content)
+        else:
+            filename = f"audit_log_{stamp}.csv"
+            out = io.StringIO()
+            writer = csv.writer(out)
+            writer.writerow(["时间", "类型", "发送者", "内容"])
+            for r in records:
+                writer.writerow([
+                    r.get("ts", ""),
+                    r.get("type", ""),
+                    r.get("sender", ""),
+                    r.get("message", ""),
+                ])
+            # 添加 UTF-8 BOM，确保 Excel 打开中文不乱码
+            content = ("\ufeff" + out.getvalue()).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/csv; charset=utf-8")
+            self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+            self.send_header("Content-Length", str(len(content)))
+            self.end_headers()
+            self.wfile.write(content)
 
     # ---- 实时日志流(SSE) ----
 

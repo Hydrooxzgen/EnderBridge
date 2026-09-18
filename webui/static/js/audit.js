@@ -1,4 +1,4 @@
-﻿// ===== 审计日志页面逻辑 =====
+// ===== 审计日志页面逻辑 =====
 
 var PAGE_SIZE = 50;
 var _auditOffset = 0;
@@ -7,8 +7,65 @@ var _autoRefresh = false;
 var _autoTimer = null;
 
 function typeLabel(key) {
-  var map = { chat: "audit.typeChat", command: "audit.typeCommand", terminal: "audit.typeTerminal", connect: "audit.typeConnect", disconnect: "audit.typeDisconnect" };
+  var map = {
+    chat: "audit.typeChat",
+    command: "audit.typeCommand",
+    terminal: "audit.typeTerminal",
+    connect: "audit.typeConnect",
+    disconnect: "audit.typeDisconnect",
+    ban: "audit.typeBan",
+    config: "audit.typeConfig",
+    user: "audit.typeUser",
+    role: "audit.typeRole",
+    update: "audit.typeUpdate"
+  };
   return t(map[key] || key);
+}
+
+function exportAuditLogs(format) {
+  var typeFilter = $("auditTypeFilter").value;
+  var senderFilter = $("auditSenderFilter").value.trim();
+  var params = [];
+  params.push("format=" + encodeURIComponent(format));
+  if (typeFilter) params.push("type=" + encodeURIComponent(typeFilter));
+  if (senderFilter) params.push("sender=" + encodeURIComponent(senderFilter));
+  var qs = params.join("&");
+
+  var headers = {};
+  var role = sessionStorage.getItem(ROLE_KEY) || "";
+  if (role === "guest") {
+    headers["X-Auth-Guest"] = "1";
+  } else {
+    var token = sessionStorage.getItem(TOKEN_KEY) || "";
+    if (token) headers["X-Auth-Token"] = token;
+  }
+
+  fetch("/api/audit-logs/export?" + qs, { headers: headers })
+    .then(function (res) {
+      if (!res.ok) {
+        return res.json().then(function (err) {
+          throw new Error(err.message || t("audit.exportFail"));
+        });
+      }
+      var disposition = res.headers.get("Content-Disposition") || "";
+      var filename = "audit_log." + format;
+      var match = disposition.match(/filename="?([^";]+)"?/);
+      if (match && match[1]) filename = match[1];
+      return res.blob().then(function (blob) {
+        var url = window.URL.createObjectURL(blob);
+        var a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        toast(t("audit.exportSuccess"), "ok");
+      });
+    })
+    .catch(function (err) {
+      toast(err.message || t("audit.exportFail"), "err");
+    });
 }
 
 function fetchLogs() {
@@ -117,4 +174,10 @@ requireAuth(function (role) {
       _autoTimer = null;
     }
   });
+
+  var exportCsvBtn = $("auditExportCsvBtn");
+  if (exportCsvBtn) exportCsvBtn.addEventListener("click", function () { exportAuditLogs("csv"); });
+
+  var exportJsonBtn = $("auditExportJsonBtn");
+  if (exportJsonBtn) exportJsonBtn.addEventListener("click", function () { exportAuditLogs("json"); });
 });
