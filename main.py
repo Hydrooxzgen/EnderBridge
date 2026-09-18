@@ -33,6 +33,9 @@ codechange1: 把update/export等逻辑放入version_manager中
 feat1: rollback功能,可回滚到指定备份包
 fix1: 日志轮转防撑爆磁盘
 feat2: 多语言支持
+feat1-1: webui rollback入口
+fix2: 完整的中英双语显示
+feat3: console界面支持↑/↓键的历史命令切换
 """
 MINIMIUM_ALLOWED_VERSION = "b0.4.0" # 因为b0.4.0版本大量重写了账户登录逻辑, 所以, 我设置了拒绝降级到b0.4.0-的版本
                                     # 但是如果你需要降级低于b0.4.0的版本，请更改这里的值为b0.0.0以删除限制
@@ -706,7 +709,42 @@ if os.path.isfile(UPDATE_MARKER) and not WANT_UPDATE:
 else:
     tmp = ""
 
-# ===== 一键导出:python main.py export [输出路径] =====
+# ===== WebUI 触发的回滚:检测 .rollback_pending 标记文件 =====
+ROLLBACK_MARKER = os.path.join(ROOT, ".rollback_pending")
+if os.path.isfile(ROLLBACK_MARKER) and not WANT_ROLLBACK:
+    try:
+        with open(ROLLBACK_MARKER, "r", encoding="utf-8") as f:
+            rollback_path = f.read().strip()
+    except Exception:
+        rollback_path = ""
+    finally:
+        try:
+            os.remove(ROLLBACK_MARKER)
+        except Exception:
+            pass
+    if rollback_path and os.path.isfile(rollback_path):
+        from version_manager.package import rollback as do_rollback, PackageError
+
+        print("========================================")
+        print(f"  WebUI 触发回滚: {rollback_path}")
+        print(f"  当前版本: {VERSION}")
+        print("========================================")
+        try:
+            used = do_rollback(ROOT, rollback_path)
+            print(f"  已回滚到: {used}")
+            print("  正在重启以加载回滚后的版本...")
+            print("  等待端口释放...")
+            time.sleep(3)
+            try:
+                import subprocess
+                subprocess.Popen([sys.executable] + sys.argv, cwd=ROOT)
+            except Exception as e:
+                print(f"  重启失败: {e},请手动重启服务器")
+            os._exit(0)
+        except PackageError as e:
+            print(f"  回滚失败: {e}")
+
+
 # 将项目代码打包为 zip(排除用户数据/设置,与 update 命令的保留规则对称),
 # 生成的压缩包可直接用于:python main.py update <压缩包> 升级其他实例。
 if WANT_EXPORT:

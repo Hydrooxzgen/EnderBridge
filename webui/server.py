@@ -838,6 +838,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if path == "/api/update/releases":
             self._api_update_releases()
             return
+        if path == "/api/update/backups":
+            self._api_update_backups()
+            return
         if path == "/api/config":
             self._api_get_config()
             return
@@ -954,6 +957,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/update/upload":
             self._api_update_upload()
+            return
+        if parsed.path == "/api/update/rollback":
+            self._api_update_rollback()
             return
         if parsed.path == "/api/console":
             self._api_console()
@@ -1784,6 +1790,66 @@ class WebUIHandler(BaseHTTPRequestHandler):
             self._respond({"ok": False, "message": "未找到文件内容"})
         except Exception as e:
             self._respond({"ok": False, "message": f"上传处理失败: {e}"})
+
+    def _api_update_backups(self) -> None:
+        """列出可用备份包（无需鉴权，仅展示元数据）"""
+        try:
+            from version_manager.package import list_backups, BACKUP_PREFIX
+            backup_dir = os.path.dirname(ROOT)
+            found = list_backups(backup_dir)
+            items = []
+            for path in reversed(found):  # 最新的排最前
+                fname = os.path.basename(path)
+                try:
+                    size = os.path.getsize(path)
+                    mtime = os.path.getmtime(path)
+                except OSError:
+                    size = 0
+                    mtime = 0
+                # 从文件名解析时间戳：EnderBridge_backup_YYYYMMDD_HHMMSS.zip
+                stamp = fname[len(BACKUP_PREFIX):].replace(".zip", "")
+                items.append({
+                    "filename": fname,
+                    "path": path,
+                    "size": size,
+                    "mtime": mtime,
+                    "stamp": stamp,
+                })
+            self._respond({"ok": True, "backups": items})
+        except Exception as e:
+            self._respond({"ok": False, "message": f"获取备份列表失败: {e}"})
+
+    def _api_update_rollback(self) -> None:
+        """回滚到指定备份（需要 update 权限），完成后触发重启"""
+        if not _require_permission("update")(self):
+            return
+        body = self._read_body()
+        backup_path = body.get("path", "").strip()
+        if not backup_path:
+            self._respond({"ok": False, "message": "请指定备份文件路径"})
+            return
+        if not os.path.isfile(backup_path):
+            self._respond({"ok": False, "message": f"备份文件不存在: {backup_path}"})
+            return
+        if _restart_handler is None:
+            self._respond({"ok": False, "message": "重启处理器未注册"})
+            return
+        # 将回滚路径写入标记文件，main.py 重启后读取并执行回滚
+        try:
+            rollback_marker = os.path.join(ROOT, ".rollback_pending")
+            with open(rollback_marker, "w", encoding="utf-8") as f:
+                f.write(backup_path)
+        except Exception as e:
+            self._respond({"ok": False, "message": f"回滚触发失败: {e}"})
+            return
+        _audit(self, "update", f"触发了回滚 ({os.path.basename(backup_path)})")
+        self._respond({"ok": True, "message": "服务器正在回滚，完成后自动重启"})
+        import time
+        time.sleep(0.5)
+        try:
+            _restart_handler()
+        except Exception:
+            pass
 
     def _api_get_config(self) -> None:
         if not _require_permission("config")(self):

@@ -55,7 +55,10 @@ def safe_rel(name: str) -> str:
     norm = os.path.normpath(name.replace("\\", "/"))
     if not norm or norm == ".":
         return ""
-    if norm.startswith("..") or os.path.isabs(norm):
+    # isabs 在 Windows 上不识别 /foo 形式的 Unix 绝对路径,额外检测
+    if os.path.isabs(norm) or norm.startswith(("/", "\\")):
+        return ""
+    if norm.startswith(".."):
         return ""
     return norm.replace(os.sep, "/")
 
@@ -230,7 +233,7 @@ def backup_dir(root, dest_dir=None, keep=BACKUP_KEEP_COUNT) -> str:
     备份默认存放在项目上级目录(避免被打包/覆盖/删除),只保留最近 keep 个。
     """
     from datetime import datetime
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:20]  # 精确到毫秒，格式 YYYYMMDD_HHMMSS_mmm
     parent = os.path.dirname(os.path.abspath(root))
     dest_dir = dest_dir or parent
     os.makedirs(dest_dir, exist_ok=True)
@@ -290,8 +293,9 @@ def rollback(root, backup_path=None, dest_dir=None) -> str:
         backup_path = found[-1]
     if not os.path.isfile(backup_path):
         raise PackageError(f"找不到备份文件: {backup_path}")
-    # 回滚前先备份当前状态
-    backup_dir(root, dest_dir)
+    # 回滚前先备份当前状态:
+    # 传 keep=BACKUP_KEEP_COUNT+1 避免 prune 误删我们即将使用的 backup_path
+    backup_dir(root, dest_dir, keep=BACKUP_KEEP_COUNT + 1)
     # 备份包是全量打包(含 config/ 等数据区),回滚时全量覆盖
     tmp = tempfile.mkdtemp(prefix="enderbridge_rollback_")
     try:
@@ -301,4 +305,7 @@ def rollback(root, backup_path=None, dest_dir=None) -> str:
         shutil.rmtree(tmp, ignore_errors=True)
     if copied == 0:
         raise PackageError("回滚失败: 备份包为空或无法解压")
+    # 覆盖完成后统一修剪回正常数量
+    prune_backups(dest_dir)
     return backup_path
+

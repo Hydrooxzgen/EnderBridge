@@ -1,4 +1,4 @@
-﻿// ===== 检查更新页面逻辑 =====
+// ===== 检查更新页面逻辑 =====
 var _releasesPage = 1;
 var _selectedUpdateFile = null;
 var _userRole = "guest";
@@ -354,14 +354,7 @@ function loadReleases(page) {
               btn.textContent = t("upd.installVer");
             } else {
               toast(t("upd.updatingRestart"), "ok");
-              var tries = 0;
-              var timer = setInterval(function () {
-                tries++;
-                fetch("/api/status").then(function (r) { return r.json(); })
-                  .then(function (d) { if (d.ok) { clearInterval(timer); location.reload(); } })
-                  .catch(function () {});
-                if (tries >= 60) { clearInterval(timer); btn.disabled = false; btn.textContent = t("upd.installVer"); toast(t("upd.recoverTimeout"), "err"); }
-              }, 2000);
+              _pollAndRedirect(btn, t("upd.installVer"));
             }
           }).catch(function () {
             toast(t("upd.installFail"), "err");
@@ -373,4 +366,74 @@ function loadReleases(page) {
   }).catch(function () {
     $("releasesList").innerHTML = '<div class="update-msg err">' + t("upd.loadFail") + '</div>';
   });
+}
+
+// ===== 历史备份 / 回滚 =====
+function loadBackups() {
+  var list = $("backupsList");
+  if (!list) return;
+  list.innerHTML = '<div class="td-dim">' + t("upd.loading") + '</div>';
+  api("/update/backups").then(function (data) {
+    if (!data.ok) {
+      list.innerHTML = '<div class="update-msg err">' + escapeHtml(data.message || t("upd.backupLoadFail")) + '</div>';
+      return;
+    }
+    var backups = data.backups || [];
+    if (!backups.length) {
+      list.innerHTML = '<div class="td-dim">' + t("upd.backupEmpty") + '</div>';
+      return;
+    }
+    list.innerHTML = backups.map(function (b) {
+      var date = b.mtime ? new Date(b.mtime * 1000).toLocaleString("zh-CN") : b.stamp;
+      var sizeMB = b.size ? (b.size / 1048576).toFixed(1) + " MB" : "";
+      var canRollback = _userRole !== "guest";
+      var btn = canRollback
+        ? '<button class="btn btn-sm" data-path="' + escapeHtml(b.path) + '">' + t("upd.backupRollback") + '</button>'
+        : '';
+      return '<div class="release-item" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">' +
+        '<div>' +
+          '<span style="font-weight:600;">' + escapeHtml(b.filename) + '</span>' +
+          '<span class="td-dim" style="margin-left:8px;font-size:12px;">' + date + '</span>' +
+          (sizeMB ? '<span class="td-dim" style="margin-left:8px;font-size:12px;">' + t("upd.backupSize") + ': ' + sizeMB + '</span>' : '') +
+        '</div>' +
+        btn +
+        '</div>';
+    }).join("");
+    // 绑定回滚按钮
+    list.querySelectorAll("button[data-path]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var path = btn.getAttribute("data-path");
+        if (!confirm(t("upd.backupConfirm"))) return;
+        btn.disabled = true;
+        btn.textContent = t("upd.backupRollingBack");
+        api("/update/rollback", { method: "POST", body: JSON.stringify({ path: path }) })
+          .then(function (result) {
+            if (!result.ok) {
+              toast(result.message || t("upd.backupRollbackFail"), "err");
+              btn.disabled = false;
+              btn.textContent = t("upd.backupRollback");
+            } else {
+              toast(t("upd.backupRollbackOk"), "ok");
+              _pollAndRedirect(btn, t("upd.backupRollback"));
+            }
+          }).catch(function () {
+            toast(t("upd.backupRollbackFail"), "err");
+            btn.disabled = false;
+            btn.textContent = t("upd.backupRollback");
+          });
+      });
+    });
+  }).catch(function () {
+    list.innerHTML = '<div class="update-msg err">' + t("upd.backupLoadFail") + '</div>';
+  });
+}
+
+var backupsLoadBtn = $("backupsLoadBtn");
+if (backupsLoadBtn) {
+  backupsLoadBtn.addEventListener("click", loadBackups);
+}
+// 访客隐藏整个备份卡片
+if (_userRole === "guest") {
+  var backupsCard = $("updateBackupsCard");
+  if (backupsCard) backupsCard.style.display = "none";
 }

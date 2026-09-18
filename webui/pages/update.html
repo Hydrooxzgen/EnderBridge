@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -35,6 +35,13 @@
       <span id="updateFileName" class="muted" style="flex:1" data-i18n="upd.noFile">未选择文件</span>
       <button class="btn btn-primary btn-sm" id="updateLocalBtn" disabled data-i18n="upd.doUpdate">🚀 执行更新</button>
     </div>
+  </div>
+
+  <div class="card card-gap" id="updateBackupsCard">
+    <div style="font-weight:600;margin-bottom:8px;" data-i18n="upd.backupTitle">⏪ 历史备份 / 回滚</div>
+    <p class="desc" data-i18n="upd.backupDesc">每次执行更新前会自动备份当前版本（最多保留 3 份）。如更新出现问题，可在此一键回滚。</p>
+    <button class="btn btn-sm" id="backupsLoadBtn" data-i18n="upd.backupLoad">🔄 加载备份列表</button>
+    <div id="backupsList" style="margin-top:8px;"></div>
   </div>
 
   <div class="card card-gap">

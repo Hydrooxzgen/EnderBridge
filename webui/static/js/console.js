@@ -1,4 +1,4 @@
-﻿// ===== 控制台页面逻辑(统一终端视图) =====
+// ===== 控制台页面逻辑(统一终端视图) =====
 var _logLines = [];
 var MAX_LOG_LINES = 1000;
 var _logPaused = false;
@@ -8,6 +8,42 @@ var _logLevelFilter = "all";
 var _logConnected = false;
 
 var LOG_LEVEL_ORDER = { debug: 0, info: 1, warning: 2, error: 3 };
+
+// ===== 命令历史记录 (↑ / ↓ 方向键切换) =====
+var CMD_HISTORY_KEY = "enderbridge_cmd_history";
+var MAX_CMD_HISTORY = 50;
+var _cmdHistory = [];
+var _historyIndex = -1;
+var _tempInput = "";
+
+function _loadCmdHistory() {
+  try {
+    var data = localStorage.getItem(CMD_HISTORY_KEY);
+    if (data) {
+      var parsed = JSON.parse(data);
+      if (Array.isArray(parsed)) _cmdHistory = parsed;
+    }
+  } catch (e) {
+    _cmdHistory = [];
+  }
+}
+
+function _saveCmdHistory(cmd) {
+  if (!cmd) return;
+  var idx = _cmdHistory.lastIndexOf(cmd);
+  if (idx !== -1) {
+    _cmdHistory.splice(idx, 1);
+  }
+  _cmdHistory.push(cmd);
+  if (_cmdHistory.length > MAX_CMD_HISTORY) {
+    _cmdHistory.shift();
+  }
+  try {
+    localStorage.setItem(CMD_HISTORY_KEY, JSON.stringify(_cmdHistory));
+  } catch (e) {}
+  _historyIndex = -1;
+  _tempInput = "";
+}
 
 // ===== 统一日志渲染 =====
 
@@ -102,6 +138,7 @@ function sendCommand() {
   if (!input) return;
   var cmd = input.value.trim();
   if (!cmd) return;
+  _saveCmdHistory(cmd);
   input.value = "";
   // 命令输入行
   addEntry({ _type: "cmd", _ts: nowTs(), _text: "> " + cmd });
@@ -166,6 +203,7 @@ requireAuth(function (role) {
   initSidebar("console", role);
   initTheme();
   initLang();
+  _loadCmdHistory();
   // 访客隐藏命令输入
   if (role === "guest") {
     var cmdCard = $("consoleCmdCard");
@@ -178,13 +216,41 @@ requireAuth(function (role) {
 var execBtn = $("consoleExecBtn");
 if (execBtn) execBtn.addEventListener("click", sendCommand);
 
-// 回车发送
+// 回车发送与历史命令切换 (↑ / ↓)
 var input = $("consoleInput");
 if (input) {
   input.addEventListener("keydown", function (e) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       sendCommand();
+    } else if (e.key === "ArrowUp") {
+      if (!_cmdHistory.length) return;
+      e.preventDefault();
+      if (_historyIndex === -1 || _historyIndex >= _cmdHistory.length) {
+        _tempInput = input.value;
+        _historyIndex = _cmdHistory.length - 1;
+      } else if (_historyIndex > 0) {
+        _historyIndex--;
+      }
+      input.value = _cmdHistory[_historyIndex] || "";
+      input.selectionStart = input.selectionEnd = input.value.length;
+    } else if (e.key === "ArrowDown") {
+      if (_historyIndex === -1 || _historyIndex >= _cmdHistory.length) return;
+      e.preventDefault();
+      _historyIndex++;
+      if (_historyIndex >= _cmdHistory.length) {
+        _historyIndex = -1;
+        input.value = _tempInput;
+      } else {
+        input.value = _cmdHistory[_historyIndex] || "";
+      }
+      input.selectionStart = input.selectionEnd = input.value.length;
+    } else if (e.key === "Escape") {
+      if (_historyIndex !== -1) {
+        _historyIndex = -1;
+        input.value = _tempInput;
+        input.selectionStart = input.selectionEnd = input.value.length;
+      }
     }
   });
   input.focus();
