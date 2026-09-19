@@ -12,12 +12,68 @@ import threading
 import time
 from uuid import uuid4
 
-# 常量定义区
+# ===== 常量定义区=====
+# --- 路径常量 ---
 ROOT = os.path.dirname(os.path.abspath(__file__))
 CONFIG_DIR = os.path.join(ROOT, "config")
 CONFIG_PY = os.path.join(CONFIG_DIR, "config.py")
 CONFIG_JSON = os.path.join(CONFIG_DIR, "config.json")
 CONFIG_EXAMPLE_JSON = os.path.join(CONFIG_DIR, "config.example.json")
+PERMISSION_JSON = os.path.join(CONFIG_DIR, "permission.json")
+PERMISSION_EXAMPLE = os.path.join(CONFIG_DIR, "permission.example.json")
+USERS_JSON = os.path.join(CONFIG_DIR, "users.json")
+UPDATE_MARKER = os.path.join(ROOT, ".update_pending")
+
+# --- 版本常量 ---
+VERSION = "b0.4.2"
+# ↓仅当不为None时从Github拉取更新日志, 反之则直接显示该变量内容。
+DESCRIPTION = None
+"""
+safefix1: 修复了14个漏洞
+codechange1: 把update/export等逻辑放入version_manager中
+feat1: rollback功能,可回滚到指定备份包
+fix1: 日志轮转防撑爆磁盘
+feat2: 多语言支持
+feat1-1: webui rollback入口
+fix2: 完整的中英双语显示
+feat3: console界面支持↑/↓键的历史命令切换
+feat4: 更新安装与上传进度反馈
+feat5: Banlist 批量操作
+feat6: 审计日志一键导出
+safe_feat: 依赖安全态势检测与已知cve漏洞告警
+feat7: webui控制台改为websocket连接
+feat8: mod界面搜索功能
+feat9: 配置文件保存前json语法校验与行号定位
+"""
+MINIMIUM_ALLOWED_VERSION = "b0.4.0" # 因为b0.4.0版本大量重写了账户登录逻辑, 所以, 设置了拒绝降级到b0.4.0-的版本
+                                    # 但是如果你需要降级低于b0.4.0的版本，请更改这里的值为b0.0.0以删除限制
+                                    # 但请注意，降级后若想重新升级至b0.4.0及以上版本, 程序不会自动创建admin账户默认密码
+                                    # 你需要自己计算admin密码的哈希值并手动修改users.json (计算哈希值请使用tell_me_hash.py)
+                                    # 或者临时修改guest用户组为'admin'
+                                    # 否则, 你无法获取admin权限
+                                    # 注: 请一定在使用完该操作后把guest用户组重新改回'viewer', 否则任何人都可以使用guest账号获取admin权限!
+
+GITHUB_REPO = "Hydrooxzgen/EnderBridge"  # You can edit this to your own repository if you fork it :)
+
+# --- 命令行开关常量 ---
+WANT_RESET = "--reset-all" in sys.argv
+WANT_EXPORT = "export" in sys.argv
+WANT_EXPORT_CLEAR = WANT_EXPORT and "-clear" in sys.argv
+WANT_LOAD_WITHOUT_CONFIG = "--load-without-config" in sys.argv
+WANT_VIEW_VERSION = "--version" in sys.argv or "-v" in sys.argv
+WANT_SYSTEM_MODE = "--system" in sys.argv
+WANT_HELP = "--help" in sys.argv or "-h" in sys.argv
+WANT_VIEW_DESCRIPTION = "--description" in sys.argv
+WANT_GOTO_OOBE = "--goto-oobe" in sys.argv
+WANT_UPDATE = "update" in sys.argv
+WANT_ROLLBACK = "--rollback" in sys.argv
+ARGV_NOT_EXIST = not WANT_RESET\
+and not WANT_VIEW_VERSION and not WANT_EXPORT \
+and not WANT_VIEW_DESCRIPTION and not WANT_HELP \
+and not WANT_ROLLBACK
+
+# --- 终端提示符常量 ---
+CONSOLE_PROMPT = "EnderBridge> "
 
 # ===== 自动迁移:将根目录下的旧配置文件移动到 config/ 目录 =====
 os.makedirs(CONFIG_DIR, exist_ok=True)
@@ -35,16 +91,6 @@ for _fname in [
             os.remove(_old)
         except OSError:
             pass
-
-VERSION = "b0.4.1"
-MINIMIUM_ALLOWED_VERSION = "b0.4.0" # 因为b0.4.0版本大量重写了账户登录逻辑, 所以, 我设置了拒绝降级到b0.4.0-的版本
-                                    # 但是如果你需要降级低于b0.4.0的版本，请更改这里的值为b0.0.0以删除限制
-                                    # 但请注意，降级后若想重新升级至b0.4.0及以上版本, 程序不会自动创建admin账户默认密码
-                                    # 你需要自己计算admin密码的哈希值并手动修改users.json (计算哈希值请使用tell_me_hash.py)
-                                    # 或者临时修改guest用户组为'admin'
-                                    # 否则, 你无法获取admin权限
-                                    # 注: 请一定在使用完该操作后把guest用户组重新改回'viewer', 否则任何人都可以使用guest账号获取admin权限!
-
 
 def _parse_version(v: str) -> tuple:
     """解析版本号字符串(如 'b0.4.1 dev', 'b0.4.1')为可比较的元组 (0, 4, 1)"""
@@ -70,48 +116,11 @@ def _check_minimum_version(new_version: str) -> None:
         if new_ver < min_ver:
             _update_err(
                 f"目标版本 {new_version} 低于最低允许版本 {MINIMIUM_ALLOWED_VERSION},\n"
-                f"  不允许降级! 如需降级请手动修改 main.py 中的 MINIMIUM_ALLOWED_VERSION"
+                f"操作终止"
             )
     except Exception:
         pass  # 版本格式异常时跳过检查,不阻塞升级
 
-
-# ↓仅当不为None时从Github拉取更新日志, 反之则直接显示该变量内容。
-DESCRIPTION = None
-"""
-fix1: 修复仅本机访问开关无法关闭的BUG
-fix2: 修复无法绑定0.0.0.0的BUG
-feat1: 新增--description参数
-feat2: 新增一键添加防火墙排除项
-feat3: 修复在Termux中无法启动的BUG
-feat4: 新增banlist 添加服务器正被攻击提示, 并自动封禁(可选)--toast通知
-feat5: version_manager可以自动迁移配置文件
-fix3: 修复无法取消系统保留用户属性的bug
-feat6: banip新增封禁时间
-feat7: 在被封禁页面也显示解禁时间
-fix4: 防止is_banned()方法死锁
-feat8: 权限管理页面添加ban权限
-feat9: 可自定义封禁时间单位
-feat10: 可自定义自动封禁规则
-feat11: banip现在无法ban127.0.0.1
-fix5: 修复无法更改自己密码的bug
-feat12: 降级现在会被限制
-feat13: 审计日志完善
-feat14: 账户被禁用现在不计入密码输入错误总数
-fix6: 修复重置配置后不启动firstrun的bug
-fix7: 从OOBE中删除登录令牌输入框
-""" 
-
-GITHUB_REPO = "Hydrooxzgen/EnderBridge"  # You can edit this to your own repository if you fork it :)
-WANT_RESET = "--reset-all" in sys.argv
-WANT_EXPORT = "export" in sys.argv
-WANT_EXPORT_CLEAR = WANT_EXPORT and "-clear" in sys.argv
-WANT_LOAD_WITHOUT_CONFIG = "--load-without-config" in sys.argv
-WANT_VIEW_VERSION = "--version" in sys.argv or "-v" in sys.argv
-WANT_SYSTEM_MODE = "--system" in sys.argv
-WANT_HELP = "--help" in sys.argv or "-h" in sys.argv
-WANT_VIEW_DESCRIPTION = "--description" in sys.argv
-WANT_GOTO_OOBE = "--goto-oobe" in sys.argv
 
 # ===== 依赖检测(必须早于任何第三方mod使用) ===== 
 # websockets 使用动态导入:缺失时自动运行 setup.py 安装,成功后继续启动。
@@ -142,10 +151,7 @@ if not WANT_RESET and not WANT_EXPORT and not _dependencies_ok():
 # ===== 引导阶段(必须早于任何依赖 config.py 的模块加载) =====
 # 依赖 config.json 的模块(lib/logger.py、lib/utils.py、lib/mods.py 等)均为延迟加载,
 # 因此 config.json 缺失时(如 --reset-all 之后)可先在此根据模板自动补全,保证程序可启动。
-# 此阶段判断启动参数并执行对应操作
-ARGV_NOT_EXIST = not WANT_RESET\
-and not WANT_VIEW_VERSION and not WANT_EXPORT \
-and not WANT_VIEW_DESCRIPTION and not WANT_HELP
+# 此阶段判断启动参数并执行对应操作(ARGV_NOT_EXIST 见顶部常量区)
 if  not os.path.exists(CONFIG_PY) and not os.path.exists(CONFIG_JSON) and ARGV_NOT_EXIST:
     # 优先生成 config.json, 若无模板则回退到 config.py
     if os.path.exists(CONFIG_EXAMPLE_JSON):
@@ -165,9 +171,7 @@ if  not os.path.exists(CONFIG_PY) and not os.path.exists(CONFIG_JSON) and ARGV_N
                 pass
         print("未找到 config.json, 已根据模板自动生成默认配置(可在向导中修改)")
 
-# permission.json 缺失时从模板复制(权限系统依赖该文件)
-PERMISSION_JSON = os.path.join(CONFIG_DIR, "permission.json")
-PERMISSION_EXAMPLE = os.path.join(CONFIG_DIR, "permission.example.json")
+# permission.json 缺失时从模板复制(权限系统依赖该文件,路径常量见顶部)
 if not os.path.exists(PERMISSION_JSON) and os.path.exists(PERMISSION_EXAMPLE) and ARGV_NOT_EXIST:
     with open(PERMISSION_EXAMPLE, "r", encoding="utf-8") as f:
         content = f.read()
@@ -228,8 +232,9 @@ if WANT_HELP:
     print()
     print("命令:")
     print("  (无参数)              正常启动服务器")
-    print("  update <压缩包>       一键升级(保留配置)")
+    print("  update <压缩包>       一键升级(保留配置,自动备份)")
     print("  export [输出路径]     一键导出为zip")
+    print("  --rollback [备份包]   回滚到指定备份(默认最新)")
     print()
     print("选项:")
     print("  --help, -h            显示此帮助信息")
@@ -248,27 +253,51 @@ if WANT_HELP:
     print("  python main.py --version                 查看版本")
     sys.exit(0)
 
+# ===== 回滚:python main.py --rollback [备份包] =====
+# 用更新前自动生成的备份覆盖当前项目(默认用最新备份),完成后退出不启动服务器。
+# (WANT_ROLLBACK 开关常量见顶部)
+if WANT_ROLLBACK:
+    from version_manager.package import rollback, PackageError
+
+    idx = sys.argv.index("--rollback")
+    backup_arg = sys.argv[idx + 1] if len(sys.argv) > idx + 1 and not sys.argv[idx + 1].startswith("-") else None
+    print("========================================")
+    print("  正在回滚 EnderBridge ...")
+    print(f"  当前版本: {VERSION}")
+    if backup_arg:
+        print(f"  指定备份: {backup_arg}")
+    print("========================================")
+    try:
+        used = rollback(ROOT, backup_arg)
+    except PackageError as e:
+        print("========================================")
+        print(f"  回滚失败: {e}")
+        print("========================================")
+        sys.exit(1)
+    print("========================================")
+    print(f"  回滚完成: {used}")
+    print("  请重新启动: py -B main.py")
+    print("========================================")
+    sys.exit(0)
+
 # ===== 一键升级:python main.py update <新版本压缩包> =====
 # 从压缩包(zip / tar.gz)升级当前版本,保留 config.py / permission.json
 # 等设置与 resources / structures / logs 等用户数据,完成后退出不启动服务器。
-WANT_UPDATE = "update" in sys.argv
+# 更新前自动备份到上级目录(保留最近 3 个),可用 --rollback 回滚。
+# (WANT_UPDATE 开关常量见顶部)
 if WANT_UPDATE:
     import shutil
-    import tarfile
     import tempfile
-    import zipfile
 
-    # 数据区/设置文件:升级时跳过,不覆盖不删除
-    UPDATE_KEEP = {
-        ".git",
-        "logs",
-        "resources",
-        "structures",
-        "config",
-    }
+    from version_manager.package import (
+        apply_archive,
+        backup_dir,
+        iter_archive_members,
+        PackageError,
+    )
 
     def _load_github_token() -> str:
-        """从 config.py 读取 GitHub API Token（用于减少速率限制）"""
+        """从 config.py 读取 GitHub API Token"""
         try:
             import importlib.util
             spec = importlib.util.spec_from_file_location("_cfg_token", CONFIG_PY)
@@ -290,69 +319,18 @@ if WANT_UPDATE:
 
     def _update_err(msg):
         print("========================================")
-        print(f"  升级失败: {msg}")
+        print(f"    失败: {msg}")
         print("  当前版本未做任何改动,可继续正常启动")
         print("========================================")
         sys.exit(1)
 
-    def _update_member_name(name):
-        """规范化压缩包成员路径,过滤路径穿越,返回相对路径或 None"""
-        norm = os.path.normpath(name.replace("\\", "/"))
-        if not norm or norm == ".":
-            return None
-        if norm.startswith("..") or os.path.isabs(norm):
-            return None
-        return norm.replace(os.sep, "/")
-
-    def _update_common_root(names):
-        """GitHub 风格压缩包内含顶层目录(如 EnderBridge-main/),探测并剥离"""
-        files = [n for n in names if n]
-        if not files:
-            return ""
-        roots = {n.split("/", 1)[0] for n in files}
-        if len(roots) == 1 and all("/" in n for n in files):
-            return roots.pop()
-        return ""
-
+    # 兼容别名:旧内部函数名统一指向 version_manager.package
     def _update_archive_members(archive):
         """迭代压缩包成员,产出 (相对路径, 文件对象)"""
-        lower = archive.lower()
-        if lower.endswith(".zip"):
-            with zipfile.ZipFile(archive) as z:
-                names = [i.filename for i in z.infolist() if not i.is_dir()]
-                root = _update_common_root(names)
-                for info in z.infolist():
-                    if info.is_dir():
-                        continue
-                    rel = _update_member_name(info.filename)
-                    if rel is None:
-                        continue
-                    if root:
-                        if not rel.startswith(root + "/"):
-                            continue
-                        rel = rel[len(root) + 1:]
-                    if not rel:
-                        continue
-                    yield rel, z.open(info)
-        elif lower.endswith((".tar.gz", ".tgz", ".tar.bz2", ".tar.xz", ".tar")):
-            with tarfile.open(archive, "r:*") as t:
-                names = [m.name for m in t.getmembers() if m.isfile()]
-                root = _update_common_root(names)
-                for m in t.getmembers():
-                    if not m.isfile():
-                        continue
-                    rel = _update_member_name(m.name)
-                    if rel is None:
-                        continue
-                    if root:
-                        if not rel.startswith(root + "/"):
-                            continue
-                        rel = rel[len(root) + 1:]
-                    if not rel:
-                        continue
-                    yield rel, t.extractfile(m)
-        else:
-            _update_err(f"不支持的压缩包格式: {archive}（仅支持 zip / tar.gz）")
+        try:
+            yield from iter_archive_members(archive)
+        except PackageError as e:
+            _update_err(str(e))
 
     def _do_update(archive, new_version=None):
         if not os.path.isfile(archive):
@@ -391,41 +369,19 @@ if WANT_UPDATE:
             except Exception:
                 pass
 
-        # 2. 解压到临时目录(跳过数据区)
-        # config/ 整体跳过,但模板文件必须带入以保证目标实例可首次运行
-        _UPDATE_CONFIG_ALLOW = {"config/config.example.json", "config/permission.example.json", "config/users.example.json"}
-        tmp = tempfile.mkdtemp(prefix="enderbridge_update_")
+        # 1.6 更新前自动备份(失败则中止,不动现有文件)
         try:
-            for rel, fobj in _update_archive_members(archive):
-                top = rel.split("/", 1)[0]
-                if top in UPDATE_KEEP and rel not in _UPDATE_CONFIG_ALLOW:
-                    continue
-                target = os.path.join(tmp, *rel.split("/"))
-                os.makedirs(os.path.dirname(target), exist_ok=True)
-                with open(target, "wb") as out:
-                    if fobj is not None:
-                        shutil.copyfileobj(fobj, out)
+            backup_path = backup_dir(ROOT)
+        except PackageError as e:
+            _update_err(str(e))
+        print(f"  已备份当前版本: {backup_path}")
 
-            # 3. 校验解压结果
-            if not os.path.exists(os.path.join(tmp, "main.py")):
-                _update_err("解压后未找到 main.py")
-            if not os.path.exists(os.path.join(tmp, "lib")):
-                _update_err("解压后未找到 lib 目录")
-
-            # 4. 覆盖到项目根目录(跳过数据区,不清除多余文件以保留自定义内容)
-            copied = 0
-            for dirpath, dirnames, filenames in os.walk(tmp):
-                rel_dir = os.path.relpath(dirpath, tmp)
-                for fname in filenames:
-                    src = os.path.join(dirpath, fname)
-                    dst = os.path.join(ROOT, rel_dir, fname)
-                    # 计算相对路径用于模板白名单检查
-                    _rel_from_root = os.path.relpath(dst, ROOT).replace(os.sep, "/")
-                    if rel_dir.split(os.sep)[0] in UPDATE_KEEP and _rel_from_root not in _UPDATE_CONFIG_ALLOW:
-                        continue
-                    os.makedirs(os.path.dirname(dst), exist_ok=True)
-                    shutil.copy2(src, dst)
-                    copied += 1
+        # 2-4. 解压到临时目录(跳过数据区,模板放行) → 校验 → 覆盖到项目根目录
+        try:
+            copied = apply_archive(archive, ROOT)
+        except PackageError as e:
+            _update_err(str(e))
+        else:
             print(f"  已覆盖 {copied} 个文件")
 
             # 5. 更新版本号
@@ -454,8 +410,6 @@ if WANT_UPDATE:
             print("  已保留: config/ 目录等设置与用户数据")
             print("  请重新启动: py -B main.py")
             print("========================================")
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)
         sys.exit(0)
 
     def _download_release(tag=None):
@@ -713,8 +667,7 @@ if WANT_UPDATE:
             except Exception:
                 pass
 
-# ===== WebUI 触发的更新:检测 .update_pending 标记文件 =====
-UPDATE_MARKER = os.path.join(ROOT, ".update_pending")
+# ===== WebUI 触发的更新:检测 .update_pending 标记文件(路径常量见顶部) =====
 if os.path.isfile(UPDATE_MARKER) and not WANT_UPDATE:
     # WebUI 写入了待更新的压缩包路径,立即执行更新
     try:
@@ -728,18 +681,7 @@ if os.path.isfile(UPDATE_MARKER) and not WANT_UPDATE:
         except Exception:
             pass
     if pending_path and os.path.isfile(pending_path):
-        import shutil
-        import tarfile
-        import tempfile
-        import zipfile
-
-        # 复用 UPDATE_KEEP(如果 WANT_UPDATE 已定义)或使用默认值
-        _keep = locals().get("UPDATE_KEEP", {
-            ".git", "logs", "resources", "structures",
-            "config",
-        })
-        # config/ 整体跳过,但模板文件必须带入(与命令行 update 保持一致)
-        _webui_config_allow = {"config/config.example.json", "config/permission.example.json", "config/users.example.json"}
+        from version_manager.package import apply_archive, backup_dir, PackageError
 
         print("========================================")
         print(f"  WebUI 触发更新: {pending_path}")
@@ -747,88 +689,13 @@ if os.path.isfile(UPDATE_MARKER) and not WANT_UPDATE:
         print("========================================")
 
         try:
-            tmp = tempfile.mkdtemp(prefix="enderbridge_webui_update_")
-            lower = pending_path.lower()
-
-            def _safe_rel(name: str) -> str:
-                """规范化成员路径,过滤路径穿越,返回相对路径或空字符串"""
-                norm = os.path.normpath(name.replace("\\", "/"))
-                if not norm or norm == ".":
-                    return ""
-                if norm.startswith("..") or os.path.isabs(norm):
-                    return ""
-                return norm.replace(os.sep, "/")
-
-            if lower.endswith(".zip"):
-                with zipfile.ZipFile(pending_path) as z:
-                    names = [i.filename for i in z.infolist() if not i.is_dir()]
-                    # 检测公共根目录
-                    roots = {n.split("/", 1)[0] for n in names if "/" in n}
-                    root = roots.pop() if len(roots) == 1 and all("/" in n for n in names) else ""
-                    for info in z.infolist():
-                        if info.is_dir():
-                            continue
-                        rel = _safe_rel(info.filename)
-                        if not rel:
-                            continue
-                        if root and rel.startswith(root + "/"):
-                            rel = rel[len(root) + 1:]
-                        if not rel:
-                            continue
-                        top = rel.split("/", 1)[0]
-                        if top in _keep and rel not in _webui_config_allow:
-                            continue
-                        target = os.path.join(tmp, *rel.split("/"))
-                        os.makedirs(os.path.dirname(target), exist_ok=True)
-                        with open(target, "wb") as out:
-                            with z.open(info) as src:
-                                shutil.copyfileobj(src, out)
-            elif lower.endswith((".tar.gz", ".tgz", ".tar")):
-                with tarfile.open(pending_path, "r:*") as t:
-                    names = [m.name for m in t.getmembers() if m.isfile()]
-                    roots = {n.split("/", 1)[0] for n in names if "/" in n}
-                    root = roots.pop() if len(roots) == 1 and all("/" in n for n in names) else ""
-                    for m in t.getmembers():
-                        if not m.isfile():
-                            continue
-                        rel = _safe_rel(m.name)
-                        if not rel:
-                            continue
-                        if root and rel.startswith(root + "/"):
-                            rel = rel[len(root) + 1:]
-                        if not rel:
-                            continue
-                        top = rel.split("/", 1)[0]
-                        if top in _keep and rel not in _webui_config_allow:
-                            continue
-                        target = os.path.join(tmp, *rel.split("/"))
-                        os.makedirs(os.path.dirname(target), exist_ok=True)
-                        with open(target, "wb") as out:
-                            src = t.extractfile(m)
-                            if src is not None:
-                                shutil.copyfileobj(src, out)
-            else:
-                print("  不支持的格式,仅支持 .zip / .tar.gz")
+            try:
+                backup_path = backup_dir(ROOT)
+                print(f"  已备份当前版本: {backup_path}")
+                copied = apply_archive(pending_path, ROOT)
+            except PackageError as e:
+                print(f"  更新失败: {e}")
                 sys.exit(1)
-
-            if not os.path.exists(os.path.join(tmp, "main.py")):
-                print("  压缩包内未找到 main.py,不是 EnderBridge 压缩包")
-                sys.exit(1)
-
-            # 覆盖到项目目录
-            copied = 0
-            for dirpath, dirnames, filenames in os.walk(tmp):
-                rel_dir = os.path.relpath(dirpath, tmp)
-                for fname in filenames:
-                    src = os.path.join(dirpath, fname)
-                    dst = os.path.join(ROOT, rel_dir, fname)
-                    top = rel_dir.split(os.sep)[0]
-                    _rel_from_root = os.path.relpath(dst, ROOT).replace(os.sep, "/")
-                    if top in _keep and _rel_from_root not in _webui_config_allow:
-                        continue
-                    os.makedirs(os.path.dirname(dst), exist_ok=True)
-                    shutil.copy2(src, dst)
-                    copied += 1
             print(f"  已覆盖 {copied} 个文件")
             print("  文件已覆盖,正在重启以加载新版本...")
             # 覆盖完成后磁盘上已是新版本代码,但内存中仍是旧代码
@@ -847,59 +714,57 @@ if os.path.isfile(UPDATE_MARKER) and not WANT_UPDATE:
             os._exit(0)
         except Exception as e:
             print(f"  更新失败: {e}")
-        finally:
-            shutil.rmtree(tmp, ignore_errors=True)  # type: ignore[possibly-undefined]
 else:
     tmp = ""
 
-# ===== 一键导出:python main.py export [输出路径] =====
+# ===== WebUI 触发的回滚:检测 .rollback_pending 标记文件 =====
+ROLLBACK_MARKER = os.path.join(ROOT, ".rollback_pending")
+if os.path.isfile(ROLLBACK_MARKER) and not WANT_ROLLBACK:
+    try:
+        with open(ROLLBACK_MARKER, "r", encoding="utf-8") as f:
+            rollback_path = f.read().strip()
+    except Exception:
+        rollback_path = ""
+    finally:
+        try:
+            os.remove(ROLLBACK_MARKER)
+        except Exception:
+            pass
+    if rollback_path and os.path.isfile(rollback_path):
+        from version_manager.package import rollback as do_rollback, PackageError
+
+        print("========================================")
+        print(f"  WebUI 触发回滚: {rollback_path}")
+        print(f"  当前版本: {VERSION}")
+        print("========================================")
+        try:
+            used = do_rollback(ROOT, rollback_path)
+            print(f"  已回滚到: {used}")
+            print("  正在重启以加载回滚后的版本...")
+            print("  等待端口释放...")
+            time.sleep(3)
+            try:
+                import subprocess
+                subprocess.Popen([sys.executable] + sys.argv, cwd=ROOT)
+            except Exception as e:
+                print(f"  重启失败: {e},请手动重启服务器")
+            os._exit(0)
+        except PackageError as e:
+            print(f"  回滚失败: {e}")
+
+
 # 将项目代码打包为 zip(排除用户数据/设置,与 update 命令的保留规则对称),
 # 生成的压缩包可直接用于:python main.py update <压缩包> 升级其他实例。
 if WANT_EXPORT:
-    import zipfile
     from datetime import datetime
 
-    # 与 update 命令的 UPDATE_KEEP 保持一致:用户数据/设置不打包
-    EXPORT_EXCLUDE = {
-        ".git",
-        "logs",
-        "resources",
-        "structures",
-        "config",
-        "node_modules",  # Bot 的 npm 依赖(约 500MB),用户需自行 npm install
-    }
-    # config/ 整体排除,但模板文件和权限模板必须随导出带出,否则目标实例无法首次运行
-    EXPORT_FORCE_INCLUDE = {
-        "config/config.example.json",
-        "config/permission.example.json",
-        "config/users.example.json",
-    }
-    EXPORT_SKIP_DIRS = {"__pycache__"}
-    EXPORT_SKIP_EXTS = {".pyc", ".pyo"}
+    from version_manager.package import collect_export_files, create_export_zip, PackageError
 
     def _export_err(msg):
         print("======================================")
         print(f"  导出失败: {msg}")
         print("======================================")
         sys.exit(1)
-
-    def _iter_export_files():
-        """遍历项目内需打包的文件,产出 (压缩包相对路径, 绝对路径)"""
-        for dirpath, dirnames, filenames in os.walk(ROOT):
-            dirnames[:] = [
-                d for d in dirnames
-                if d not in EXPORT_EXCLUDE and d not in EXPORT_SKIP_DIRS
-            ]
-            rel_dir = os.path.relpath(dirpath, ROOT)
-            rel_dir = "" if rel_dir == "." else rel_dir
-            for fname in filenames:
-                if os.path.splitext(fname)[1].lower() in EXPORT_SKIP_EXTS:
-                    continue
-                rel = os.path.join(rel_dir, fname) if rel_dir else fname
-                rel = rel.replace(os.sep, "/")
-                if rel.split("/", 1)[0] in EXPORT_EXCLUDE:
-                    continue
-                yield rel, os.path.join(dirpath, fname)
 
     # 输出路径:默认当前工作目录 EnderBridge_export_<时间戳>.zip
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -916,14 +781,10 @@ if WANT_EXPORT:
     if out == ROOT or out.startswith(ROOT + os.sep):
         _export_err("输出路径不能位于项目目录内,请放到上级目录或指定其他位置")
 
-    files = list(_iter_export_files())
-    # 强制包含模板文件(即使 config/ 整体被排除)
-    for force_rel in EXPORT_FORCE_INCLUDE:
-        force_abs = os.path.join(ROOT, force_rel)
-        if os.path.isfile(force_abs) and force_rel not in [f[0] for f in files]:
-            files.append((force_rel, force_abs))
-    if not files:
-        _export_err("未找到可导出的文件")
+    try:
+        files = collect_export_files(ROOT)
+    except PackageError as e:
+        _export_err(str(e))
 
     print("======================================")
     print(f"  正在导出 EnderBridge ...")
@@ -931,10 +792,10 @@ if WANT_EXPORT:
     print(f"  输出路径: {out}")
     print("======================================")
 
-    os.makedirs(os.path.dirname(out), exist_ok=True)
-    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
-        for rel, abspath in files:
-            z.write(abspath, rel)
+    try:
+        create_export_zip(ROOT, out)
+    except PackageError as e:
+        _export_err(str(e))
 
     size_kb = os.path.getsize(out) / 1024.0
     print("======================================")
@@ -1061,7 +922,7 @@ if "--downgrade-config" in sys.argv:
     sys.exit(0)
 
 # ===== 终极兜底:若 users.json 不存在,强制视为首次运行(向导会创建用户系统) =====
-USERS_JSON = os.path.join(CONFIG_DIR, "users.json")
+# (USERS_JSON 路径常量见顶部)
 if not is_first_run and not os.path.exists(USERS_JSON):
     is_first_run = True
     # 同步写回 config.json,避免下次启动再次误判
@@ -1466,8 +1327,7 @@ async def _hot_restart() -> None:
         _show_prompt()
 
 
-# ===== 交互式终端提示符 =====
-CONSOLE_PROMPT = "EnderBridge> "
+# ===== 交互式终端提示符(CONSOLE_PROMPT 常量见顶部) =====
 _restarting = False  # 重启/更新中,抑制提示符输出
 _prompt_visible = False  # 提示符是否已在终端显示(防重复)
 

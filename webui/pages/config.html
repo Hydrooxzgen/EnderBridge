@@ -8,81 +8,63 @@
 <script>document.documentElement.setAttribute('data-theme',localStorage.getItem('enderbridge_theme')||(window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark'));</script>
 </head>
 <body>
-<aside class="sidebar">
-  <div class="brand">
-    <span class="logo">⛏️</span>
-    <div>
-      <div class="name" id="srvName">EnderBridge</div>
-      <div class="ver">Web 管理</div>
-    </div>
-  </div>
-  <div class="nav-item" data-page="dashboard"><span>📊</span><span>仪表盘</span></div>
-  <div class="nav-item" data-page="permissions"><span>👥</span><span>权限管理</span></div>
-  <div class="nav-item" data-page="config"><span>⚙️</span><span>功能设置</span></div>
-  <div class="nav-item" data-page="mods"><span>🧩</span><span>Mod 管理</span></div>
-  <div class="nav-item" data-page="console"><span>💻</span><span>控制台</span></div>
-  <div class="nav-item" data-page="audit"><span>📋</span><span>审计日志</span></div>
-  <div class="nav-item" data-page="update"><span>🔄</span><span>检查更新</span></div>
-  <div class="nav-item" data-page="banlist"><span>🚫</span><span>封禁管理</span></div>
-  <div class="spacer"></div>
-  <button class="theme-toggle" id="themeToggle"><span class="theme-icon">🌙</span><span class="theme-label">深色模式</span></button>
-  <div class="guest-badge" id="guestBadge">👤 访客模式</div>
-  <div class="nav-item hidden" id="adminLoginBtn"><span>🔑</span><span>管理员登录</span></div>
-  <div class="logout" id="logoutBtn"><span>🚪</span><span>退出登录</span></div>
-</aside>
+<aside class="sidebar" data-auto-sidebar></aside>
 <div class="main">
-  <h2>⚙️ 功能设置</h2>
+  <h2 data-i18n="cfg.title">⚙️ 功能设置</h2>
   <div class="cfg-layout">
     <!-- 左侧分类导航 -->
     <div class="cfg-sidebar">
       <div class="cfg-sidebar-item active" data-cfg-cat="basic">
-        <span class="icon">🏠</span><span class="label-text">服务器基础</span>
+        <span class="icon">🏠</span><span class="label-text" data-i18n="cfg.catBasic">服务器基础</span>
       </div>
       <div class="cfg-sidebar-item" data-cfg-cat="features">
-        <span class="icon">🧩</span><span class="label-text">功能开关</span>
+        <span class="icon">🧩</span><span class="label-text" data-i18n="cfg.catFeatures">功能开关</span>
       </div>
       <div class="cfg-sidebar-item" data-cfg-cat="ai">
-        <span class="icon">🤖</span><span class="label-text">AI 配置</span>
+        <span class="icon">🤖</span><span class="label-text" data-i18n="cfg.catAi">AI 配置</span>
       </div>
       <div class="cfg-sidebar-item" data-cfg-cat="integration">
-        <span class="icon">🔗</span><span class="label-text">集成 / 服务</span>
+        <span class="icon">🔗</span><span class="label-text" data-i18n="cfg.catIntegration">集成 / 服务</span>
       </div>
       <div class="cfg-sidebar-item" data-cfg-cat="aliases">
-        <span class="icon">🔧</span><span class="label-text">命令别名</span>
+        <span class="icon">🔧</span><span class="label-text" data-i18n="cfg.catAliases">命令别名</span>
       </div>
       <div class="cfg-sidebar-item" data-cfg-cat="system">
-        <span class="icon">⚡</span><span class="label-text">系统管理</span>
+        <span class="icon">⚡</span><span class="label-text" data-i18n="cfg.catSystem">系统管理</span>
       </div>
       <div class="cfg-sidebar-item" data-cfg-cat="resources">
-        <span class="icon">📂</span><span class="label-text">资源路径</span>
+        <span class="icon">📂</span><span class="label-text" data-i18n="cfg.catResources">资源路径</span>
+      </div>
+      <div class="cfg-sidebar-item" data-cfg-cat="raw">
+        <span class="icon">📝</span><span class="label-text" data-i18n="cfg.catRaw">高级 JSON</span>
       </div>
     </div>
 
     <!-- 右侧内容区 -->
     <div class="cfg-content">
       <div class="cfg-action-bar">
-        <button class="btn btn-primary" id="configSave">💾 保存配置</button>
+        <button class="btn btn-primary" id="configSave" data-i18n="cfg.save">💾 保存配置</button>
       </div>
 
       <!-- ===== 服务器基础 ===== -->
       <div class="cfg-category active" data-cfg-cat="basic">
         <div class="cfg-section">
-          <h3>🏠 服务器基础</h3>
+          <h3 data-i18n="cfg.basicTitle">🏠 服务器基础</h3>
           <div class="cfg-grid">
             <div class="cfg-field">
-              <label>服务器显示名</label>
+              <label data-i18n="cfg.name">服务器显示名</label>
               <input id="cfg-name" class="cfg-input" placeholder="EnderBridge" />
             </div>
             <div class="cfg-field">
-              <label>WebSocket 端口</label>
+              <label data-i18n="cfg.port">WebSocket 端口</label>
               <input id="cfg-port" class="cfg-input" type="number" placeholder="8800" />
             </div>
             <div class="cfg-field">
-              <label>命令前缀</label>
+              <label data-i18n="cfg.prefix">命令前缀</label>
               <input id="cfg-prefix" class="cfg-input" placeholder="$" />
             </div>
             <div class="cfg-field">
-              <label>日志级别</label>
+              <label data-i18n="cfg.logLevel">日志级别</label>
               <select id="cfg-loglevel" class="cfg-input">
                 <option value="debug">debug</option>
                 <option value="info">info</option>
@@ -98,61 +80,61 @@
       <!-- ===== 功能开关 ===== -->
       <div class="cfg-category" data-cfg-cat="features">
         <div class="cfg-section" id="cfgCardMusic">
-          <h3>🎵 音乐 (Music)</h3>
+          <h3 data-i18n="cfg.musicTitle">🎵 音乐 (Music)</h3>
           <div class="cfg-switch">
             <label class="switch"><input type="checkbox" id="cfg-percussion"><span class="track"></span></label>
-            <span class="switch-label">默认启用打击乐器 (playPercussion)</span>
+            <span class="switch-label" data-i18n="cfg.percussion">默认启用打击乐器 (playPercussion)</span>
           </div>
-          <p class="hint">启用后新加入的玩家默认开启打击乐器收听。</p>
+          <p class="hint" data-i18n="cfg.percussionHint">启用后新加入的玩家默认开启打击乐器收听。</p>
         </div>
 
         <div class="cfg-section" id="cfgCardTool">
-          <h3>🔧 Tool</h3>
-          <p class="hint" style="margin:0">Tool 模块默认启用，无额外配置项。</p>
+          <h3 data-i18n="cfg.toolTitle">🔧 Tool</h3>
+          <p class="hint" style="margin:0" data-i18n="cfg.toolHint">Tool 模块默认启用，无额外配置项。</p>
         </div>
 
         <div class="cfg-section">
-          <h3>🧩 Mod 开关</h3>
-          <p class="hint" style="margin-bottom:12px">勾选启用对应 Mod，取消勾选禁用。修改后需重启服务器生效。</p>
-          <div style="margin-bottom:6px;font-weight:600;font-size:13px">客户端 Mods</div>
+          <h3 data-i18n="cfg.modTitle">🧩 Mod 开关</h3>
+          <p class="hint" style="margin-bottom:12px" data-i18n="cfg.modHint">勾选启用对应 Mod，取消勾选禁用。修改后需重启服务器生效。</p>
+          <div style="margin-bottom:6px;font-weight:600;font-size:13px" data-i18n="cfg.modClient">客户端 Mods</div>
           <div id="modClientBox"></div>
-          <div style="margin:14px 0 6px;font-weight:600;font-size:13px">服务端 Mods</div>
+          <div style="margin:14px 0 6px;font-weight:600;font-size:13px" data-i18n="cfg.modServer">服务端 Mods</div>
           <div id="modServerBox"></div>
         </div>
 
         <div class="cfg-section" id="cfgCardSpam">
-          <h3>📢 刷屏 (Spam)</h3>
+          <h3 data-i18n="cfg.spamTitle">📢 刷屏 (Spam)</h3>
           <div class="cfg-grid">
             <div class="cfg-field cfg-grid-full">
-              <label>攻击消息</label>
-              <input id="cfg-spamattack" class="cfg-input" placeholder="例如：§eThis server is bought you by mcfox.top" />
-              <span class="hint">若留空则禁用广告刷屏命令 (spam attack)。此命令绕过 SPAM 频率限制且无次数上限。</span>
+              <label data-i18n="cfg.spamAttack">攻击消息</label>
+              <input id="cfg-spamattack" class="cfg-input" data-i18n-ph="cfg.spamAttackPh" placeholder="例如：§eThis server is bought you by mcfox.top" />
+              <span class="hint" data-i18n="cfg.spamAttackHint">若留空则禁用广告刷屏命令 (spam attack)。此命令绕过 SPAM 频率限制且无次数上限。</span>
             </div>
             <div class="cfg-field cfg-grid-full">
-              <label>广告内容（每行一条）</label>
-              <textarea id="cfg-spamad" class="cfg-input" rows="3" placeholder="每行一条广告内容"></textarea>
+              <label data-i18n="cfg.spamAd">广告内容（每行一条）</label>
+              <textarea id="cfg-spamad" class="cfg-input" rows="3" data-i18n-ph="cfg.spamAdPh" placeholder="每行一条广告内容"></textarea>
             </div>
             <div class="cfg-field">
-              <label>广告间隔 (毫秒)</label>
+              <label data-i18n="cfg.spamInterval">广告间隔 (毫秒)</label>
               <input id="cfg-spaminterval" class="cfg-input" type="number" placeholder="10000" />
             </div>
           </div>
         </div>
 
         <div class="cfg-section" id="cfgCardAliasesToggle">
-          <h3>🔧 命令别名</h3>
+          <h3 data-i18n="cfg.aliasToggleTitle">🔧 命令别名</h3>
           <div class="cfg-switch">
             <label class="switch"><input type="checkbox" id="cfg-aliases-enabled"><span class="track"></span></label>
-            <span class="switch-label">启用命令别名 (commandAliases)</span>
+            <span class="switch-label" data-i18n="cfg.aliasToggle">启用命令别名 (commandAliases)</span>
           </div>
-          <p class="hint">启用后可在「命令别名」tab 中管理别名。为命令设置简短别名，如 <code>message → msg</code> 则 <code>$msg</code> 等同 <code>$message</code>。</p>
+          <p class="hint" data-i18n="cfg.aliasToggleHint">启用后可在「命令别名」tab 中管理别名。为命令设置简短别名，如 <code>message → msg</code> 则 <code>$msg</code> 等同 <code>$message</code>。</p>
         </div>
       </div>
 
       <!-- ===== AI 配置 ===== -->
       <div class="cfg-category" data-cfg-cat="ai">
         <div class="cfg-section" id="cfgCardAi">
-          <h3>🤖 AI 对话配置</h3>
+          <h3 data-i18n="cfg.aiTitle">🤖 AI 对话配置</h3>
           <div class="cfg-grid">
             <div class="cfg-field">
               <label>API Base URL</label>
@@ -163,7 +145,7 @@
               <input id="cfg-aikey" class="cfg-input" type="password" placeholder="sk-..." />
             </div>
           </div>
-          <h3 style="margin-top:20px;font-size:14px;border:none;padding:0">💬 Chat 模型</h3>
+          <h3 style="margin-top:20px;font-size:14px;border:none;padding:0" data-i18n="cfg.aiChatTitle">💬 Chat 模型</h3>
           <div class="cfg-grid">
             <div class="cfg-field">
               <label>chatModel</label>
@@ -178,11 +160,11 @@
               <input id="cfg-aicooldown" class="cfg-input" type="number" />
             </div>
             <div class="cfg-field cfg-grid-full">
-              <label>chatPrompt（系统提示词）</label>
+              <label data-i18n="cfg.aiChatPrompt">chatPrompt（系统提示词）</label>
               <textarea id="cfg-aichatprompt" class="cfg-input" rows="3"></textarea>
             </div>
           </div>
-          <h3 style="margin-top:20px;font-size:14px;border:none;padding:0">⌨️ Command 模型</h3>
+          <h3 style="margin-top:20px;font-size:14px;border:none;padding:0" data-i18n="cfg.aiCmdTitle">⌨️ Command 模型</h3>
           <div class="cfg-grid">
             <div class="cfg-field">
               <label>cmdModel</label>
@@ -193,7 +175,7 @@
               <input id="cfg-aicmdtokens" class="cfg-input" type="number" />
             </div>
             <div class="cfg-field cfg-grid-full">
-              <label>cmdPrompt（命令提示词）</label>
+              <label data-i18n="cfg.aiCmdPrompt">cmdPrompt（命令提示词）</label>
               <textarea id="cfg-aicmdprompt" class="cfg-input" rows="3"></textarea>
             </div>
           </div>
@@ -203,41 +185,41 @@
       <!-- ===== 集成 / 服务 ===== -->
       <div class="cfg-category" data-cfg-cat="integration">
         <div class="cfg-section" id="cfgCardBot">
-          <h3>🤖 假人 Bot</h3>
-          <p class="hint" style="margin:0 0 8px 0">假人以独立玩家身份连接 MCBE 服务器或加入 Realm，出现在 Tab 列表和游戏世界中。需要 Node.js 运行时。</p>
+          <h3 data-i18n="cfg.botTitle">🤖 假人 Bot</h3>
+          <p class="hint" style="margin:0 0 8px 0" data-i18n="cfg.botDesc">假人以独立玩家身份连接 MCBE 服务器或加入 Realm，出现在 Tab 列表和游戏世界中。需要 Node.js 运行时。</p>
           <div class="cfg-grid">
             <div class="cfg-field cfg-grid-full">
-              <label>连接模式</label>
+              <label data-i18n="cfg.botMode">连接模式</label>
               <div class="cfg-switch" style="gap:20px;">
                 <label class="switch"><input type="radio" name="cfg-bot-mode" id="cfg-bot-mode-server" value="server" checked><span class="track"></span></label>
-                <span class="switch-label">🖥️ 服务器直连（可选 offline）</span>
+                <span class="switch-label" data-i18n="cfg.botModeServer">🖥️ 服务器直连（可选 offline）</span>
               </div>
               <div class="cfg-switch">
                 <label class="switch"><input type="radio" name="cfg-bot-mode" id="cfg-bot-mode-realm" value="realm"><span class="track"></span></label>
-                <span class="switch-label">☁️ Xbox Live Realm（强制在线）</span>
+                <span class="switch-label" data-i18n="cfg.botModeRealm">☁️ Xbox Live Realm（强制在线）</span>
               </div>
             </div>
             <!-- Server 模式字段 -->
             <div id="cfgBotServerFields" class="cfg-grid-full">
               <div class="cfg-grid">
                 <div class="cfg-field">
-                  <label>服务器地址 (host)</label>
+                  <label data-i18n="cfg.botHost">服务器地址 (host)</label>
                   <input id="cfg-bot-host" class="cfg-input" placeholder="127.0.0.1" />
                 </div>
                 <div class="cfg-field">
-                  <label>服务器端口 (port)</label>
+                  <label data-i18n="cfg.botPort">服务器端口 (port)</label>
                   <input id="cfg-bot-port" class="cfg-input" type="number" placeholder="19132" />
                 </div>
               </div>
               <div class="cfg-grid">
                 <div class="cfg-field">
-                  <label>协议版本 (version)</label>
-                  <input id="cfg-bot-version" class="cfg-input" placeholder="留空自动检测" />
+                  <label data-i18n="cfg.botVersion">协议版本 (version)</label>
+                  <input id="cfg-bot-version" class="cfg-input" data-i18n-ph="cfg.botVersionPh" placeholder="留空自动检测" />
                 </div>
                 <div class="cfg-field">
                   <div class="cfg-switch">
                     <label class="switch"><input type="checkbox" id="cfg-bot-offline"><span class="track"></span></label>
-                    <span class="switch-label">正版模式 — 需要 Xbox Live</span>
+                    <span class="switch-label" data-i18n="cfg.botOffline">正版模式 — 需要 Xbox Live</span>
                   </div>
                 </div>
               </div>
@@ -246,52 +228,52 @@
             <div id="cfgBotRealmFields" class="cfg-grid-full" style="display:none;">
               <div class="cfg-grid">
                 <div class="cfg-field">
-                  <label>Realm ID</label>
-                  <input id="cfg-bot-realmid" class="cfg-input" placeholder="Realm 数字 ID" />
-                  <span class="hint">可在 Realms 管理页面或 Minecraft 内获取</span>
+                  <label data-i18n="cfg.botRealmId">Realm ID</label>
+                  <input id="cfg-bot-realmid" class="cfg-input" data-i18n-ph="cfg.botRealmIdPh" placeholder="Realm 数字 ID" />
+                  <span class="hint" data-i18n="cfg.botRealmIdHint">可在 Realms 管理页面或 Minecraft 内获取</span>
                 </div>
                 <div class="cfg-field">
-                  <label>Realm 邀请链接</label>
-                  <input id="cfg-bot-realminvite" class="cfg-input" placeholder="例如 https://realms.gg/xxxxxxx" />
-                  <span class="hint">与 Realm ID 二选一即可</span>
+                  <label data-i18n="cfg.botRealmInvite">Realm 邀请链接</label>
+                  <input id="cfg-bot-realminvite" class="cfg-input" data-i18n-ph="cfg.botRealmInvitePh" placeholder="例如 https://realms.gg/xxxxxxx" />
+                  <span class="hint" data-i18n="cfg.botRealmInviteHint">与 Realm ID 二选一即可</span>
                 </div>
               </div>
             </div>
             <!-- 通用字段: offline 模式 -->
             <div id="cfgBotUsernameOffline" class="cfg-field">
-              <label>假人名称 (username)</label>
+              <label data-i18n="cfg.botUsername">假人名称 (username)</label>
               <input id="cfg-bot-username" class="cfg-input" placeholder="FakeBot" />
             </div>
             <!-- 通用字段: online 模式 — Xbox Live 账号管理 -->
             <div id="cfgBotUsernameOnline" class="cfg-field cfg-grid-full" style="display:none;">
-              <label>Xbox Live 账号</label>
+              <label data-i18n="cfg.botXboxAccount">Xbox Live 账号</label>
               <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                <span id="cfg-bot-xbox-active" style="font-weight:600;font-size:15px;">未登录</span>
+                <span id="cfg-bot-xbox-active" style="font-weight:600;font-size:15px;" data-i18n="cfg.botXboxNotLogged">未登录</span>
                 <span id="cfg-bot-xbox-badge" style="display:none;padding:2px 8px;border-radius:6px;font-size:11px;background:var(--accent);color:#fff;">active</span>
               </div>
               <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center;">
-                <button type="button" id="cfg-bot-xbox-login" class="btn btn-sm">🔐 登录新账号</button>
+                <button type="button" id="cfg-bot-xbox-login" class="btn btn-sm" data-i18n="cfg.botXboxLogin">🔐 登录新账号</button>
                 <select id="cfg-bot-xbox-switch" class="cfg-input" style="max-width:220px;display:none;"></select>
-                <button type="button" id="cfg-bot-xbox-switch-btn" class="btn btn-sm btn-ghost" style="display:none;">切换</button>
-                <button type="button" id="cfg-bot-xbox-remove-btn" class="btn btn-sm btn-ghost" style="display:none;color:var(--danger,#ef4444);">移除</button>
+                <button type="button" id="cfg-bot-xbox-switch-btn" class="btn btn-sm btn-ghost" style="display:none;" data-i18n="cfg.botXboxSwitch">切换</button>
+                <button type="button" id="cfg-bot-xbox-remove-btn" class="btn btn-sm btn-ghost" style="display:none;color:var(--danger,#ef4444);" data-i18n="cfg.botXboxRemove">移除</button>
               </div>
-              <p class="hint" style="margin:6px 0 0 0;">登录后账号会自动保存。切换账号后需重启 Bot 生效。</p>
+              <p class="hint" style="margin:6px 0 0 0;" data-i18n="cfg.botXboxHint">登录后账号会自动保存。切换账号后需重启 Bot 生效。</p>
             </div>
             <!-- Xbox Live 登录弹窗 -->
             <div id="cfgBotXboxLoginModal" class="cfg-grid-full" style="display:none;">
               <div style="border:1px solid var(--border);border-radius:10px;padding:16px;background:var(--bg-card,#1a1a2e);">
-                <div style="font-weight:600;margin-bottom:8px;">🔐 Xbox Live 登录</div>
+                <div style="font-weight:600;margin-bottom:8px;" data-i18n="cfg.botXboxModalTitle">🔐 Xbox Live 登录</div>
                 <div id="cfgBotXboxLoginStep1">
-                  <p style="margin:0 0 8px 0;font-size:13px;color:var(--text-dim);">点击下方按钮发起 Microsoft 设备码认证,Gamertag 将自动获取。</p>
-                  <button type="button" id="cfg-bot-xbox-login-start" class="btn btn-sm" style="margin-top:4px;">🔐 开始登录</button>
-                  <button type="button" id="cfg-bot-xbox-login-cancel" class="btn btn-sm btn-ghost" style="margin-top:4px;">取消</button>
+                  <p style="margin:0 0 8px 0;font-size:13px;color:var(--text-dim);" data-i18n="cfg.botXboxStep1Desc">点击下方按钮发起 Microsoft 设备码认证,Gamertag 将自动获取。</p>
+                  <button type="button" id="cfg-bot-xbox-login-start" class="btn btn-sm" style="margin-top:4px;" data-i18n="cfg.botXboxStart">🔐 开始登录</button>
+                  <button type="button" id="cfg-bot-xbox-login-cancel" class="btn btn-sm btn-ghost" style="margin-top:4px;" data-i18n="cfg.botXboxCancel">取消</button>
                 </div>
                 <div id="cfgBotXboxLoginStep2" style="display:none;">
-                  <p style="margin:0 0 8px 0;">请在浏览器中完成认证:</p>
-                  <p style="margin:0 0 4px 0;"><b>1.</b> 打开 <a id="cfg-bot-xbox-login-url" href="#" target="_blank" rel="noopener"></a></p>
-                  <p style="margin:0 0 4px 0;"><b>2.</b> 输入验证码: <code id="cfg-bot-xbox-login-code" style="font-size:18px;font-weight:700;letter-spacing:2px;color:var(--accent);"></code></p>
-                  <p style="margin:8px 0 0 0;font-size:12px;color:var(--text-dim);">等待认证完成...</p>
-                  <button type="button" id="cfg-bot-xbox-login-cancel2" class="btn btn-sm btn-ghost" style="margin-top:8px;">取消</button>
+                  <p style="margin:0 0 8px 0;" data-i18n="cfg.botXboxStep2Desc">请在浏览器中完成认证:</p>
+                  <p style="margin:0 0 4px 0;"><b>1.</b> <span data-i18n="cfg.botXboxOpen">打开</span> <a id="cfg-bot-xbox-login-url" href="#" target="_blank" rel="noopener"></a></p>
+                  <p style="margin:0 0 4px 0;"><b>2.</b> <span data-i18n="cfg.botXboxEnterCode">输入验证码:</span> <code id="cfg-bot-xbox-login-code" style="font-size:18px;font-weight:700;letter-spacing:2px;color:var(--accent);"></code></p>
+                  <p style="margin:8px 0 0 0;font-size:12px;color:var(--text-dim);" data-i18n="cfg.botXboxWaiting">等待认证完成...</p>
+                  <button type="button" id="cfg-bot-xbox-login-cancel2" class="btn btn-sm btn-ghost" style="margin-top:8px;" data-i18n="cfg.botXboxCancel">取消</button>
                 </div>
                 <div id="cfgBotXboxLoginResult" style="display:none;"></div>
               </div>
@@ -299,33 +281,33 @@
             <!-- Xbox Live 认证高级选项 -->
             <div id="cfgBotXboxLiveFields" class="cfg-grid-full" style="display:none;">
               <div class="cfg-field">
-                <label>Xbox Live 认证 Title (authTitle)</label>
-                <input id="cfg-bot-authtitle" class="cfg-input" placeholder="留空使用默认 Nintendo Switch" />
-                <span class="hint">可选：MinecraftAndroid、MinecraftIOS、MinecraftNintendoSwitch 等</span>
+                <label data-i18n="cfg.botAuthTitle">Xbox Live 认证 Title (authTitle)</label>
+                <input id="cfg-bot-authtitle" class="cfg-input" data-i18n-ph="cfg.botAuthTitlePh" placeholder="留空使用默认 Nintendo Switch" />
+                <span class="hint" data-i18n="cfg.botAuthTitleHint">可选：MinecraftAndroid、MinecraftIOS、MinecraftNintendoSwitch 等</span>
               </div>
               <div class="cfg-field">
-                <label>Token 缓存目录 (profilesFolder)</label>
-                <input id="cfg-bot-profilesfolder" class="cfg-input" placeholder="留空使用默认路径" />
-                <span class="hint">首次认证需在终端查看验证 URL 并完成登录</span>
+                <label data-i18n="cfg.botProfilesFolder">Token 缓存目录 (profilesFolder)</label>
+                <input id="cfg-bot-profilesfolder" class="cfg-input" data-i18n-ph="cfg.botProfilesFolderPh" placeholder="留空使用默认路径" />
+                <span class="hint" data-i18n="cfg.botProfilesFolderHint">首次认证需在终端查看验证 URL 并完成登录</span>
               </div>
             </div>
           </div>
         </div>
 
         <div class="cfg-section" id="cfgCardQq">
-          <h3>💬 QQ 桥接</h3>
+          <h3 data-i18n="cfg.qqTitle">💬 QQ 桥接</h3>
           <div class="cfg-switch">
             <label class="switch"><input type="checkbox" id="cfg-qq"><span class="track"></span></label>
-            <span class="switch-label">启用 QQ 桥接 (features.qq.enabled)</span>
+            <span class="switch-label" data-i18n="cfg.qqEnable">启用 QQ 桥接 (features.qq.enabled)</span>
           </div>
           <div class="cfg-sub-box show" id="qqFields">
             <div class="cfg-grid">
               <div class="cfg-field">
-                <label>QQ 群号 (groupId)</label>
+                <label data-i18n="cfg.qqGroup">QQ 群号 (groupId)</label>
                 <input id="cfg-qqgroup" class="cfg-input" type="number" />
               </div>
               <div class="cfg-field">
-                <label>端口 (port)</label>
+                <label data-i18n="cfg.qqPort">端口 (port)</label>
                 <input id="cfg-qqport" class="cfg-input" type="number" />
               </div>
               <div class="cfg-field">
@@ -341,18 +323,18 @@
         </div>
 
         <div class="cfg-section">
-          <h3>🔗 Utils / SAPI</h3>
+          <h3 data-i18n="cfg.utilsTitle">🔗 Utils / SAPI</h3>
           <div class="cfg-grid">
             <div class="cfg-field cfg-grid-full">
               <div class="cfg-switch">
                 <label class="switch"><input type="checkbox" id="cfg-tellall"><span class="track"></span></label>
-                <span class="switch-label">tellAllToTell（启用时仅转发 Tell 相关）</span>
+                <span class="switch-label" data-i18n="cfg.tellAll">tellAllToTell（启用时仅转发 Tell 相关）</span>
               </div>
             </div>
             <div class="cfg-field cfg-grid-full">
               <div class="cfg-switch">
                 <label class="switch"><input type="checkbox" id="cfg-polling"><span class="track"></span></label>
-                <span class="switch-label">enablePolling（仅 Windows 默认开启）</span>
+                <span class="switch-label" data-i18n="cfg.polling">enablePolling（仅 Windows 默认开启）</span>
               </div>
             </div>
             <div class="cfg-field">
@@ -367,21 +349,21 @@
         </div>
 
         <div class="cfg-section" id="cfgCardAnnouncements">
-          <h3>📢 定时公告</h3>
+          <h3 data-i18n="cfg.annTitle">📢 定时公告</h3>
           <div class="cfg-switch">
             <label class="switch"><input type="checkbox" id="cfg-announce-enabled"><span class="track"></span></label>
-            <span class="switch-label">启用定时公告 (messageConfig.announcements.enabled)</span>
+            <span class="switch-label" data-i18n="cfg.annEnable">启用定时公告 (messageConfig.announcements.enabled)</span>
           </div>
           <div class="cfg-sub-box show" id="announceFields">
             <div class="cfg-grid">
               <div class="cfg-field">
-                <label>间隔 (秒)</label>
+                <label data-i18n="cfg.annInterval">间隔 (秒)</label>
                 <input id="cfg-announce-interval" class="cfg-input" type="number" min="10" />
               </div>
             </div>
             <div class="cfg-field cfg-grid-full">
-              <label>公告内容（每行一条，支持多行）</label>
-              <textarea id="cfg-announce-messages" class="cfg-input" rows="6" placeholder="欢迎来到本服务器！&#10;加入我们的 QQ 群：123456789&#10;服务器官网：https://example.com"></textarea>
+              <label data-i18n="cfg.annMessages">公告内容（每行一条，支持多行）</label>
+              <textarea id="cfg-announce-messages" class="cfg-input" rows="6" data-i18n-ph="cfg.annMessagesPh" placeholder="欢迎来到本服务器！&#10;加入我们的 QQ 群：123456789&#10;服务器官网：https://example.com"></textarea>
             </div>
           </div>
         </div>
@@ -390,29 +372,29 @@
       <!-- ===== 命令别名 ===== -->
       <div class="cfg-category" data-cfg-cat="aliases">
         <div class="cfg-section" id="cfgCardAliases">
-          <h3>🔧 命令别名管理</h3>
-          <p class="hint">为命令设置简短别名，如 <code>message → msg</code> 则 <code>$msg</code> 等同 <code>$message</code>。修改后无需重启，保存即时生效。</p>
+          <h3 data-i18n="cfg.aliasTitle">🔧 命令别名管理</h3>
+          <p class="hint" data-i18n="cfg.aliasHint">为命令设置简短别名，如 <code>message → msg</code> 则 <code>$msg</code> 等同 <code>$message</code>。修改后无需重启，保存即时生效。</p>
           <div id="aliasList" style="margin-top:12px;"></div>
-          <button class="btn btn-sm" id="addAliasBtn" style="margin-top:8px;">➕ 添加别名</button>
+          <button class="btn btn-sm" id="addAliasBtn" style="margin-top:8px;" data-i18n="cfg.aliasAdd">➕ 添加别名</button>
         </div>
       </div>
 
       <!-- ===== 系统管理 ===== -->
       <div class="cfg-category" data-cfg-cat="system">
         <div class="cfg-section" id="cfgCardRateLimit">
-          <h3>⏱️ 命令限流</h3>
+          <h3 data-i18n="cfg.rlTitle">⏱️ 命令限流</h3>
           <div class="cfg-switch">
             <label class="switch"><input type="checkbox" id="cfg-ratelimit"><span class="track"></span></label>
-            <span class="switch-label">启用命令限流 (rateLimit.command.enabled)</span>
+            <span class="switch-label" data-i18n="cfg.rlEnable">启用命令限流 (rateLimit.command.enabled)</span>
           </div>
           <div class="cfg-sub-box show" id="rlFields">
             <div class="cfg-grid">
               <div class="cfg-field">
-                <label>窗口时长 (毫秒)</label>
+                <label data-i18n="cfg.rlWindow">窗口时长 (毫秒)</label>
                 <input id="cfg-rlwindow" class="cfg-input" type="number" />
               </div>
               <div class="cfg-field">
-                <label>单窗口最大次数</label>
+                <label data-i18n="cfg.rlMax">单窗口最大次数</label>
                 <input id="cfg-rlmax" class="cfg-input" type="number" />
               </div>
             </div>
@@ -420,55 +402,55 @@
         </div>
 
         <div class="cfg-section" id="cfgCardPlayerListPolling">
-          <h3>👥 玩家列表轮询</h3>
+          <h3 data-i18n="cfg.plpTitle">👥 玩家列表轮询</h3>
           <div class="cfg-switch">
             <label class="switch"><input type="checkbox" id="cfg-playerlistpolling"><span class="track"></span></label>
-            <span class="switch-label">启用定期 /list 获取玩家名 (playerListPolling.enabled)</span>
+            <span class="switch-label" data-i18n="cfg.plpEnable">启用定期 /list 获取玩家名 (playerListPolling.enabled)</span>
           </div>
           <div class="cfg-sub-box show" id="plpFields">
             <div class="cfg-grid">
               <div class="cfg-field">
-                <label>轮询间隔 (秒)</label>
+                <label data-i18n="cfg.plpInterval">轮询间隔 (秒)</label>
                 <input id="cfg-plpinterval" class="cfg-input" type="number" min="5" />
               </div>
             </div>
-            <p class="cfg-hint">通过定期执行 /list 命令解析在线玩家名，在仪表盘显示玩家名称而非 IP。需主客户端已连接。</p>
+            <p class="cfg-hint" data-i18n="cfg.plpHint">通过定期执行 /list 命令解析在线玩家名，在仪表盘显示玩家名称而非 IP。需主客户端已连接。</p>
           </div>
         </div>
 
         <div class="cfg-section" id="cfgCardWebui">
-          <h3>🌐 Web 管理端</h3>
+          <h3 data-i18n="cfg.webTitle">🌐 Web 管理端</h3>
           <div class="cfg-switch">
             <label class="switch"><input type="checkbox" id="cfg-webui"><span class="track"></span></label>
-            <span class="switch-label">启用 Web 管理界面 (webui.enabled)</span>
+            <span class="switch-label" data-i18n="cfg.webEnable">启用 Web 管理界面 (webui.enabled)</span>
           </div>
           <div class="cfg-sub-box show" id="webuiFields">
             <div class="cfg-field">
-              <label>端口 (port)</label>
+              <label data-i18n="cfg.webPort">端口 (port)</label>
               <input id="cfg-webport" class="cfg-input" type="number" />
             </div>
             <div class="cfg-switch" style="margin-top:8px;">
               <label class="switch"><input type="checkbox" id="cfg-weblockal"><span class="track"></span></label>
-              <span class="switch-label">仅允许本机访问 (localOnly)</span>
+              <span class="switch-label" data-i18n="cfg.webLocalOnly">仅允许本机访问 (localOnly)</span>
             </div>
-            <p class="hint">关闭后将绑定 0.0.0.0，允许局域网/远程设备访问管理界面。</p>
-            <p class="hint">禁用 Web 管理界面后将不再启动 HTTP 服务。</p>
+            <p class="hint" data-i18n="cfg.webHint1">关闭后将绑定 0.0.0.0，允许局域网/远程设备访问管理界面。</p>
+            <p class="hint" data-i18n="cfg.webHint2">禁用 Web 管理界面后将不再启动 HTTP 服务。</p>
             <div style="margin-top:8px;">
-              <button type="button" id="cfg-addFirewall" class="btn btn-sm">🛡️ 一键放行防火墙</button>
-              <span class="hint" style="margin-left:8px;">添加 Windows 防火墙入站规则，允许局域网设备访问本页面。</span>
+              <button type="button" id="cfg-addFirewall" class="btn btn-sm" data-i18n="cfg.webFirewall">🛡️ 一键放行防火墙</button>
+              <span class="hint" style="margin-left:8px;" data-i18n="cfg.webFirewallHint">添加 Windows 防火墙入站规则，允许局域网设备访问本页面。</span>
             </div>
           </div>
         </div>
 
         <div class="cfg-section">
-          <h3>🔗 GitHub API Token</h3>
+          <h3 data-i18n="cfg.ghTitle">🔗 GitHub API Token</h3>
           <div class="cfg-grid">
             <div class="cfg-field cfg-grid-full">
-              <label>GitHub Token（可选）</label>
-              <input id="cfg-github-token" class="cfg-input" type="password" placeholder="ghp_... 或留空" />
-              <span class="hint">用于减少 GitHub API 速率限制（未认证 60 次/小时，认证后 5000 次/小时）。
+              <label data-i18n="cfg.ghToken">GitHub Token（可选）</label>
+              <input id="cfg-github-token" class="cfg-input" type="password" data-i18n-ph="cfg.ghTokenPh" placeholder="ghp_... 或留空" />
+              <span class="hint" data-i18n="cfg.ghHint1">用于减少 GitHub API 速率限制（未认证 60 次/小时，认证后 5000 次/小时）。
                 在 <a href="https://github.com/settings/tokens" target="_blank" style="color:#818cf8">github.com/settings/tokens</a> 创建，只需 <code>public_repo</code> 读取权限。</span>
-              <span class="hint" style="color:#fda4af">⚠️ 请勿泄露此 Token，不要提交到公开仓库！export 导出时不会包含此 Token。</span>
+              <span class="hint" style="color:#fda4af" data-i18n="cfg.ghHint2">⚠️ 请勿泄露此 Token，不要提交到公开仓库！export 导出时不会包含此 Token。</span>
             </div>
           </div>
         </div>
@@ -477,23 +459,65 @@
       <!-- ===== 资源路径 ===== -->
       <div class="cfg-category" data-cfg-cat="resources">
         <div class="cfg-section">
-          <h3>📂 资源路径 (basePath)</h3>
+          <h3 data-i18n="cfg.resTitle">📂 资源路径 (basePath)</h3>
           <div class="cfg-grid">
             <div class="cfg-field">
-              <label>🎵 music 路径</label>
-              <input id="cfg-path-music" class="cfg-input" placeholder="留空则使用默认 resources/midi" />
+              <label data-i18n="cfg.resMusic">🎵 music 路径</label>
+              <input id="cfg-path-music" class="cfg-input" data-i18n-ph="cfg.resMusicPh" placeholder="留空则使用默认 resources/midi" />
             </div>
             <div class="cfg-field">
-              <label>⌨️ mcfunc 路径</label>
-              <input id="cfg-path-mcfunc" class="cfg-input" placeholder="留空则使用默认 resources/mcfunc" />
+              <label data-i18n="cfg.resMcfunc">⌨️ mcfunc 路径</label>
+              <input id="cfg-path-mcfunc" class="cfg-input" data-i18n-ph="cfg.resMcfuncPh" placeholder="留空则使用默认 resources/mcfunc" />
             </div>
             <div class="cfg-field">
-              <label>🧱 ezmatic 路径</label>
-              <input id="cfg-path-ezmatic" class="cfg-input" placeholder="留空则使用默认 resources/ezmatic" />
+              <label data-i18n="cfg.resEzmatic">🧱 ezmatic 路径</label>
+              <input id="cfg-path-ezmatic" class="cfg-input" data-i18n-ph="cfg.resEzmaticPh" placeholder="留空则使用默认 resources/ezmatic" />
             </div>
             <div class="cfg-field">
-              <label>🖼️ image 路径</label>
-              <input id="cfg-path-image" class="cfg-input" placeholder="留空则使用默认 resources/pictures" />
+              <label data-i18n="cfg.resImage">🖼️ image 路径</label>
+              <input id="cfg-path-image" class="cfg-input" data-i18n-ph="cfg.resImagePh" placeholder="留空则使用默认 resources/pictures" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== 高级 JSON 配置 (Raw JSON) ===== -->
+      <div class="cfg-category" data-cfg-cat="raw">
+        <div class="cfg-section">
+          <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
+            <h3 data-i18n="cfg.rawTitle" style="margin:0;">📝 高级 JSON 源码配置</h3>
+            <div class="row gap-10" style="flex-wrap:wrap;">
+              <button type="button" class="btn btn-sm" id="cfgJsonFormatBtn" data-i18n="cfg.jsonFormat">✨ 格式化</button>
+              <button type="button" class="btn btn-sm" id="cfgJsonSyncFromFormBtn" data-i18n="cfg.jsonSyncFromForm">🔄 从表单同步</button>
+              <button type="button" class="btn btn-sm" id="cfgJsonCopyBtn" data-i18n="cfg.jsonCopy">📋 复制</button>
+            </div>
+          </div>
+          <p class="hint" data-i18n="cfg.rawHint" style="margin-bottom:12px;">直接查看并编辑 <code>config.json</code> 完整结构。保存前将自动执行精确语法校验并定位错误行号，防止因语法损坏导致服务器崩溃。</p>
+
+          <!-- 错误提示横幅 (语法错误时动态展现) -->
+          <div id="cfgJsonErrorBanner" style="display:none;margin-bottom:12px;padding:12px 14px;border-radius:8px;background:rgba(244,63,94,0.12);border-left:4px solid var(--danger);">
+            <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px;">
+              <span style="font-weight:700;color:var(--danger);" id="cfgJsonErrorTitle">❌ JSON 语法错误</span>
+              <button type="button" class="btn btn-sm btn-danger" id="cfgJsonGotoErrorBtn" style="padding:2px 8px;font-size:12px;" data-i18n="cfg.jsonGotoError">📍 定位到出错行</button>
+            </div>
+            <div style="font-size:12px;color:var(--text);margin-bottom:6px;" id="cfgJsonErrorMsg"></div>
+            <pre id="cfgJsonErrorSnippet" style="margin:0;padding:8px 10px;background:rgba(0,0,0,0.3);border-radius:4px;font-size:12px;font-family:'Cascadia Code',Consolas,monospace;color:#fca5a5;overflow-x:auto;"></pre>
+          </div>
+
+          <!-- 编辑器文本域 -->
+          <div style="position:relative;">
+            <textarea id="cfgRawJsonEditor" style="width:100%;min-height:500px;font-family:'Cascadia Code',Consolas,monospace;font-size:13px;line-height:1.5;padding:12px;border:1px solid var(--card-border);border-radius:8px;background:var(--input-bg);color:var(--text);resize:vertical;white-space:pre;tab-size:2;" spellcheck="false" autocomplete="off"></textarea>
+          </div>
+
+          <!-- 底部状态指示栏 -->
+          <div class="row" style="justify-content:space-between;align-items:center;margin-top:8px;font-size:12px;color:var(--text-dim);">
+            <div>
+              <span id="cfgJsonValidationBadge" class="badge-sec-safe">✔ 语法有效</span>
+            </div>
+            <div>
+              <span id="cfgJsonLineColInfo">第 1 行, 第 1 列</span>
+              <span style="margin:0 6px;">|</span>
+              <span id="cfgJsonTotalLines">共 0 行</span>
             </div>
           </div>
         </div>
@@ -504,6 +528,7 @@
 </div>
 <div id="toast"></div>
 <script src="/static/js/app.js"></script>
+<script src="/static/js/i18n.js"></script>
 <script src="/static/js/config.js"></script>
 </body>
 </html>

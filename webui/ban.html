@@ -21,20 +21,60 @@
            text-align: left; font-size: 13px; color: #888; line-height: 1.8; }
   .info b { color: #ccc; }
   .footer { margin-top: 24px; font-size: 12px; color: #555; }
+  .lang-btn { position: fixed; top: 16px; right: 16px; padding: 8px 14px; border-radius: 8px;
+    background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+    color: #e0e0e0; cursor: pointer; font-size: 13px; }
+  .lang-btn:hover { background: rgba(255,255,255,0.15); }
 </style>
 </head>
 <body>
+<button class="lang-btn" id="langBtn">🌐 EN</button>
 <div class="card">
   <div class="icon">🚫</div>
-  <h1>你已被封禁</h1>
-  <p class="msg">你已被服务器封禁, 无法使用EnderBridge。</p>
+  <h1 data-i18n="banned.title">你已被封禁</h1>
+  <p class="msg" data-i18n="banned.msg">你已被服务器封禁, 无法使用EnderBridge。</p>
   <div class="info">
-    <div><b>封禁 IP: </b>$ip</div>
-    <div><b>封禁原因：</b>$reason</div>
-    <div><b>封禁时间：</b>$ban_time</div>
-    <div><b>解禁时间：</b>$expires_str</div>
+    <div><b data-i18n="banned.ip">封禁 IP: </b>$ip</div>
+    <div><b data-i18n="banned.reason">封禁原因：</b>$reason</div>
+    <div><b data-i18n="banned.time">封禁时间：</b>$ban_time</div>
+    <div><b data-i18n="banned.expires">解禁时间：</b>$expires_str</div>
   </div>
-  <p class="footer">如需解除封禁，请联系服务器管理员。</p>
+  <p class="footer" data-i18n="banned.footer">如需解除封禁，请联系服务器管理员。</p>
 </div>
+<script>
+(function() {
+  var dict = {
+    zh: { "banned.title": "你已被封禁", "banned.msg": "你已被服务器封禁, 无法使用EnderBridge。",
+      "banned.ip": "封禁 IP: ", "banned.reason": "封禁原因：", "banned.time": "封禁时间：",
+      "banned.expires": "解禁时间：", "banned.footer": "如需解除封禁，请联系服务器管理员。",
+      "banned.btn": "🌐 EN", "banned.htmlLang": "zh-CN", "banned.docTitle": "EnderBridge - 你已被封禁!" },
+    en: { "banned.title": "You Are Banned", "banned.msg": "You have been banned and cannot use EnderBridge.",
+      "banned.ip": "Banned IP: ", "banned.reason": "Reason: ", "banned.time": "Banned At: ",
+      "banned.expires": "Expires: ", "banned.footer": "Contact the server admin to appeal.",
+      "banned.btn": "🌐 中文", "banned.htmlLang": "en", "banned.docTitle": "EnderBridge - Banned!" }
+  };
+  function getLang() {
+    try { return localStorage.getItem("enderbridge_lang") === "en" ? "en" : "zh"; }
+    catch (e) { return "zh"; }
+  }
+  function apply(lang) {
+    var d = dict[lang] || dict.zh;
+    document.querySelectorAll("[data-i18n]").forEach(function (el) {
+      var k = el.getAttribute("data-i18n");
+      if (d[k] !== undefined) el.textContent = d[k];
+    });
+    document.documentElement.setAttribute("lang", d["banned.htmlLang"]);
+    document.title = d["banned.docTitle"];
+    document.getElementById("langBtn").textContent = d["banned.btn"];
+    try { localStorage.setItem("enderbridge_lang", lang); } catch (e) {}
+  }
+  var cur = getLang();
+  apply(cur);
+  document.getElementById("langBtn").addEventListener("click", function () {
+    cur = cur === "zh" ? "en" : "zh";
+    apply(cur);
+  });
+})();
+</script>
 </body>
 </html>

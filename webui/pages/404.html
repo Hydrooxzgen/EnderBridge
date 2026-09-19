@@ -12,13 +12,15 @@
   <div class="login-card" style="text-align:center;">
     <div style="font-size:48px;margin-bottom:8px;">⛏️</div>
     <div style="font-size:3rem;font-weight:700;color:var(--accent);line-height:1;margin-bottom:4px;">404</div>
-    <h1>页面不存在</h1>
-    <p class="sub">你访问的页面可能已移动或不存在。</p>
-    <a href="/" style="display:block;width:100%;padding:12px;margin-bottom:12px;font-size:15px;font-weight:700;color:#fff;border:none;border-radius:10px;cursor:pointer;text-align:center;text-decoration:none;background:linear-gradient(90deg,#6366f1,#8b5cf6);letter-spacing:2px;">返回仪表盘</a>
-    <button onclick="history.back()" style="width:100%;padding:12px;font-size:15px;font-weight:700;color:var(--text);background:var(--input-bg);border:1px solid var(--input-border);border-radius:10px;cursor:pointer;">返回上一页</button>
+    <h1 data-i18n="notfound.title">页面不存在</h1>
+    <p class="sub" data-i18n="notfound.sub">你访问的页面可能已移动或不存在。</p>
+    <a href="/" data-i18n="notfound.home" style="display:block;width:100%;padding:12px;margin-bottom:12px;font-size:15px;font-weight:700;color:#fff;border:none;border-radius:10px;cursor:pointer;text-align:center;text-decoration:none;background:linear-gradient(90deg,#6366f1,#8b5cf6);letter-spacing:2px;">返回仪表盘</a>
+    <button onclick="history.back()" data-i18n="notfound.back" style="width:100%;padding:12px;font-size:15px;font-weight:700;color:var(--text);background:var(--input-bg);border:1px solid var(--input-border);border-radius:10px;cursor:pointer;">返回上一页</button>
   </div>
 </div>
 <div id="toast"></div>
 <script src="/static/js/app.js"></script>
+<script src="/static/js/i18n.js"></script>
+<script>if (typeof initLang === "function") initLang();</script>
 </body>
 </html>

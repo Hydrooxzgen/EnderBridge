@@ -8,69 +8,145 @@
 <script>document.documentElement.setAttribute('data-theme',localStorage.getItem('enderbridge_theme')||(window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark'));</script>
 </head>
 <body>
-<aside class="sidebar">
-  <div class="brand">
-    <span class="logo">⛏️</span>
-    <div>
-      <div class="name" id="srvName">EnderBridge</div>
-      <div class="ver">Web 管理</div>
-    </div>
-  </div>
-  <div class="nav-item" data-page="dashboard"><span>📊</span><span>仪表盘</span></div>
-  <div class="nav-item" data-page="permissions"><span>👥</span><span>权限管理</span></div>
-  <div class="nav-item" data-page="config"><span>⚙️</span><span>功能设置</span></div>
-  <div class="nav-item" data-page="mods"><span>🧩</span><span>Mod 管理</span></div>
-  <div class="nav-item" data-page="console"><span>💻</span><span>控制台</span></div>
-  <div class="nav-item" data-page="audit"><span>📋</span><span>审计日志</span></div>
-  <div class="nav-item" data-page="update"><span>🔄</span><span>检查更新</span></div>
-  <div class="nav-item" data-page="banlist"><span>🚫</span><span>封禁管理</span></div>
-  <div class="spacer"></div>
-  <button class="theme-toggle" id="themeToggle"><span class="theme-icon">🌙</span><span class="theme-label">深色模式</span></button>
-  <div class="guest-badge" id="guestBadge">👤 访客模式</div>
-  <div class="nav-item hidden" id="adminLoginBtn"><span>🔑</span><span>管理员登录</span></div>
-  <div class="logout" id="logoutBtn"><span>🚪</span><span>退出登录</span></div>
-</aside>
+<aside class="sidebar" data-auto-sidebar></aside>
 <div class="main">
-  <h2>🔄 检查更新</h2>
+  <h2 data-i18n="upd.title">🔄 检查更新</h2>
 
   <div class="card card-gap">
     <div class="row" style="justify-content:space-between;align-items:center;">
-      <div style="font-weight:600">🔍 当前版本</div>
-      <button class="btn btn-primary btn-sm" id="updateCheckBtn">🔍 检查更新</button>
+      <div style="font-weight:600" data-i18n="upd.curVer">🔍 当前版本</div>
+      <button class="btn btn-primary btn-sm" id="updateCheckBtn" data-i18n="upd.checkBtn">🔍 检查更新</button>
     </div>
     <div class="update-ver" style="margin:8px 0">
-      当前版本：<code id="updateCurVer" style="padding:2px 6px;background:var(--input-bg);border-radius:4px;color:var(--text);">...</code>
+      <span data-i18n="upd.curVerLabel">当前版本：</span><code id="updateCurVer" style="padding:2px 6px;background:var(--input-bg);border-radius:4px;color:var(--text);">...</code>
     </div>
     <div id="updateCheckResult" style="display:none;">
       <div id="updateLatestInfo"></div>
     </div>
   </div>
 
-  <div class="card card-gap" id="updateLocalCard">
-    <div style="font-weight:600;margin-bottom:8px;">📦 本地文件更新</div>
-    <p class="desc">从本地选择 EnderBridge 压缩包进行更新（zip / tar.gz / 7z / xz）。<br>
-      服务器会先校验文件名与版本号，通过后自动备份并替换项目文件，然后重启。</p>
-    <div class="row gap-10" style="flex-wrap:wrap;align-items:center">
-      <button class="btn btn-sm" id="updateChooseFileBtn">📂 选择压缩包</button>
-      <input type="file" id="updateFileInput" accept=".zip,.tar.gz,.tgz,.7z,.xz" style="display:none" />
-      <span id="updateFileName" class="muted" style="flex:1">未选择文件</span>
-      <button class="btn btn-primary btn-sm" id="updateLocalBtn" disabled>🚀 执行更新</button>
+  <div class="card card-gap" id="securityAuditCard">
+    <div class="row" style="justify-content:space-between;align-items:center;">
+      <div style="font-weight:600" data-i18n="sec.title">🛡️ 依赖安全态势与已知 CVE 漏洞检测</div>
+      <button class="btn btn-sm" id="secAuditRefreshBtn" data-i18n="sec.rescanBtn">🔄 重新检测</button>
+    </div>
+    <p class="desc" data-i18n="sec.desc" style="margin:6px 0 12px 0;">自动对项目 requirements.txt 依赖及当前运行环境安装版本进行深度健康审计，检测已知 CVE 安全漏洞与版本隐患。</p>
+    
+    <div id="secAuditLoading" class="muted" style="padding:12px 0;" data-i18n="sec.scanning">正在扫描依赖项安全态势...</div>
+    
+    <div id="secAuditContent" style="display:none;">
+      <div class="row" style="align-items:center;gap:10px;margin-bottom:12px;">
+        <span id="secAuditOverallBadge"></span>
+        <span class="muted" style="font-size:12px;" id="secAuditEnv"></span>
+      </div>
+
+      <div class="sec-stat-grid">
+        <div class="sec-stat-box">
+          <span class="sec-num" id="secStatTotal">-</span>
+          <span class="sec-label" data-i18n="sec.summaryTotal">检测依赖项</span>
+        </div>
+        <div class="sec-stat-box safe">
+          <span class="sec-num" id="secStatSafe">-</span>
+          <span class="sec-label" data-i18n="sec.summarySafe">安全无虞</span>
+        </div>
+        <div class="sec-stat-box warn" id="secStatMissingBox">
+          <span class="sec-num" id="secStatMissing">-</span>
+          <span class="sec-label" data-i18n="sec.summaryMissing">未安装</span>
+        </div>
+        <div class="sec-stat-box danger" id="secStatVulnBox">
+          <span class="sec-num" id="secStatVuln">-</span>
+          <span class="sec-label" data-i18n="sec.summaryVuln">漏洞风险</span>
+        </div>
+      </div>
+
+      <div style="overflow-x:auto;margin-top:12px;">
+        <table class="table" id="secAuditTable">
+          <thead>
+            <tr>
+              <th data-i18n="sec.colPkg">依赖包名</th>
+              <th data-i18n="sec.colInstalled">已安装版本</th>
+              <th data-i18n="sec.colReq">规范版本</th>
+              <th data-i18n="sec.colStatus">安全状态</th>
+              <th data-i18n="sec.colDetail">风险与 CVE 详情 / 修复建议</th>
+            </tr>
+          </thead>
+          <tbody id="secAuditList"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 
+  <div class="card card-gap" id="updateLocalCard">
+    <div style="font-weight:600;margin-bottom:8px;" data-i18n="upd.localTitle">📦 本地文件更新</div>
+    <p class="desc" data-i18n="upd.localDesc">从本地选择 EnderBridge 压缩包进行更新（zip / tar.gz / 7z / xz）。<br>
+      服务器会先校验文件名与版本号，通过后自动备份并替换项目文件，然后重启。</p>
+    <div class="row gap-10" style="flex-wrap:wrap;align-items:center">
+      <button class="btn btn-sm" id="updateChooseFileBtn" data-i18n="upd.chooseFile">📂 选择压缩包</button>
+      <input type="file" id="updateFileInput" accept=".zip,.tar.gz,.tgz,.7z,.xz" style="display:none" />
+      <span id="updateFileName" class="muted" style="flex:1" data-i18n="upd.noFile">未选择文件</span>
+      <button class="btn btn-primary btn-sm" id="updateLocalBtn" disabled data-i18n="upd.doUpdate">🚀 执行更新</button>
+    </div>
+  </div>
+
+  <div class="card card-gap" id="updateBackupsCard">
+    <div style="font-weight:600;margin-bottom:8px;" data-i18n="upd.backupTitle">⏪ 历史备份 / 回滚</div>
+    <p class="desc" data-i18n="upd.backupDesc">每次执行更新前会自动备份当前版本（最多保留 3 份）。如更新出现问题，可在此一键回滚。</p>
+    <button class="btn btn-sm" id="backupsLoadBtn" data-i18n="upd.backupLoad">🔄 加载备份列表</button>
+    <div id="backupsList" style="margin-top:8px;"></div>
+  </div>
+
   <div class="card card-gap">
-    <div style="font-weight:600;margin-bottom:8px;">📜 所有版本 (GitHub Releases)</div>
-    <button class="btn btn-sm" id="releasesLoadBtn" style="margin-bottom:8px">加载版本历史</button>
+    <div style="font-weight:600;margin-bottom:8px;" data-i18n="upd.allVersions">📜 所有版本 (GitHub Releases)</div>
+    <button class="btn btn-sm" id="releasesLoadBtn" style="margin-bottom:8px" data-i18n="upd.loadHistory">加载版本历史</button>
     <div id="releasesPager" style="display:none;margin-bottom:8px">
-      <span class="muted" style="margin:0 8px">第 <span id="releasesPageNum">1</span> 页</span>
-      <button class="btn btn-sm" id="releasesPrevBtn" disabled>← 上一页</button>
-      <button class="btn btn-sm" id="releasesNextBtn">下一页 →</button>
+      <span class="muted" style="margin:0 8px"><span data-i18n="upd.pagePrefix">第 </span><span id="releasesPageNum">1</span><span data-i18n="upd.pageSuffix"> 页</span></span>
+      <button class="btn btn-sm" id="releasesPrevBtn" disabled data-i18n="upd.prevPage">← 上一页</button>
+      <button class="btn btn-sm" id="releasesNextBtn" data-i18n="upd.nextPage">下一页 →</button>
     </div>
     <div id="releasesList"></div>
   </div>
 </div>
+
+<div id="updateProgressModal" class="modal-overlay" style="display:none;">
+  <div class="modal-card" style="width:440px;max-width:92vw;">
+    <h3 id="updateModalTitle" data-i18n="upd.progressTitle">🔄 更新进度</h3>
+    <div class="step-list" id="updateStepList">
+      <div class="step-item" id="stepUpload">
+        <span class="step-icon">1</span>
+        <span class="step-text" id="stepUploadText" data-i18n="upd.step1">准备与上传更新包</span>
+      </div>
+      <div class="step-item" id="stepValidate">
+        <span class="step-icon">2</span>
+        <span class="step-text" id="stepValidateText" data-i18n="upd.step2">安全校验与版本备份</span>
+      </div>
+      <div class="step-item" id="stepInstall">
+        <span class="step-icon">3</span>
+        <span class="step-text" id="stepInstallText" data-i18n="upd.step3">解压并覆盖项目文件</span>
+      </div>
+      <div class="step-item" id="stepRestart">
+        <span class="step-icon">4</span>
+        <span class="step-text" id="stepRestartText" data-i18n="upd.step4">重启服务并等待重新上线</span>
+      </div>
+    </div>
+    <div class="progress-container" id="updateProgressContainer">
+      <div class="progress-bar-wrap">
+        <div class="progress-bar-fill" id="updateProgressBar"></div>
+      </div>
+      <div class="progress-meta">
+        <span id="updateProgressText" data-i18n="upd.processing">正在处理...</span>
+        <span id="updateProgressPercent">0%</span>
+      </div>
+    </div>
+    <div id="updateModalMsg" style="font-size:12px;color:var(--text-faint);margin-top:8px;word-break:break-all;"></div>
+    <div id="updateModalActions" style="display:none;margin-top:16px;text-align:right;">
+      <button class="btn btn-sm" id="updateModalCloseBtn" data-i18n="upd.close">关闭</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 <script src="/static/js/app.js"></script>
+<script src="/static/js/i18n.js"></script>
 <script src="/static/js/update.js"></script>
 </body>
 </html>

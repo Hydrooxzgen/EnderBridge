@@ -838,6 +838,12 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if path == "/api/update/releases":
             self._api_update_releases()
             return
+        if path == "/api/update/backups":
+            self._api_update_backups()
+            return
+        if path == "/api/security/audit":
+            self._api_security_audit()
+            return
         if path == "/api/config":
             self._api_get_config()
             return
@@ -862,11 +868,17 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if path == "/api/audit-logs":
             self._api_audit_logs()
             return
+        if path == "/api/audit-logs/export":
+            self._api_audit_logs_export()
+            return
         if path == "/api/logs/recent":
             self._api_logs_recent()
             return
         if path == "/api/logs/stream":
             self._api_logs_stream()
+            return
+        if path == "/api/ws/console":
+            self._handle_ws_console()
             return
         if path == "/api/auth/me":
             self._api_auth_me()
@@ -955,11 +967,17 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/update/upload":
             self._api_update_upload()
             return
+        if parsed.path == "/api/update/rollback":
+            self._api_update_rollback()
+            return
         if parsed.path == "/api/console":
             self._api_console()
             return
         if parsed.path == "/api/banlist":
             self._api_banlist_add()
+            return
+        if parsed.path == "/api/banlist/batch":
+            self._api_banlist_batch_add()
             return
         if parsed.path == "/api/banlist/auto-ban":
             self._api_banlist_auto_ban_toggle()
@@ -1785,6 +1803,75 @@ class WebUIHandler(BaseHTTPRequestHandler):
         except Exception as e:
             self._respond({"ok": False, "message": f"上传处理失败: {e}"})
 
+    def _api_update_backups(self) -> None:
+        """列出可用备份包（无需鉴权，仅展示元数据）"""
+        try:
+            from version_manager.package import list_backups, BACKUP_PREFIX
+            backup_dir = os.path.dirname(ROOT)
+            found = list_backups(backup_dir)
+            items = []
+            for path in reversed(found):  # 最新的排最前
+                fname = os.path.basename(path)
+                try:
+                    size = os.path.getsize(path)
+                    mtime = os.path.getmtime(path)
+                except OSError:
+                    size = 0
+                    mtime = 0
+                # 从文件名解析时间戳：EnderBridge_backup_YYYYMMDD_HHMMSS.zip
+                stamp = fname[len(BACKUP_PREFIX):].replace(".zip", "")
+                items.append({
+                    "filename": fname,
+                    "path": path,
+                    "size": size,
+                    "mtime": mtime,
+                    "stamp": stamp,
+                })
+            self._respond({"ok": True, "backups": items})
+        except Exception as e:
+            self._respond({"ok": False, "message": f"获取备份列表失败: {e}"})
+
+    def _api_update_rollback(self) -> None:
+        """回滚到指定备份（需要 update 权限），完成后触发重启"""
+        if not _require_permission("update")(self):
+            return
+        body = self._read_body()
+        backup_path = body.get("path", "").strip()
+        if not backup_path:
+            self._respond({"ok": False, "message": "请指定备份文件路径"})
+            return
+        if not os.path.isfile(backup_path):
+            self._respond({"ok": False, "message": f"备份文件不存在: {backup_path}"})
+            return
+        if _restart_handler is None:
+            self._respond({"ok": False, "message": "重启处理器未注册"})
+            return
+        # 将回滚路径写入标记文件，main.py 重启后读取并执行回滚
+        try:
+            rollback_marker = os.path.join(ROOT, ".rollback_pending")
+            with open(rollback_marker, "w", encoding="utf-8") as f:
+                f.write(backup_path)
+        except Exception as e:
+            self._respond({"ok": False, "message": f"回滚触发失败: {e}"})
+            return
+        _audit(self, "update", f"触发了回滚 ({os.path.basename(backup_path)})")
+        self._respond({"ok": True, "message": "服务器正在回滚，完成后自动重启"})
+        import time
+        time.sleep(0.5)
+        try:
+            _restart_handler()
+        except Exception:
+            pass
+
+    def _api_security_audit(self) -> None:
+        """执行依赖包安全健康检查与已知 CVE 比对"""
+        try:
+            from lib.security_audit import run_security_audit
+            report = run_security_audit()
+            self._respond(report)
+        except Exception as e:
+            self._respond({"ok": False, "message": f"依赖安全审计失败: {e}"})
+
     def _api_get_config(self) -> None:
         if not _require_permission("config")(self):
             return
@@ -1794,8 +1881,8 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if not _require_permission("config")(self):
             return
         body = self._read_body()
-        if not body or "config" not in body:
-            self._respond({"ok": False, "message": "请求数据格式错误"})
+        if not body or "config" not in body or not isinstance(body.get("config"), dict):
+            self._respond({"ok": False, "message": "请求数据格式错误: config 必须为 JSON 对象"})
             return
         # 保存前记录 localOnly 和 port 状态
         _old_cfg = _load_config_module().get("webuiConfig", {})
@@ -1940,12 +2027,24 @@ class WebUIHandler(BaseHTTPRequestHandler):
                     f"localport={port}",
                     "enable=yes",
                 ],
-                capture_output=True, text=True, timeout=10,
+                capture_output=True, timeout=10,
             )
-            if result.returncode == 0 and "确定" in result.stdout or "ok" in result.stdout.lower():
+            def _decode_output(data: bytes) -> str:
+                if not data:
+                    return ""
+                for enc in ("gbk", "utf-8", "cp936", "latin1"):
+                    try:
+                        return data.decode(enc)
+                    except (UnicodeDecodeError, LookupError):
+                        pass
+                return data.decode("utf-8", errors="replace")
+
+            stdout_str = _decode_output(result.stdout)
+            stderr_str = _decode_output(result.stderr)
+            if result.returncode == 0 and ("确定" in stdout_str or "ok" in stdout_str.lower()):
                 self._respond({"ok": True, "message": f"已添加防火墙规则: {rule_name} (端口 {port})"})
             else:
-                err = result.stdout.strip() + result.stderr.strip()
+                err = stdout_str.strip() + stderr_str.strip()
                 if "需要提升" in err or "Run as administrator" in err or "拒绝访问" in err or result.returncode == 5:
                     self._respond({"ok": False, "message": "需要管理员权限,请在管理员终端中手动执行", "command": f'netsh advfirewall firewall add rule name="{rule_name}" dir=in action=allow protocol=TCP localport={port}'})
                 else:
@@ -1997,16 +2096,88 @@ class WebUIHandler(BaseHTTPRequestHandler):
         else:
             self._respond({"ok": False, "message": f"{ip} 已在封禁列表中"})
 
-    def _api_banlist_remove(self) -> None:
-        """解封 IP(需要 banlist 权限)"""
+    def _api_banlist_batch_add(self) -> None:
+        """批量封禁 IP(需要 banlist 权限)"""
         if not _require_permission("banlist")(self):
             return
         body = self._read_body()
+        raw_ips = body.get("ips") or []
+        reason = (body.get("reason") or "管理员批量封禁").strip()
+        duration = int(body.get("duration", 0))  # 分钟, 0=永久
+        if isinstance(raw_ips, str):
+            import re
+            raw_ips = re.split(r"[\r\n,;\s]+", raw_ips)
+        from lib import banlist
+        import ipaddress
+        banned = []
+        skipped = []
+        invalid = []
+        for raw in raw_ips:
+            text = str(raw).strip()
+            if not text:
+                continue
+            if ":" in text and not text.startswith("[") and text.count(":") == 1:
+                text = text.split(":", 1)[0]
+            try:
+                if "/" in text:
+                    net = ipaddress.ip_network(text, strict=False)
+                    if net.num_addresses > 1024:
+                        invalid.append(f"{text}(子网超1024)")
+                        continue
+                    candidates = [str(h) for h in net.hosts()] if net.num_addresses > 1 else [str(net.network_address)]
+                else:
+                    ipaddress.ip_address(text)
+                    candidates = [text]
+            except ValueError:
+                invalid.append(text)
+                continue
+
+            for cand in candidates:
+                if cand in banlist._PROTECTED_IPS or cand in skipped or cand in banned:
+                    skipped.append(cand)
+                    continue
+                if banlist.ban(cand, reason, duration=duration):
+                    self._disconnect_banned_ip(cand)
+                    banned.append(cand)
+                else:
+                    skipped.append(cand)
+
+        dur_text = "永久" if duration <= 0 else f"{duration} 分钟"
+        _audit(self, "ban", f"批量封禁了 {len(banned)} 个 IP (原因: {reason}, 时长: {dur_text})")
+        msg = f"成功封禁 {len(banned)} 个 IP"
+        if skipped:
+            msg += f"，跳过 {len(skipped)} 个已存在或受保护的 IP"
+        if invalid:
+            msg += f"，忽略 {len(invalid)} 个无效输入"
+        self._respond({
+            "ok": True,
+            "banned_count": len(banned),
+            "skipped_count": len(skipped),
+            "invalid_count": len(invalid),
+            "message": msg,
+        })
+
+    def _api_banlist_remove(self) -> None:
+        """解封 IP(单条或批量，需要 banlist 权限)"""
+        if not _require_permission("banlist")(self):
+            return
+        body = self._read_body()
+        from lib import banlist
+        # 支持批量解封
+        ips = body.get("ips")
+        if isinstance(ips, list):
+            removed = []
+            for ip_item in ips:
+                ip_clean = str(ip_item).strip()
+                if ip_clean and banlist.unban(ip_clean):
+                    removed.append(ip_clean)
+            _audit(self, "ban", f"批量解封了 {len(removed)} 个 IP")
+            self._respond({"ok": True, "count": len(removed), "message": f"已批量解封 {len(removed)} 个 IP"})
+            return
         ip = (body.get("ip") or "").strip()
         if not ip:
             self._respond({"ok": False, "message": "请输入 IP 地址"})
             return
-        from lib import banlist
         if banlist.unban(ip):
             _audit(self, "ban", f"解封了 {ip}")
             self._respond({"ok": True, "message": f"已解封 {ip}"})
@@ -2135,6 +2306,57 @@ class WebUIHandler(BaseHTTPRequestHandler):
         result = audit_log.query(sender=sender, type_=type_, limit=limit, offset=offset)
         self._respond({"ok": True, **result})
 
+    def _api_audit_logs_export(self) -> None:
+        """导出审计日志(需要 audit 权限, 支持 format=csv|json)"""
+        if not _require_permission("audit")(self):
+            return
+        import csv
+        import io
+        import json
+        from datetime import datetime
+
+        parsed = urllib.parse.urlparse(self.path)
+        qs = urllib.parse.parse_qs(parsed.query)
+        format_ = (qs.get("format", ["csv"])[0] or "csv").lower()
+        sender = qs.get("sender", [None])[0]
+        type_ = qs.get("type", [None])[0]
+
+        from lib.logger import audit_log
+        # 查询所有匹配记录, 导出上限 10000 条
+        result = audit_log.query(sender=sender, type_=type_, limit=10000, offset=0)
+        records = result.get("records", [])
+
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        if format_ == "json":
+            filename = f"audit_log_{stamp}.json"
+            content = json.dumps(records, ensure_ascii=False, indent=2).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+            self.send_header("Content-Length", str(len(content)))
+            self.end_headers()
+            self.wfile.write(content)
+        else:
+            filename = f"audit_log_{stamp}.csv"
+            out = io.StringIO()
+            writer = csv.writer(out)
+            writer.writerow(["时间", "类型", "发送者", "内容"])
+            for r in records:
+                writer.writerow([
+                    r.get("ts", ""),
+                    r.get("type", ""),
+                    r.get("sender", ""),
+                    r.get("message", ""),
+                ])
+            # 添加 UTF-8 BOM，确保 Excel 打开中文不乱码
+            content = ("\ufeff" + out.getvalue()).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/csv; charset=utf-8")
+            self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+            self.send_header("Content-Length", str(len(content)))
+            self.end_headers()
+            self.wfile.write(content)
+
     # ---- 实时日志流(SSE) ----
 
     def _api_logs_recent(self) -> None:
@@ -2211,6 +2433,164 @@ class WebUIHandler(BaseHTTPRequestHandler):
         except (ConnectionAbortedError, BrokenPipeError, OSError):
             pass
 
+    def _handle_ws_console(self) -> None:
+        """WebSocket 实时双向控制台 (需要 console 权限)
+
+        握手后完成：
+        1. 初始下发最近 50 条历史日志 {"type": "history", "logs": [...]}
+        2. 实时推送新日志 {"type": "log", "record": {...}}
+        3. 双向接收客户端执行命令请求 {"type": "command", "command": "...", "id": "..."} 并返回结果
+        4. 自动心跳保持与异常断开安全回收
+        """
+        if not _require_permission("console")(self):
+            return
+        sec_key = self.headers.get("Sec-WebSocket-Key", "").strip()
+        if not sec_key:
+            self._respond({"ok": False, "message": "缺少 Sec-WebSocket-Key 请求头"}, status=400)
+            return
+
+        try:
+            from webui.websocket import (
+                compute_accept_key,
+                WebSocketConnection,
+                read_frame,
+                OP_TEXT,
+                OP_PING,
+                OP_PONG,
+                OP_CLOSE,
+            )
+            accept_val = compute_accept_key(sec_key)
+            self.send_response(101, "Switching Protocols")
+            self.send_header("Upgrade", "websocket")
+            self.send_header("Connection", "Upgrade")
+            self.send_header("Sec-WebSocket-Accept", accept_val)
+            self.end_headers()
+            self.wfile.flush()
+            self.close_connection = True
+
+            ws = WebSocketConnection(self.request)
+            from lib.logger import _live_log
+
+            # 1) 下发历史日志
+            recent = _live_log.get_recent(50)
+            ws.send_json({"type": "history", "logs": recent})
+
+            # 2) 订阅实时日志
+            def _on_log(record):
+                if not ws.is_closed:
+                    try:
+                        ws.send_json({"type": "log", "record": record})
+                    except Exception:
+                        pass
+
+            _live_log.subscribe(_on_log)
+
+            # 3) 消息循环
+            self.request.settimeout(1.0)
+            last_ping_time = time.time()
+
+            try:
+                while not ws.is_closed:
+                    now = time.time()
+                    if now - last_ping_time >= 15.0:
+                        ws.send_ping()
+                        last_ping_time = now
+
+                    try:
+                        opcode, payload = read_frame(self.request)
+                    except socket.timeout:
+                        continue
+                    except (EOFError, ConnectionResetError, BrokenPipeError, OSError):
+                        break
+
+                    if opcode == OP_CLOSE:
+                        ws.send_close()
+                        break
+                    elif opcode == OP_PING:
+                        ws.send_pong(payload)
+                    elif opcode == OP_PONG:
+                        pass
+                    elif opcode == OP_TEXT:
+                        try:
+                            msg_text = payload.decode("utf-8")
+                            data = json.loads(msg_text)
+                        except Exception:
+                            continue
+
+                        msg_type = data.get("type")
+                        if msg_type == "ping":
+                            ws.send_json({"type": "pong"})
+                        elif msg_type == "command":
+                            command = data.get("command", "").strip()
+                            req_id = data.get("id")
+
+                            user = _auth_user(self)
+                            if user.get("is_guest") or "console" not in user.get("permissions", []):
+                                ws.send_json({
+                                    "type": "cmd-result",
+                                    "id": req_id,
+                                    "ok": False,
+                                    "message": "无命令执行权限",
+                                })
+                                continue
+
+                            if not command:
+                                ws.send_json({
+                                    "type": "cmd-result",
+                                    "id": req_id,
+                                    "ok": False,
+                                    "message": "缺少 command 参数",
+                                })
+                                continue
+
+                            if _event_loop is None or _event_loop.is_closed():
+                                ws.send_json({
+                                    "type": "cmd-result",
+                                    "id": req_id,
+                                    "ok": False,
+                                    "message": "事件循环未就绪,请稍后重试",
+                                })
+                                continue
+
+                            try:
+                                from lib.current import Current
+                                client = Current.client
+                                if client is None:
+                                    ws.send_json({
+                                        "type": "cmd-result",
+                                        "id": req_id,
+                                        "ok": False,
+                                        "message": "无客户端连接",
+                                    })
+                                    continue
+
+                                import asyncio
+                                fut = asyncio.run_coroutine_threadsafe(
+                                    client.runCommand(command), _event_loop
+                                )
+                                result = fut.result(timeout=15)
+                                body_data = result.get("body", {}) if isinstance(result, dict) else {}
+                                ws.send_json({
+                                    "type": "cmd-result",
+                                    "id": req_id,
+                                    "ok": True,
+                                    "statusCode": body_data.get("statusCode"),
+                                    "statusMessage": body_data.get("statusMessage"),
+                                })
+                                _audit(self, "command", f"执行了命令: {command}")
+                            except Exception as e:
+                                ws.send_json({
+                                    "type": "cmd-result",
+                                    "id": req_id,
+                                    "ok": False,
+                                    "message": f"命令执行失败: {e}",
+                                })
+            finally:
+                _live_log.unsubscribe(_on_log)
+                ws.close()
+        except (ConnectionAbortedError, BrokenPipeError, ConnectionResetError, OSError):
+            pass
+
 
 def _check_importable(mod_path: str) -> bool:
     """检测 mod 模块能否导入(轻量检查,不真正实例化)"""
@@ -2253,9 +2633,9 @@ class _FastHTTPServer(ThreadingHTTPServer):
 
     def handle_error(self, request, client_address):
         """静默连接断开类错误,避免 Ctrl+C / SSE 断开时打印 traceback"""
-        import traceback as _tb
         _, exc, _ = sys.exc_info()
-        if exc in (ConnectionAbortedError, BrokenPipeError, ConnectionResetError, OSError):
+        # 注意:exc 是异常实例,必须用 isinstance 判断(旧代码用 in 比较类,永远为 False)
+        if isinstance(exc, (ConnectionAbortedError, BrokenPipeError, ConnectionResetError, OSError)):
             return
         super().handle_error(request, client_address)
 

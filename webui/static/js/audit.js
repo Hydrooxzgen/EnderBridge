@@ -6,13 +6,67 @@ var _auditTotal = 0;
 var _autoRefresh = false;
 var _autoTimer = null;
 
-var TYPE_LABELS = {
-  chat: "💬 聊天",
-  command: "⚡ 命令",
-  terminal: "🖥️ 终端",
-  connect: "🟢 连接",
-  disconnect: "🔴 断开"
-};
+function typeLabel(key) {
+  var map = {
+    chat: "audit.typeChat",
+    command: "audit.typeCommand",
+    terminal: "audit.typeTerminal",
+    connect: "audit.typeConnect",
+    disconnect: "audit.typeDisconnect",
+    ban: "audit.typeBan",
+    config: "audit.typeConfig",
+    user: "audit.typeUser",
+    role: "audit.typeRole",
+    update: "audit.typeUpdate"
+  };
+  return t(map[key] || key);
+}
+
+function exportAuditLogs(format) {
+  var typeFilter = $("auditTypeFilter").value;
+  var senderFilter = $("auditSenderFilter").value.trim();
+  var params = [];
+  params.push("format=" + encodeURIComponent(format));
+  if (typeFilter) params.push("type=" + encodeURIComponent(typeFilter));
+  if (senderFilter) params.push("sender=" + encodeURIComponent(senderFilter));
+  var qs = params.join("&");
+
+  var headers = {};
+  var role = sessionStorage.getItem(ROLE_KEY) || "";
+  if (role === "guest") {
+    headers["X-Auth-Guest"] = "1";
+  } else {
+    var token = sessionStorage.getItem(TOKEN_KEY) || "";
+    if (token) headers["X-Auth-Token"] = token;
+  }
+
+  fetch("/api/audit-logs/export?" + qs, { headers: headers })
+    .then(function (res) {
+      if (!res.ok) {
+        return res.json().then(function (err) {
+          throw new Error(err.message || t("audit.exportFail"));
+        });
+      }
+      var disposition = res.headers.get("Content-Disposition") || "";
+      var filename = "audit_log." + format;
+      var match = disposition.match(/filename="?([^";]+)"?/);
+      if (match && match[1]) filename = match[1];
+      return res.blob().then(function (blob) {
+        var url = window.URL.createObjectURL(blob);
+        var a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        toast(t("audit.exportSuccess"), "ok");
+      });
+    })
+    .catch(function (err) {
+      toast(err.message || t("audit.exportFail"), "err");
+    });
+}
 
 function fetchLogs() {
   var typeFilter = $("auditTypeFilter").value;
@@ -25,15 +79,15 @@ function fetchLogs() {
   var qs = params.length ? "?" + params.join("&") : "";
 
   var statusEl = $("auditStatus");
-  if (statusEl) statusEl.textContent = "加载中…";
+  if (statusEl) statusEl.textContent = t("audit.loading");
 
   api("/audit-logs" + qs).then(function (d) {
     if (statusEl) statusEl.textContent = "";
-    if (!d.ok) { toast(d.message || "加载失败", "err"); return; }
+    if (!d.ok) { toast(d.message || t("audit.loadFail"), "err"); return; }
     _auditTotal = d.total || 0;
     renderLogs(d.records || []);
   }).catch(function () {
-    if (statusEl) statusEl.textContent = "请求失败";
+    if (statusEl) statusEl.textContent = t("audit.reqFail");
   });
 }
 
@@ -41,7 +95,7 @@ function renderLogs(records) {
   var body = $("auditLogBody");
   var empty = $("auditEmpty");
   var countEl = $("auditCount");
-  if (countEl) countEl.textContent = "共 " + _auditTotal + " 条";
+  if (countEl) countEl.textContent = t("audit.totalPrefix") + _auditTotal + t("audit.totalSuffix");
 
   if (!records.length) {
     if (body) body.innerHTML = "";
@@ -52,7 +106,7 @@ function renderLogs(records) {
   if (empty) empty.style.display = "none";
 
   var html = records.map(function (r) {
-    var typeLabel = TYPE_LABELS[r.type] || r.type;
+    var typeLabel = typeLabel(r.type);
     var ts = r.ts ? r.ts.replace("T", " ").replace(/\+.+$/, "") : "";
     var msg = escapeHtml(r.message || "");
     if (r.type === "command") {
@@ -74,7 +128,7 @@ function updatePagination() {
   var totalPages = Math.max(1, Math.ceil(_auditTotal / PAGE_SIZE));
   var currentPage = Math.floor(_auditOffset / PAGE_SIZE) + 1;
   var info = $("auditPageInfo");
-  if (info) info.textContent = "第 " + currentPage + " / " + totalPages + " 页";
+  if (info) info.textContent = t("audit.pageMid1") + currentPage + t("audit.pageMid2") + totalPages + t("audit.pageSuffix");
   var prev = $("auditPrevBtn");
   var next = $("auditNextBtn");
   if (prev) prev.disabled = currentPage <= 1;
@@ -89,6 +143,7 @@ function doQuery() {
 requireAuth(function (role) {
   initSidebar("audit", role);
   initTheme();
+  initLang();
   fetchLogs();
 
   $("auditQueryBtn").addEventListener("click", doQuery);
@@ -110,7 +165,7 @@ requireAuth(function (role) {
 
   $("auditAutoBtn").addEventListener("click", function () {
     _autoRefresh = !_autoRefresh;
-    this.textContent = "🔄 自动刷新: " + (_autoRefresh ? "开" : "关");
+    this.textContent = _autoRefresh ? t("audit.autoOn") : t("audit.autoOff");
     this.style.borderColor = _autoRefresh ? "#6366f1" : "";
     if (_autoRefresh) {
       _autoTimer = setInterval(fetchLogs, 3000);
@@ -119,4 +174,10 @@ requireAuth(function (role) {
       _autoTimer = null;
     }
   });
+
+  var exportCsvBtn = $("auditExportCsvBtn");
+  if (exportCsvBtn) exportCsvBtn.addEventListener("click", function () { exportAuditLogs("csv"); });
+
+  var exportJsonBtn = $("auditExportJsonBtn");
+  if (exportJsonBtn) exportJsonBtn.addEventListener("click", function () { exportAuditLogs("json"); });
 });

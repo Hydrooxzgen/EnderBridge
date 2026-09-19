@@ -18,6 +18,7 @@ var MOD_CATALOG = {
 requireAuth(function (role) {
   initSidebar("config", role);
   initTheme();
+  initLang();
   loadConfig();
   initCategoryNav();
 });
@@ -37,6 +38,16 @@ function initCategoryNav() {
       document.querySelectorAll(".cfg-category[data-cfg-cat]").forEach(function (sec) {
         sec.classList.toggle("active", sec.getAttribute("data-cfg-cat") === cat);
       });
+      // 切换到 Raw JSON 时自动从表单同步最新数据
+      if (cat === "raw") {
+        var editor = $("cfgRawJsonEditor");
+        if (editor && (!editor.value.trim() || editor.dataset.synced !== "true")) {
+          var cfgToPreview = collectFormConfig();
+          editor.value = JSON.stringify(cfgToPreview, null, 2);
+          editor.dataset.synced = "true";
+        }
+        validateRawJson();
+      }
     });
   });
 }
@@ -92,6 +103,12 @@ function loadConfig() {
   api("/config").then(function (data) {
     if (!data.ok) return;
     cfgData = data.config;
+    var editor = $("cfgRawJsonEditor");
+    if (editor) {
+      editor.value = JSON.stringify(data.config, null, 2);
+      editor.dataset.synced = "true";
+      validateRawJson();
+    }
     var f = data.config.features || {};
     var qq = f.qq || {};
     var music = f.music || {};
@@ -222,11 +239,11 @@ function renderAliasList() {
     html += '<div class="alias-item" style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg-card);border:1px solid var(--border);border-radius:6px;margin-bottom:8px;">' +
       '<span style="font-weight:600;min-width:100px;">' + escapeHtml(cmd) + '</span>' +
       '<span style="flex:1;color:var(--text-dim);font-size:13px;">' + escapeHtml(aliasList) + '</span>' +
-      '<button class="btn btn-sm btn-ghost edit-alias" data-cmd="' + escapeHtml(cmd) + '" data-aliases="' + escapeHtml(aliases[cmd].join(",")) + '">✏️ 编辑</button>' +
+      '<button class="btn btn-sm btn-ghost edit-alias" data-cmd="' + escapeHtml(cmd) + '" data-aliases="' + escapeHtml(aliases[cmd].join(",")) + '">' + t("cfg.jsEdit") + '</button>' +
       '<button class="btn btn-sm btn-ghost remove-alias" data-cmd="' + escapeHtml(cmd) + '">🗑️</button>' +
       '</div>';
   }
-  if (!html) html = '<p class="hint" style="text-align:center;padding:16px;">暂无自定义别名，点击上方按钮添加</p>';
+  if (!html) html = '<p class="hint" style="text-align:center;padding:16px;">' + t("cfg.jsNoAlias") + '</p>';
   container.innerHTML = html;
   // 绑定编辑事件
   container.querySelectorAll(".edit-alias").forEach(function (btn) {
@@ -240,35 +257,35 @@ function renderAliasList() {
   container.querySelectorAll(".remove-alias").forEach(function (btn) {
     btn.addEventListener("click", function () {
       var cmd = this.getAttribute("data-cmd");
-      if (confirm("确定要删除 " + cmd + " 的所有别名吗？")) {
+      if (confirm(t("cfg.jsConfirmDelAliasPrefix") + cmd + t("cfg.jsConfirmDelAliasSuffix"))) {
         delete cfgData.commandAliases[cmd];
         renderAliasList();
-        toast("已删除 " + cmd + " 的别名", "ok");
+        toast(t("cfg.jsDeletedPrefix") + cmd + t("cfg.jsDeletedSuffix"), "ok");
       }
     });
   });
 }
 
 function showAddAliasModal() {
-  var cmd = prompt("请输入主命令名（如 message, bot, function 等）：");
+  var cmd = prompt(t("cfg.jsPromptCmd"));
   if (!cmd) return;
-  var aliases = prompt("请输入别名，多个用逗号分隔（如 msg, m）：");
+  var aliases = prompt(t("cfg.jsPromptAliases"));
   if (!aliases) return;
   var aliasArr = aliases.split(",").map(function (s) { return s.trim(); }).filter(Boolean);
   if (!aliasArr.length) return;
   cfgData.commandAliases = cfgData.commandAliases || {};
   cfgData.commandAliases[cmd] = aliasArr;
   renderAliasList();
-  toast("已添加别名: " + cmd + " → " + aliasArr.join(", "), "ok");
+  toast(t("cfg.jsAddedPrefix") + cmd + " → " + aliasArr.join(", "), "ok");
 }
 
 function showEditAliasModal(cmd, currentAliases) {
-  var newAliases = prompt("编辑 " + cmd + " 的别名（多个用逗号分隔）：", currentAliases);
+  var newAliases = prompt(t("cfg.jsEditPromptPrefix") + cmd + t("cfg.jsEditPromptSuffix"), currentAliases);
   if (newAliases === null) return; // 用户取消
   var aliasArr = newAliases.split(",").map(function (s) { return s.trim(); }).filter(Boolean);
   if (!aliasArr.length) {
     // 别名清空则删除该命令
-    if (confirm("别名为空，确定要删除 " + cmd + " 的所有别名吗？")) {
+    if (confirm(t("cfg.jsEmptyConfirmPrefix") + cmd + t("cfg.jsConfirmDelAliasSuffix"))) {
       delete cfgData.commandAliases[cmd];
     }
     renderAliasList();
@@ -277,7 +294,7 @@ function showEditAliasModal(cmd, currentAliases) {
   cfgData.commandAliases = cfgData.commandAliases || {};
   cfgData.commandAliases[cmd] = aliasArr;
   renderAliasList();
-  toast("已更新别名: " + cmd + " → " + aliasArr.join(", "), "ok");
+  toast(t("cfg.jsUpdatedPrefix") + cmd + " → " + aliasArr.join(", "), "ok");
 }
 
 var addAliasBtn = $("addAliasBtn");
@@ -320,7 +337,7 @@ if (aliasToggle) {
       // 开启别名:若当前为空则填充默认值
       if (!cfgData.commandAliases || Object.keys(cfgData.commandAliases).length === 0) {
         cfgData.commandAliases = JSON.parse(JSON.stringify(DEFAULT_COMMAND_ALIASES));
-        toast("已加载默认别名配置", "ok");
+        toast(t("cfg.jsDefaultLoaded"), "ok");
       }
     } else {
       cfgData.commandAliases = {};
@@ -371,7 +388,7 @@ function loadXboxAccounts() {
     var activeEl = $("cfg-bot-xbox-active");
     var badgeEl = $("cfg-bot-xbox-badge");
     if (activeEl) {
-      activeEl.textContent = active || "未登录";
+      activeEl.textContent = active || t("cfg.botXboxNotLogged");
     }
     if (badgeEl) {
       badgeEl.style.display = active ? "inline" : "none";
@@ -419,13 +436,13 @@ function startLoginProcess() {
   var step2 = $("cfgBotXboxLoginStep2");
   api("/bot/xbox-login", { method: "POST", body: JSON.stringify({}) })
     .then(function (data) {
-      if (!data.ok) { toast(data.message || "启动失败", "err"); return; }
+      if (!data.ok) { toast(data.message || t("cfg.jsStartFail"), "err"); return; }
       if (step1) step1.style.display = "none";
       if (step2) step2.style.display = "";
       // 开始轮询登录状态
       pollXboxLoginStatus();
     })
-    .catch(function (e) { toast("启动失败: " + (e.message || e), "err"); });
+    .catch(function (e) { toast(t("cfg.jsStartFailPrefix") + (e.message || e), "err"); });
 }
 
 function pollXboxLoginStatus() {
@@ -443,7 +460,7 @@ function pollXboxLoginStatus() {
         var result = $("cfgBotXboxLoginResult");
         var step2 = $("cfgBotXboxLoginStep2");
         if (step2) step2.style.display = "none";
-        if (result) { result.style.display = ""; result.innerHTML = '<p style="color:var(--accent);">✅ 登录成功! 账号 ' + escapeHtml(data.username) + ' 已保存。</p>'; }
+        if (result) { result.style.display = ""; result.innerHTML = '<p style="color:var(--accent);">' + t("cfg.jsLoginOkPrefix") + escapeHtml(data.username) + t("cfg.jsLoginOkSuffix") + '</p>'; }
         loadXboxAccounts();
         setTimeout(closeXboxLoginModal, 2000);
       } else if (data.status === "error") {
@@ -451,7 +468,7 @@ function pollXboxLoginStatus() {
         var result2 = $("cfgBotXboxLoginResult");
         var step2b = $("cfgBotXboxLoginStep2");
         if (step2b) step2b.style.display = "none";
-        if (result2) { result2.style.display = ""; result2.innerHTML = '<p style="color:var(--danger,#ef4444);">❌ 登录失败: ' + escapeHtml(data.error || "未知错误") + '</p>'; }
+        if (result2) { result2.style.display = ""; result2.innerHTML = '<p style="color:var(--danger,#ef4444);">' + t("cfg.jsLoginFailPrefix") + escapeHtml(data.error || t("cfg.jsUnknownError")) + '</p>'; }
       }
     }).catch(function () {});
   }, 2000);
@@ -478,22 +495,22 @@ function switchXboxAccount() {
       toast(data.message, data.ok ? "ok" : "err");
       if (data.ok) loadXboxAccounts();
     })
-    .catch(function (e) { toast("切换失败: " + (e.message || e), "err"); });
+    .catch(function (e) { toast(t("cfg.jsSwitchFailPrefix") + (e.message || e), "err"); });
 }
 
 function removeXboxAccount() {
   var active = ($("cfg-bot-xbox-active").textContent || "").trim();
-  if (!active || active === "未登录") { toast("没有可移除的账号", "err"); return; }
+  if (!active || active === t("cfg.botXboxNotLogged")) { toast(t("cfg.jsNoAccount"), "err"); return; }
   var select = $("cfg-bot-xbox-switch");
   var username = (select && select.style.display !== "none") ? select.value : active;
   if (!username) return;
-  if (!confirm("确定要移除账号 " + username + " 吗?")) return;
+  if (!confirm(t("cfg.jsRemoveConfirmPrefix") + username + t("cfg.jsRemoveConfirmSuffix"))) return;
   api("/bot/xbox-account/remove", { method: "POST", body: JSON.stringify({ username: username }) })
     .then(function (data) {
       toast(data.message, data.ok ? "ok" : "err");
       if (data.ok) loadXboxAccounts();
     })
-    .catch(function (e) { toast("移除失败: " + (e.message || e), "err"); });
+    .catch(function (e) { toast(t("cfg.jsRemoveFailPrefix") + (e.message || e), "err"); });
 }
 
 // 绑定 Xbox 账号按钮事件
@@ -510,46 +527,58 @@ if (xboxSwitchBtn) xboxSwitchBtn.addEventListener("click", switchXboxAccount);
 var xboxRemoveBtn = $("cfg-bot-xbox-remove-btn");
 if (xboxRemoveBtn) xboxRemoveBtn.addEventListener("click", removeXboxAccount);
 
-function saveConfig() {
-  if (!cfgData) return;
+// ===== 表单数据收集 =====
+function collectFormConfig() {
+  if (!cfgData) return {};
   var f = cfgData.features || {};
   f.music = f.music || {}; f.qq = f.qq || {};
-  f.music.playPercussion = $("cfg-percussion").checked;
-  f.qq.enabled = $("cfg-qq").checked;
-  f.qq.groupId = parseInt($("cfg-qqgroup").value, 10) || 0;
-  f.qq.port = parseInt($("cfg-qqport").value, 10) || 0;
-  f.qq.host = $("cfg-qqhost").value.trim() || "127.0.0.1";
-  f.qq.accessToken = $("cfg-qqtoken").value.trim();
+  f.music.playPercussion = $("cfg-percussion") ? $("cfg-percussion").checked : false;
+  f.qq.enabled = $("cfg-qq") ? $("cfg-qq").checked : false;
+  f.qq.groupId = parseInt($("cfg-qqgroup") ? $("cfg-qqgroup").value : 0, 10) || 0;
+  f.qq.port = parseInt($("cfg-qqport") ? $("cfg-qqport").value : 0, 10) || 0;
+  f.qq.host = ($("cfg-qqhost") ? $("cfg-qqhost").value.trim() : "") || "127.0.0.1";
+  f.qq.accessToken = $("cfg-qqtoken") ? $("cfg-qqtoken").value.trim() : "";
 
   var rl = cfgData.rateLimit || {}; rl.command = rl.command || {};
-  rl.command.enabled = $("cfg-ratelimit").checked;
-  rl.command.windowMs = parseInt($("cfg-rlwindow").value, 10) || 1000;
-  rl.command.maxPerWindow = parseInt($("cfg-rlmax").value, 10) || 20;
+  rl.command.enabled = $("cfg-ratelimit") ? $("cfg-ratelimit").checked : false;
+  rl.command.windowMs = parseInt($("cfg-rlwindow") ? $("cfg-rlwindow").value : 1000, 10) || 1000;
+  rl.command.maxPerWindow = parseInt($("cfg-rlmax") ? $("cfg-rlmax").value : 20, 10) || 20;
 
   var plp = cfgData.playerListPolling || {};
-  plp.enabled = $("cfg-playerlistpolling").checked;
-  plp.intervalSeconds = parseInt($("cfg-plpinterval").value, 10) || 30;
+  plp.enabled = $("cfg-playerlistpolling") ? $("cfg-playerlistpolling").checked : false;
+  plp.intervalSeconds = parseInt($("cfg-plpinterval") ? $("cfg-plpinterval").value : 30, 10) || 30;
 
   var webui = cfgData.webui || {};
-  webui.enabled = $("cfg-webui").checked;
-    webui.port = parseInt($("cfg-webport").value, 10) || 18888;
-    webui.localOnly = $("cfg-weblockal").checked;
+  webui.enabled = $("cfg-webui") ? $("cfg-webui").checked : true;
+  webui.port = parseInt($("cfg-webport") ? $("cfg-webport").value : 18888, 10) || 18888;
+  webui.localOnly = $("cfg-weblockal") ? $("cfg-weblockal").checked : false;
+
   var ai = {
-    baseURL: $("cfg-aibase").value.trim(), apiKey: $("cfg-aikey").value.trim(),
-    chatModel: $("cfg-aichatmodel").value.trim() || "deepseek-chat",
-    chatMaxTokens: parseInt($("cfg-aichattokens").value, 10) || 512,
-    chatPrompt: $("cfg-aichatprompt").value,
-    cmdModel: $("cfg-aicmdmodel").value.trim() || "deepseek-chat",
-    cmdMaxTokens: parseInt($("cfg-aicmdtokens").value, 10) || 1024,
-    cmdPrompt: $("cfg-aicmdprompt").value,
-    chatCooldown: parseInt($("cfg-aicooldown").value, 10) || 5000,
+    baseURL: $("cfg-aibase") ? $("cfg-aibase").value.trim() : "",
+    apiKey: $("cfg-aikey") ? $("cfg-aikey").value.trim() : "",
+    chatModel: ($("cfg-aichatmodel") ? $("cfg-aichatmodel").value.trim() : "") || "deepseek-chat",
+    chatMaxTokens: parseInt($("cfg-aichattokens") ? $("cfg-aichattokens").value : 512, 10) || 512,
+    chatPrompt: $("cfg-aichatprompt") ? $("cfg-aichatprompt").value : "",
+    cmdModel: ($("cfg-aicmdmodel") ? $("cfg-aicmdmodel").value.trim() : "") || "deepseek-chat",
+    cmdMaxTokens: parseInt($("cfg-aicmdtokens") ? $("cfg-aicmdtokens").value : 1024, 10) || 1024,
+    cmdPrompt: $("cfg-aicmdprompt") ? $("cfg-aicmdprompt").value : "",
+    chatCooldown: parseInt($("cfg-aicooldown") ? $("cfg-aicooldown").value : 5000, 10) || 5000,
   };
-  var utils = { tellAllToTell: $("cfg-tellall").checked, enablePolling: $("cfg-polling").checked };
-  var sapi = { gmsg: $("cfg-gmsg").value.trim() || "gmsg", smsg: $("cfg-smsg").value.trim() || "smsg" };
+
+  var utils = {
+    tellAllToTell: $("cfg-tellall") ? $("cfg-tellall").checked : false,
+    enablePolling: $("cfg-polling") ? $("cfg-polling").checked : true
+  };
+
+  var sapi = {
+    gmsg: ($("cfg-gmsg") ? $("cfg-gmsg").value.trim() : "") || "gmsg",
+    smsg: ($("cfg-smsg") ? $("cfg-smsg").value.trim() : "") || "smsg"
+  };
+
   var announce = {
-    enabled: $("cfg-announce-enabled").checked,
-    interval: parseInt($("cfg-announce-interval").value, 10) || 300,
-    messages: $("cfg-announce-messages").value.split(/\n+/).map(function (s) { return s.trim(); }).filter(Boolean),
+    enabled: $("cfg-announce-enabled") ? $("cfg-announce-enabled").checked : false,
+    interval: parseInt($("cfg-announce-interval") ? $("cfg-announce-interval").value : 300, 10) || 300,
+    messages: $("cfg-announce-messages") ? $("cfg-announce-messages").value.split(/\n+/).map(function (s) { return s.trim(); }).filter(Boolean) : [],
   };
 
   var mods = cfgData.mods || {}; mods.client = mods.client || {}; mods.server = mods.server || {};
@@ -562,58 +591,317 @@ function saveConfig() {
   });
 
   var spam = cfgData.spam || {};
-  spam.attack = $("cfg-spamattack").value;
-  spam.ad = $("cfg-spamad").value.split(/\n+/).map(function (s) { return s.trim(); }).filter(Boolean);
-  spam.adInterval = parseInt($("cfg-spaminterval").value, 10) || 0;
+  spam.attack = $("cfg-spamattack") ? $("cfg-spamattack").value : "";
+  spam.ad = $("cfg-spamad") ? $("cfg-spamad").value.split(/\n+/).map(function (s) { return s.trim(); }).filter(Boolean) : [];
+  spam.adInterval = parseInt($("cfg-spaminterval") ? $("cfg-spaminterval").value : 0, 10) || 0;
 
   var basePath = cfgData.basePath || {};
-  basePath.music = $("cfg-path-music").value.trim();
-  basePath.mcfunc = $("cfg-path-mcfunc").value.trim();
-  basePath.ezmatic = $("cfg-path-ezmatic").value.trim();
-  basePath.image = $("cfg-path-image").value.trim();
+  basePath.music = $("cfg-path-music") ? $("cfg-path-music").value.trim() : "";
+  basePath.mcfunc = $("cfg-path-mcfunc") ? $("cfg-path-mcfunc").value.trim() : "";
+  basePath.ezmatic = $("cfg-path-ezmatic") ? $("cfg-path-ezmatic").value.trim() : "";
+  basePath.image = $("cfg-path-image") ? $("cfg-path-image").value.trim() : "";
 
   var bot = {
     enabled: true,
-    mode: $("cfg-bot-mode-server").checked ? "server" : "realm",
-    host: $("cfg-bot-host").value.trim() || "127.0.0.1",
-    port: parseInt($("cfg-bot-port").value, 10) || 19132,
-    username: $("cfg-bot-username").value.trim() || "FakeBot",
-    version: $("cfg-bot-version").value.trim() || null,
-    // 反转: 勾选=正版(online,offline=false), 不勾选=离线(offline=true)
-    offline: !$("cfg-bot-offline").checked,
-    authTitle: $("cfg-bot-authtitle").value.trim() || null,
-    profilesFolder: $("cfg-bot-profilesfolder").value.trim() || null,
-    realmId: $("cfg-bot-realmid").value.trim() || null,
-    realmInvite: $("cfg-bot-realminvite").value.trim() || null,
+    mode: ($("cfg-bot-mode-server") && $("cfg-bot-mode-server").checked) ? "server" : "realm",
+    host: ($("cfg-bot-host") ? $("cfg-bot-host").value.trim() : "") || "127.0.0.1",
+    port: parseInt($("cfg-bot-port") ? $("cfg-bot-port").value : 19132, 10) || 19132,
+    username: ($("cfg-bot-username") ? $("cfg-bot-username").value.trim() : "") || "FakeBot",
+    version: ($("cfg-bot-version") ? $("cfg-bot-version").value.trim() : "") || null,
+    offline: $("cfg-bot-offline") ? !$("cfg-bot-offline").checked : false,
+    authTitle: ($("cfg-bot-authtitle") ? $("cfg-bot-authtitle").value.trim() : "") || null,
+    profilesFolder: ($("cfg-bot-profilesfolder") ? $("cfg-bot-profilesfolder").value.trim() : "") || null,
+    realmId: ($("cfg-bot-realmid") ? $("cfg-bot-realmid").value.trim() : "") || null,
+    realmInvite: ($("cfg-bot-realminvite") ? $("cfg-bot-realminvite").value.trim() : "") || null,
   };
 
-  var payload = {
-    config: {
-      name: $("cfg-name").value.trim() || "EnderBridge",
-      port: parseInt($("cfg-port").value, 10) || 8800,
-      commandPrefix: $("cfg-prefix").value.trim() || "$",
-      logLevel: $("cfg-loglevel").value,
-      githubToken: $("cfg-github-token").value.trim(),
-      features: f, rateLimit: rl, webui: webui, ai: ai,
-      utils: utils, sapi: sapi, bot: bot, mods: mods, spam: spam, basePath: basePath,
-      messageConfig: { announcements: announce },
-      commandAliases: cfgData.commandAliases || {},
-      playerListPolling: plp,
-    }
+  return {
+    name: ($("cfg-name") ? $("cfg-name").value.trim() : "") || "EnderBridge",
+    port: parseInt($("cfg-port") ? $("cfg-port").value : 8800, 10) || 8800,
+    commandPrefix: ($("cfg-prefix") ? $("cfg-prefix").value.trim() : "") || "$",
+    logLevel: $("cfg-loglevel") ? $("cfg-loglevel").value : "info",
+    githubToken: $("cfg-github-token") ? $("cfg-github-token").value.trim() : "",
+    features: f, rateLimit: rl, webui: webui, ai: ai,
+    utils: utils, sapi: sapi, bot: bot, mods: mods, spam: spam, basePath: basePath,
+    messageConfig: { announcements: announce },
+    commandAliases: cfgData.commandAliases || {},
+    playerListPolling: plp,
   };
-  api("/config", { method: "PUT", body: JSON.stringify(payload) })
-    .then(function (data) { toast(data.message, data.ok ? "ok" : "err"); if (data.ok) loadConfig(); })
-    .catch(function (e) { toast("保存失败: " + (e.message || e), "err"); });
+}
+
+// ===== 高级 Raw JSON 语法校验与行号定位 =====
+var _lastJsonError = null;
+var _jsonValidateTimer = null;
+
+function getJsonErrorInfo(jsonStr) {
+  if (!jsonStr || !jsonStr.trim()) {
+    return {
+      message: "JSON 内容为空",
+      line: 1,
+      column: 1,
+      position: 0,
+      snippet: { lineNum: 1, prev: null, curr: "", next: null }
+    };
+  }
+
+  try {
+    JSON.parse(jsonStr);
+    return null;
+  } catch (err) {
+    var msg = err.message || "JSON 语法解析失败";
+    var line = 1;
+    var column = 1;
+    var position = -1;
+
+    // 1) 尝试提取 "at position X"
+    var posMatch = msg.match(/at position (\d+)/i);
+    if (posMatch) {
+      position = parseInt(posMatch[1], 10);
+    }
+
+    // 2) 尝试提取 "line X column Y"
+    var lineMatch = msg.match(/line (\d+)/i);
+    var colMatch = msg.match(/column (\d+)/i);
+    if (lineMatch) line = parseInt(lineMatch[1], 10);
+    if (colMatch) column = parseInt(colMatch[1], 10);
+
+    // 3) 若有精准字符偏移量 position，推导精确实时行号和列号
+    if (position >= 0 && position <= jsonStr.length) {
+      var linesBefore = jsonStr.substring(0, position).split("\n");
+      line = linesBefore.length;
+      column = linesBefore[linesBefore.length - 1].length + 1;
+    }
+
+    var allLines = jsonStr.split("\n");
+    var errorLine = Math.max(1, Math.min(line, allLines.length));
+    var currLineText = allLines[errorLine - 1] || "";
+    var prevLineText = errorLine > 1 ? allLines[errorLine - 2] : null;
+    var nextLineText = errorLine < allLines.length ? allLines[errorLine] : null;
+
+    return {
+      message: msg,
+      line: errorLine,
+      column: column,
+      position: position,
+      snippet: {
+        lineNum: errorLine,
+        prev: prevLineText,
+        curr: currLineText,
+        next: nextLineText,
+      }
+    };
+  }
+}
+
+function validateRawJson() {
+  var editor = $("cfgRawJsonEditor");
+  if (!editor) return true;
+  var val = editor.value;
+  var err = getJsonErrorInfo(val);
+  _lastJsonError = err;
+
+  var banner = $("cfgJsonErrorBanner");
+  var titleEl = $("cfgJsonErrorTitle");
+  var msgEl = $("cfgJsonErrorMsg");
+  var snippetEl = $("cfgJsonErrorSnippet");
+  var badge = $("cfgJsonValidationBadge");
+
+  var totalLines = val ? val.split("\n").length : 0;
+  if ($("cfgJsonTotalLines")) $("cfgJsonTotalLines").textContent = "共 " + totalLines + " 行";
+
+  if (!err) {
+    if (banner) banner.style.display = "none";
+    if (badge) {
+      badge.className = "badge-sec-safe";
+      badge.textContent = t("cfg.jsonValid");
+    }
+    return true;
+  } else {
+    if (banner) banner.style.display = "block";
+    if (titleEl) {
+      titleEl.textContent = "❌ " + t("cfg.jsonInvalid") + " (第 " + err.line + " 行, 第 " + err.column + " 列)";
+    }
+    if (msgEl) msgEl.textContent = err.message;
+    if (snippetEl && err.snippet) {
+      var snipText = "";
+      if (err.snippet.prev !== null) {
+        snipText += " " + (err.snippet.lineNum - 1) + " | " + err.snippet.prev + "\n";
+      }
+      snipText += ">" + err.snippet.lineNum + " | " + err.snippet.curr + "   <-- [语法错误位置]\n";
+      if (err.snippet.next !== null) {
+        snipText += " " + (err.snippet.lineNum + 1) + " | " + err.snippet.next;
+      }
+      snippetEl.textContent = snipText;
+    }
+    if (badge) {
+      badge.className = "badge-sec-danger";
+      badge.textContent = t("cfg.jsonInvalid") + " (L" + err.line + ":C" + err.column + ")";
+    }
+    return false;
+  }
+}
+
+function gotoErrorLine() {
+  var editor = $("cfgRawJsonEditor");
+  if (!editor || !_lastJsonError) return;
+  var lines = editor.value.split("\n");
+  var targetLine = _lastJsonError.line;
+  var targetCol = _lastJsonError.column || 1;
+
+  var charIndex = 0;
+  for (var i = 0; i < targetLine - 1 && i < lines.length; i++) {
+    charIndex += lines[i].length + 1;
+  }
+  charIndex += Math.max(0, targetCol - 1);
+
+  editor.focus();
+  editor.setSelectionRange(charIndex, charIndex);
+
+  var lineHeight = 20;
+  editor.scrollTop = Math.max(0, (targetLine - 5) * lineHeight);
+}
+
+function updateCursorInfo() {
+  var editor = $("cfgRawJsonEditor");
+  var infoEl = $("cfgJsonLineColInfo");
+  if (!editor || !infoEl) return;
+  var pos = editor.selectionStart || 0;
+  var linesBefore = editor.value.substring(0, pos).split("\n");
+  var line = linesBefore.length;
+  var col = linesBefore[linesBefore.length - 1].length + 1;
+  infoEl.textContent = "第 " + line + " 行, 第 " + col + " 列";
+}
+
+function saveConfig() {
+  if (!cfgData) return;
+
+  var activeCat = document.querySelector(".cfg-sidebar-item.active[data-cfg-cat]");
+  var isRawMode = activeCat && activeCat.getAttribute("data-cfg-cat") === "raw";
+
+  if (isRawMode) {
+    var isValid = validateRawJson();
+    if (!isValid) {
+      var err = _lastJsonError;
+      var banner = $("cfgJsonErrorBanner");
+      if (banner) banner.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      toast(t("cfg.jsonSaveBlocked") + " (" + (err ? "第 " + err.line + " 行" : "") + ")", "err");
+      return;
+    }
+    var editor = $("cfgRawJsonEditor");
+    var parsedConfig;
+    try {
+      parsedConfig = JSON.parse(editor.value);
+    } catch (e) {
+      toast(t("cfg.jsonSaveBlocked"), "err");
+      return;
+    }
+
+    api("/config", { method: "PUT", body: JSON.stringify({ config: parsedConfig }) })
+      .then(function (data) {
+        toast(data.message, data.ok ? "ok" : "err");
+        if (data.ok) {
+          cfgData = parsedConfig;
+          loadConfig();
+        }
+      })
+      .catch(function (e) {
+        toast(t("cfg.jsSaveFailPrefix") + (e.message || e), "err");
+      });
+    return;
+  }
+
+  var currentPayload = collectFormConfig();
+  api("/config", { method: "PUT", body: JSON.stringify({ config: currentPayload }) })
+    .then(function (data) {
+      toast(data.message, data.ok ? "ok" : "err");
+      if (data.ok) loadConfig();
+    })
+    .catch(function (e) { toast(t("cfg.jsSaveFailPrefix") + (e.message || e), "err"); });
 }
 
 var cs1 = $("configSave"); if (cs1) cs1.addEventListener("click", saveConfig);
 var cs2 = $("configSave2"); if (cs2) cs2.addEventListener("click", saveConfig);
 
+// ===== Raw JSON 编辑器辅助按钮与交互 =====
+var formatBtn = $("cfgJsonFormatBtn");
+if (formatBtn) {
+  formatBtn.addEventListener("click", function () {
+    var editor = $("cfgRawJsonEditor");
+    if (!editor) return;
+    if (!validateRawJson()) {
+      toast(t("cfg.jsonSaveBlocked"), "err");
+      return;
+    }
+    try {
+      var obj = JSON.parse(editor.value);
+      editor.value = JSON.stringify(obj, null, 2);
+      validateRawJson();
+      toast(t("cfg.jsonFormat") + " ✔", "ok");
+    } catch (e) {}
+  });
+}
+
+var syncFromFormBtn = $("cfgJsonSyncFromFormBtn");
+if (syncFromFormBtn) {
+  syncFromFormBtn.addEventListener("click", function () {
+    var editor = $("cfgRawJsonEditor");
+    if (!editor) return;
+    var currentCfg = collectFormConfig();
+    editor.value = JSON.stringify(currentCfg, null, 2);
+    validateRawJson();
+    toast(t("cfg.jsonSynced"), "ok");
+  });
+}
+
+var copyBtn = $("cfgJsonCopyBtn");
+if (copyBtn) {
+  copyBtn.addEventListener("click", function () {
+    var editor = $("cfgRawJsonEditor");
+    if (!editor) return;
+    navigator.clipboard.writeText(editor.value)
+      .then(function () { toast(t("cfg.jsonCopied"), "ok"); })
+      .catch(function () { toast("复制失败", "err"); });
+  });
+}
+
+var gotoErrorBtn = $("cfgJsonGotoErrorBtn");
+if (gotoErrorBtn) {
+  gotoErrorBtn.addEventListener("click", gotoErrorLine);
+}
+
+var rawEditor = $("cfgRawJsonEditor");
+if (rawEditor) {
+  // Tab 键插入两空格缩进
+  rawEditor.addEventListener("keydown", function (e) {
+    if (e.key === "Tab") {
+      e.preventDefault();
+      var start = this.selectionStart;
+      var end = this.selectionEnd;
+      this.value = this.value.substring(0, start) + "  " + this.value.substring(end);
+      this.selectionStart = this.selectionEnd = start + 2;
+      updateCursorInfo();
+      clearTimeout(_jsonValidateTimer);
+      _jsonValidateTimer = setTimeout(validateRawJson, 250);
+    }
+  });
+
+  // 输入防抖校验
+  rawEditor.addEventListener("input", function () {
+    updateCursorInfo();
+    clearTimeout(_jsonValidateTimer);
+    _jsonValidateTimer = setTimeout(validateRawJson, 300);
+  });
+
+  // 光标位置指示更新
+  rawEditor.addEventListener("click", updateCursorInfo);
+  rawEditor.addEventListener("keyup", updateCursorInfo);
+}
+
 // ===== 防火墙放行 =====
 var fwBtn = $("cfg-addFirewall");
 if (fwBtn) fwBtn.addEventListener("click", function () {
   fwBtn.disabled = true;
-  fwBtn.textContent = "⏳ 添加中...";
+  fwBtn.textContent = t("cfg.jsFwAdding");
   api("/firewall", { method: "POST" })
     .then(function (data) {
       if (data.ok) {
@@ -622,16 +910,16 @@ if (fwBtn) fwBtn.addEventListener("click", function () {
         toast(data.message, "err");
         if (data.command) {
           navigator.clipboard.writeText(data.command).then(function () {
-            toast("命令已复制到剪贴板,请在管理员终端中粘贴执行", "ok");
+            toast(t("cfg.jsFwCopied"), "ok");
           }).catch(function () {
-            toast("请手动复制命令: " + data.command, "err");
+            toast(t("cfg.jsFwCopyManualPrefix") + data.command, "err");
           });
         }
       }
     })
-    .catch(function (e) { toast("请求失败: " + (e.message || e), "err"); })
+    .catch(function (e) { toast(t("cfg.jsReqFailPrefix") + (e.message || e), "err"); })
     .finally(function () {
       fwBtn.disabled = false;
-      fwBtn.textContent = "🛡️ 一键放行防火墙";
+      fwBtn.textContent = t("cfg.webFirewall");
     });
 });

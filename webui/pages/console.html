@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -8,61 +8,40 @@
 <script>document.documentElement.setAttribute('data-theme',localStorage.getItem('enderbridge_theme')||(window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark'));</script>
 </head>
 <body>
-<aside class="sidebar">
-  <div class="brand">
-    <span class="logo">⛏️</span>
-    <div>
-      <div class="name" id="srvName">EnderBridge</div>
-      <div class="ver">Web 管理</div>
-    </div>
-  </div>
-  <div class="nav-item" data-page="dashboard"><span>📊</span><span>仪表盘</span></div>
-  <div class="nav-item" data-page="permissions"><span>👥</span><span>权限管理</span></div>
-  <div class="nav-item" data-page="config"><span>⚙️</span><span>功能设置</span></div>
-  <div class="nav-item" data-page="mods"><span>🧩</span><span>Mod 管理</span></div>
-  <div class="nav-item" data-page="console"><span>💻</span><span>控制台</span></div>
-  <div class="nav-item" data-page="audit"><span>📋</span><span>审计日志</span></div>
-  <div class="nav-item" data-page="update"><span>🔄</span><span>检查更新</span></div>
-  <div class="nav-item" data-page="banlist"><span>🚫</span><span>封禁管理</span></div>
-  <div class="spacer"></div>
-  <button class="theme-toggle" id="themeToggle"><span class="theme-icon">🌙</span><span class="theme-label">深色模式</span></button>
-  <div class="guest-badge" id="guestBadge">👤 访客模式</div>
-  <div class="nav-item hidden" id="adminLoginBtn"><span>🔑</span><span>管理员登录</span></div>
-  <div class="logout" id="logoutBtn"><span>🚪</span><span>退出登录</span></div>
-</aside>
+<aside class="sidebar" data-auto-sidebar></aside>
 <div class="main">
-  <h2>💻 控制台</h2>
+  <h2 data-i18n="console.title">💻 控制台</h2>
 
   <div class="card" id="consoleCmdCard">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-      <span style="font-weight:600;">发送命令</span>
-      <span style="font-size:12px;color:var(--text-faint);">以 <code>/</code> 开头为游戏命令，否则作为聊天消息</span>
+      <span style="font-weight:600;" data-i18n="console.sendCmd">发送命令</span>
+      <span style="font-size:12px;color:var(--text-faint);" data-i18n="console.sendHint">以 <code>/</code> 开头为游戏命令，否则作为聊天消息</span>
     </div>
     <div class="row gap-10" style="align-items:stretch">
-      <input type="text" id="consoleInput" placeholder="输入命令，如 /list 或 say hello" autocomplete="off" />
-      <button class="btn btn-primary btn-sm" id="consoleExecBtn">▶ 执行</button>
+      <input type="text" id="consoleInput" data-i18n-ph="console.inputPh" placeholder="输入命令，如 /list 或 say hello" autocomplete="off" />
+      <button class="btn btn-primary btn-sm" id="consoleExecBtn" data-i18n="console.exec">▶ 执行</button>
     </div>
   </div>
 
   <div class="card" style="margin-top:12px;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
       <div style="display:flex;align-items:center;gap:10px;">
-        <span style="font-weight:600;">🖥 终端输出</span>
-        <span id="logStatus" style="font-size:11px;color:#4ade80;">● 已连接</span>
+        <span style="font-weight:600;" data-i18n="console.termOut">🖥 终端输出</span>
+        <span id="logStatus" style="font-size:11px;color:#4ade80;" data-i18n="console.connected">● 已连接</span>
       </div>
       <div style="display:flex;align-items:center;gap:8px;">
         <select id="logLevelFilter">
-          <option value="all">全部</option>
+          <option value="all" data-i18n="console.all">全部</option>
           <option value="debug">Debug</option>
           <option value="info" selected>Info</option>
           <option value="warning">Warning</option>
           <option value="error">Error</option>
         </select>
         <label style="font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:4px;cursor:pointer;">
-          <input type="checkbox" id="logAutoScroll" checked /> 自动滚动
+          <input type="checkbox" id="logAutoScroll" checked /> <span data-i18n="console.autoScroll">自动滚动</span>
         </label>
-        <button class="btn btn-sm" id="logPauseBtn">⏸ 暂停</button>
-        <button class="btn btn-sm" id="logClearBtn">🗑️ 清空</button>
+        <button class="btn btn-sm" id="logPauseBtn" data-i18n="console.pause">⏸ 暂停</button>
+        <button class="btn btn-sm" id="logClearBtn" data-i18n="console.clear">🗑️ 清空</button>
       </div>
     </div>
     <div class="log-viewer" id="logViewer"></div>
@@ -73,6 +52,7 @@
 </div>
 <div id="toast"></div>
 <script src="/static/js/app.js"></script>
+<script src="/static/js/i18n.js"></script>
 <script src="/static/js/console.js"></script>
 </body>
 </html>

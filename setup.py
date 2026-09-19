@@ -2,14 +2,9 @@
 # ============================================================
 #  setup.py - 依赖安装器(用于空包主机)
 # ------------------------------------------------------------
-#  空包主机 = 只有项目文件、没有第三方库的环境
-#  (例如直接从 GitHub 下载 zip 解压后运行)
-#
-#  用法:
+#    how2use:
 #    python setup.py           检测依赖,缺失时自动 pip install
 #    python setup.py --check   仅检测不安装(齐全退出 0,缺失退出 1)
-#
-#  main.py 在直接运行时也会在缺失依赖时调用本脚本。
 # ============================================================
 import importlib.util
 import os
@@ -69,7 +64,6 @@ def has_pip():
     res = subprocess.run(
         [sys.executable, "-m", "pip", "--version"],
         capture_output=True,
-        text=True,
     )
     return res.returncode == 0
 

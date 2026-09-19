@@ -1,21 +1,63 @@
-// ===== 权限管理页面逻辑 =====
+﻿// ===== 权限管理页面逻辑 =====
 var permData = { owner: "YourXboxName", op: [], user: [], blocker: [] };
 var _systemMode = false;
 var _PERM_META = [
-  { key: "dashboard", label: "📊 仪表盘" },
-  { key: "config",    label: "⚙️ 功能设置" },
-  { key: "mods",      label: "🧩 Mod 管理" },
-  { key: "console",   label: "💻 控制台" },
-  { key: "permissions", label: "👥 权限管理" },
-  { key: "banlist",   label: "🚫 封禁管理" },
-  { key: "audit",     label: "📋 审计日志" },
-  { key: "update",    label: "🔄 检查更新" },
-  { key: "restart",   label: "🔁 重启服务器" }
+  { key: "dashboard", label: "nav.dashboard", icon: "📊" },
+  { key: "config",    label: "nav.config", icon: "⚙️" },
+  { key: "mods",      label: "nav.mods", icon: "🧩" },
+  { key: "console",   label: "nav.console", icon: "💻" },
+  { key: "permissions", label: "nav.permissions", icon: "👥" },
+  { key: "banlist",   label: "nav.banlist", icon: "🚫" },
+  { key: "audit",     label: "nav.audit", icon: "📋" },
+  { key: "update",    label: "nav.update", icon: "🔄" },
+  { key: "restart",   label: "nav.restart", icon: "🔁" }
 ];
+
+// 渲染权限 label:图标 + 当前语言文案(语言切换时重新渲染即可刷新)
+function _permLabel(p) {
+  return (p.icon ? p.icon + " " : "") + t(p.label);
+}
+
+// 语言切换时重渲染动态区域(静态区由 applyI18n 处理;由 i18n.js setLang() 回调)
+function _refreshPermLang() {
+  loadPermissions();
+  loadRoles();
+  loadUsers();
+  // 用户弹窗若正打开:刷新标题/密码占位符/角色下拉,保留当前选择重填覆盖区
+  // (applyI18n 会把 modalPassword 占位符重置为 perm.passwordPh,需按编辑态纠正)
+  var _um = typeof $ === "function" ? $("userModal") : null;
+  var _ov = typeof $ === "function" ? $("userPermOverrides") : null;
+  if (_um && _um.style.display === "flex") {
+    try {
+      var _title = $("userModalTitle");
+      if (_title) _title.textContent = _editingUser
+        ? t("perm.editUser") + " - " + _editingUser.username
+        : t("perm.addUser");
+      var _pw = $("modalPassword");
+      if (_pw) {
+        if (_editingUser) {
+          if (_editingUser.username === "guest") { _pw.disabled = true; _pw.placeholder = t("perm.guestNoPw"); }
+          else { _pw.placeholder = t("perm.keepBlank"); }
+        } else {
+          _pw.disabled = false; _pw.placeholder = t("perm.passwordPh");
+        }
+      }
+      var _sel = $("modalRole");
+      if (_sel && _ov && _ov.innerHTML) {
+        var _keepRole = _sel.value;
+        try { fillRoleSelect(); } catch (e) {}
+        if (_keepRole) _sel.value = _keepRole;
+        var _cur = collectUserPermOverrides();
+        fillUserPermOverrides(_cur.permissions, _cur.no_role_inherit);
+      }
+    } catch (e) {}
+  }
+}
 
 requireAuth(function (role) {
   initSidebar("permissions", role);
   initTheme();
+  initLang();
   // 获取 systemMode + system 标记
   api("/auth/me").then(function (d) {
     if (d.ok) {
@@ -36,10 +78,10 @@ function loadPermissions() {
     $("perm-owner").value = permData.owner || "";
     ["op", "user", "blocker"].forEach(function (g) {
       var list = permData[g] || [];
-      $("count-" + g).textContent = list.length + " 人";
+      $("count-" + g).textContent = list.length + t("perm.jsCountSuffix");
       $("chips-" + g).innerHTML = list.map(function (name) {
         return '<span class="chip">' + escapeHtml(name) + '<span class="x" data-group="' + g + '" data-name="' + escapeHtml(name) + '">✕</span></span>';
-      }).join("") || '<span class="hint">暂无成员</span>';
+      }).join("") || '<span class="hint">' + t("perm.jsNoMembers") + '</span>';
     });
   }).catch(function () {});
 }
@@ -64,9 +106,9 @@ document.querySelectorAll('[data-group]').forEach(function (btn) {
       permData[g] = permData[g] || [];
       if (permData[g].indexOf(name) < 0) {
         permData[g].push(name);
-        savePerm("已添加 " + name + " → " + g);
+        savePerm(t("perm.jsAddedPrefix") + name + " → " + g);
       } else {
-        toast(name + " 已在 " + g + " 列表中", "err");
+        toast(name + t("perm.jsAlreadyInMid") + g + t("perm.jsAlreadyInSuffix"), "err");
       }
       input.value = "";
     });
@@ -79,15 +121,15 @@ document.addEventListener("click", function (e) {
     var g = e.target.getAttribute("data-group");
     var name = e.target.getAttribute("data-name");
     permData[g] = (permData[g] || []).filter(function (n) { return n !== name; });
-    savePerm("已移除 " + name + " ← " + g);
+    savePerm(t("perm.jsRemovedPrefix") + name + " ← " + g);
   }
 });
 
 var permSaveBtn = $("permSave");
-if (permSaveBtn) permSaveBtn.addEventListener("click", function () { savePerm("权限已保存"); });
+if (permSaveBtn) permSaveBtn.addEventListener("click", function () { savePerm(t("perm.jsSaved")); });
 
 var permReloadBtn = $("permReload");
-if (permReloadBtn) permReloadBtn.addEventListener("click", function () { loadPermissions(); toast("已重新加载", "ok"); });
+if (permReloadBtn) permReloadBtn.addEventListener("click", function () { loadPermissions(); toast(t("perm.jsReloaded"), "ok"); });
 
 // ===== 用户管理 =====
 var _allRoles = {};
@@ -97,7 +139,7 @@ function loadUsers() {
     if (!data.ok) return;
     var tbody = $("userTableBody");
     if (!data.users.length) {
-      tbody.innerHTML = '<tr><td colspan="4" class="muted" style="text-align:center;padding:20px">暂无用户,请添加</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="4" class="muted" style="text-align:center;padding:20px">' + t("perm.jsNoUsers") + '</td></tr>';
       return;
     }
     tbody.innerHTML = data.users.map(function (u) {
@@ -108,11 +150,11 @@ function loadUsers() {
       var isSystem = u.system;
       var isReserved = u.system_reserved;
       var statusHtml = isDisabled
-        ? '<span style="color:var(--err)">禁用</span>'
-        : '<span style="color:var(--accent)">启用</span>';
+        ? '<span style="color:var(--err)">' + t("perm.jsDisabled") + '</span>'
+        : '<span style="color:var(--accent)">' + t("perm.jsEnabled") + '</span>';
       // 启用/禁用按钮(不能禁用自己)
       var toggleBtn = isMe ? ''
-        : '<button class="btn btn-sm" onclick="toggleUser(\'' + escapeHtml(u.username) + '\',' + (isDisabled ? 'true' : 'false') + ')" title="' + (isDisabled ? '启用' : '禁用') + '">'
+        : '<button class="btn btn-sm" onclick="toggleUser(\'' + escapeHtml(u.username) + '\',' + (isDisabled ? 'true' : 'false') + ')" title="' + (isDisabled ? t("perm.jsEnableAction") : t("perm.jsDisableAction")) + '">'
         + (isDisabled ? '🔓' : '🔒') + '</button> ';
       // 删除按钮(系统用户/系统保留账户不可删除)
       var delBtn = (isMe || isSystem || isReserved) ? ''
@@ -122,7 +164,7 @@ function loadUsers() {
       var editBtn = ((isReserved && !isSystemAdmin) ? ''
         : '<button class="btn btn-sm" onclick="editUser(\'' + escapeHtml(u.username) + '\')">✏️</button> ');
       return '<tr>'
-        + '<td>' + escapeHtml(u.username) + (isMe ? ' <span class="muted">(你)</span>' : '') + (isSystem ? ' <span class="muted">系统</span>' : '') + (u.system_reserved ? ' <span style="color:var(--accent);font-size:0.8em;" title="系统保留账户">🛡️</span>' : '') + '</td>'
+        + '<td>' + escapeHtml(u.username) + (isMe ? ' <span class="muted">' + t("perm.jsYou") + '</span>' : '') + (isSystem ? ' <span class="muted">' + t("perm.jsSystem") + '</span>' : '') + (u.system_reserved ? ' <span style="color:var(--accent);font-size:0.8em;" title="' + t("perm.jsSystemReservedTitle") + '">🛡️</span>' : '') + '</td>'
         + '<td><span class="chip">' + escapeHtml(roleLabel) + '</span></td>'
         + '<td>' + statusHtml + '</td>'
         + '<td>'
@@ -144,7 +186,7 @@ function loadRoles() {
       var role = data.roles[name];
       var perms = role.permissions || [];
       var isBuiltin = builtins.indexOf(name) !== -1;
-      var delBtn = isBuiltin ? '' : ' <button class="btn btn-sm" style="color:var(--err);font-size:0.8em;margin-left:8px;" onclick="deleteRole(\'' + escapeHtml(name) + '\')">🗑️ 删除</button>';
+      var delBtn = isBuiltin ? '' : ' <button class="btn btn-sm" style="color:var(--err);font-size:0.8em;margin-left:8px;" onclick="deleteRole(\'' + escapeHtml(name) + '\')">' + t("perm.jsDelete") + '</button>';
       html += '<div class="perm-group" style="margin-bottom:16px;">'
         + '<div style="font-weight:600;margin-bottom:4px;">' + escapeHtml(role.label || name)
         + ' <span class="muted" style="font-weight:400;">(' + escapeHtml(name) + ')</span>'
@@ -154,7 +196,7 @@ function loadRoles() {
         var checked = perms.indexOf(p.key) !== -1 ? "checked" : "";
         html += '<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:0.9em;">'
           + '<input type="checkbox" data-role="' + name + '" data-perm="' + p.key + '" ' + checked + '>'
-          + p.label + '</label>';
+          + _permLabel(p) + '</label>';
       });
       html += '</div></div>';
     }
@@ -179,7 +221,7 @@ if (roleSaveBtn) roleSaveBtn.addEventListener("click", function () {
   });
   Promise.all(promises).then(function (results) {
     var allOk = results.every(function (r) { return r.ok; });
-    toast(allOk ? "角色配置已保存" : "部分保存失败", allOk ? "ok" : "err");
+    toast(allOk ? t("perm.jsRolesSaved") : t("perm.jsRolesPartialFail"), allOk ? "ok" : "err");
     if (allOk) {
       loadRoles();
       // 刷新当前用户权限缓存
@@ -191,7 +233,7 @@ if (roleSaveBtn) roleSaveBtn.addEventListener("click", function () {
         }
       }).catch(function(){});
     }
-  }).catch(function () { toast("保存失败", "err"); });
+  }).catch(function () { toast(t("perm.jsSaveFail"), "err"); });
 });
 
 // ===== 新建角色 =====
@@ -211,11 +253,11 @@ var roleModalConfirm = $("roleModalConfirm");
 if (roleModalConfirm) roleModalConfirm.addEventListener("click", function () {
   var name = $("roleNameInput").value.trim().toLowerCase();
   var label = $("roleLabelInput").value.trim();
-  if (!name) { toast("请输入角色标识", "err"); return; }
-  if (!/^[a-z][a-z0-9_]*$/.test(name)) { toast("角色标识只能包含小写字母、数字和下划线", "err"); return; }
+  if (!name) { toast(t("perm.jsNeedRoleId"), "err"); return; }
+  if (!/^[a-z][a-z0-9_]*$/.test(name)) { toast(t("perm.jsRoleIdRule"), "err"); return; }
   api("/roles", { method: "POST", body: JSON.stringify({ name: name, label: label || name, permissions: [] }) })
     .then(function (data) {
-      toast(data.message || "已创建", data.ok ? "ok" : "err");
+      toast(data.message || t("perm.jsCreated"), data.ok ? "ok" : "err");
       if (data.ok) {
         $("roleModal").style.display = "none";
         loadRoles();
@@ -233,13 +275,13 @@ if (roleModal) roleModal.addEventListener("click", function (e) {
 // 添加用户
 var userAddBtn = $("userAddBtn");
 if (userAddBtn) userAddBtn.addEventListener("click", function () {
-  $("userModalTitle").textContent = "添加用户";
+  $("userModalTitle").textContent = t("perm.addUser");
   $("modalUsername").value = "";
   $("modalUsername").disabled = false;
   var pwInput = $("modalPassword");
   pwInput.value = "";
   pwInput.disabled = false;
-  pwInput.placeholder = "密码";
+  pwInput.placeholder = t("perm.passwordPh");
   fillRoleSelect();
   $("modalRole").value = "viewer";
   fillUserPermOverrides({}, false);  // 新用户默认继承
@@ -254,7 +296,7 @@ if (userAddBtn) userAddBtn.addEventListener("click", function () {
 // 编辑用户
 var _editingUser = null;  // 当前正在编辑的用户数据
 function editUser(username) {
-  $("userModalTitle").textContent = "编辑用户 - " + username;
+  $("userModalTitle").textContent = t("perm.editUser") + " - " + username;
   $("modalUsername").value = username;
   $("modalUsername").disabled = true;
   var pwInput = $("modalPassword");
@@ -262,10 +304,10 @@ function editUser(username) {
   // guest 用户禁用密码框
   if (username === "guest") {
     pwInput.disabled = true;
-    pwInput.placeholder = "guest 不允许设置密码";
+    pwInput.placeholder = t("perm.guestNoPw");
   } else {
     pwInput.disabled = false;
-    pwInput.placeholder = "留空则不修改";
+    pwInput.placeholder = t("perm.keepBlank");
   }
   fillRoleSelect();
   _showUserModalMsg("");
@@ -305,15 +347,15 @@ function fillUserPermOverrides(overrides, noRoleInherit) {
   var html = '<div style="margin-bottom:8px;">'
     + '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:0.88em;font-weight:500;">'
     + '<input type="checkbox" id="noRoleInheritToggle"' + (noRoleInherit ? ' checked' : '') + '>'
-    + '<span>🚫 不继承角色权限(完全自定义)</span>'
+    + '<span>' + t("perm.jsNoInherit") + '</span>'
     + '</label>'
-    + '<div class="muted" style="margin:2px 0 0 22px;font-size:0.8em;">开启后此用户不从角色继承任何权限,仅保留下方显式设置的权限</div>'
+    + '<div class="muted" style="margin:2px 0 0 22px;font-size:0.8em;">' + t("perm.jsNoInheritHint") + '</div>'
     + '</div>';
   html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">'
-    + '<span style="font-size:0.85em;font-weight:500;">权限覆盖:</span>'
-    + '<button type="button" class="btn btn-sm" id="permInheritAll" title="将所有权限设为继承角色">📥 全部继承</button>'
-    + '<button type="button" class="btn btn-sm" id="permAllowAll" title="将所有权限设为明确允许">✅ 全部允许</button>'
-    + '<button type="button" class="btn btn-sm" id="permDenyAll" title="将所有权限设为明确拒绝">❌ 全部拒绝</button>'
+    + '<span style="font-size:0.85em;font-weight:500;">' + t("perm.jsOverrideLabel") + '</span>'
+    + '<button type="button" class="btn btn-sm" id="permInheritAll" title="' + t("perm.jsInheritAllTitle") + '">' + t("perm.jsInheritAll") + '</button>'
+    + '<button type="button" class="btn btn-sm" id="permAllowAll" title="' + t("perm.jsAllowAllTitle") + '">' + t("perm.jsAllowAll") + '</button>'
+    + '<button type="button" class="btn btn-sm" id="permDenyAll" title="' + t("perm.jsDenyAllTitle") + '">' + t("perm.jsDenyAll") + '</button>'
     + '</div>';
   html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;">';
   _PERM_META.forEach(function (p) {
@@ -322,12 +364,12 @@ function fillUserPermOverrides(overrides, noRoleInherit) {
     var stateAllow = (val === true) ? ' checked' : '';
     var stateDeny = (val === false) ? ' checked' : '';
     html += '<div style="display:flex;align-items:center;gap:2px;font-size:0.88em;">'
-      + '<span style="min-width:100px;">' + p.label + '</span>'
-      + '<label class="perm-inherit-label" title="继承角色" style="cursor:pointer;color:var(--muted);">'
-      + '<input type="radio" name="perm_' + p.key + '" value="inherit"' + stateInherit + '> 继承</label>'
-      + '<label title="明确允许" style="cursor:pointer;color:var(--ok);">'
+      + '<span style="min-width:100px;">' + _permLabel(p) + '</span>'
+      + '<label class="perm-inherit-label" title="' + t("perm.jsInherit") + '" style="cursor:pointer;color:var(--muted);">'
+      + '<input type="radio" name="perm_' + p.key + '" value="inherit"' + stateInherit + '> ' + t("perm.jsInheritLabel") + '</label>'
+      + '<label title="' + t("perm.jsAllow") + '" style="cursor:pointer;color:var(--ok);">'
       + '<input type="radio" name="perm_' + p.key + '" value="allow"' + stateAllow + '> ✅</label>'
-      + '<label title="明确拒绝" style="cursor:pointer;color:var(--err);">'
+      + '<label title="' + t("perm.jsDeny") + '" style="cursor:pointer;color:var(--err);">'
       + '<input type="radio" name="perm_' + p.key + '" value="deny"' + stateDeny + '> ❌</label>'
       + '</div>';
   });
@@ -361,11 +403,11 @@ function _updateInheritControls(noInherit) {
     if (noInherit) {
       label.style.opacity = "0.35";
       label.style.cursor = "not-allowed";
-      label.title = "已禁用:不继承角色";
+      label.title = t("perm.jsInheritDisabled");
     } else {
       label.style.opacity = "1";
       label.style.cursor = "pointer";
-      label.title = "继承角色";
+      label.title = t("perm.jsInherit");
     }
   });
   // 全部继承按钮也随之下禁用
@@ -392,7 +434,7 @@ function collectUserPermOverrides() {
 
 // 删除用户
 function deleteUser(username) {
-  if (!confirm("确定要删除用户 " + username + " 吗?")) return;
+  if (!confirm(t("perm.jsConfirmDeletePrefix") + username + t("perm.jsConfirmSuffix"))) return;
   var me = getCurrentUser();
   var isSystemAdmin = me.role === "admin" && me.system;
   function doDelete(adminPw) {
@@ -400,7 +442,7 @@ function deleteUser(username) {
     if (adminPw) body.admin_password = adminPw;
     api("/users", { method: "DELETE", body: JSON.stringify(body) })
       .then(function (data) {
-        toast(data.message || "已删除", data.ok ? "ok" : "err");
+        toast(data.message || t("perm.jsDeleted"), data.ok ? "ok" : "err");
         if (data.ok) loadUsers();
       }).catch(function () {});
   }
@@ -412,13 +454,13 @@ function deleteUser(username) {
       api("/users", { method: "DELETE", body: JSON.stringify(body) })
         .then(function (data) {
           if (!data.ok && modal && modal.error) {
-            modal.error(data.message || "验证失败");
+            modal.error(data.message || t("perm.jsVerifyFail"));
             return;
           }
-          toast(data.message || "已删除", data.ok ? "ok" : "err");
+          toast(data.message || t("perm.jsDeleted"), data.ok ? "ok" : "err");
           if (data.ok) { if (modal && modal.dismiss) modal.dismiss(); loadUsers(); }
         }).catch(function () {
-          if (modal && modal.error) modal.error("网络请求失败");
+          if (modal && modal.error) modal.error(t("perm.jsNetFail"));
         });
     });
   }
@@ -426,8 +468,8 @@ function deleteUser(username) {
 
 // 启用/禁用用户
 function toggleUser(username, enable) {
-  var action = enable ? "启用" : "禁用";
-  if (!confirm("确定要" + action + "用户 " + username + " 吗?")) return;
+  var action = enable ? t("perm.jsEnableAction") : t("perm.jsDisableAction");
+  if (!confirm(t("perm.jsConfirmActionPrefix") + action + t("perm.jsConfirmUserMid") + username + t("perm.jsConfirmSuffix"))) return;
   var me = getCurrentUser();
   var isSystemAdmin = me.role === "admin" && me.system;
   var isSelf = me.username === username;
@@ -436,7 +478,7 @@ function toggleUser(username, enable) {
     if (adminPw) body.admin_password = adminPw;
     api("/users", { method: "PUT", body: JSON.stringify(body) })
       .then(function (data) {
-        toast(data.message || ("已" + action), data.ok ? "ok" : "err");
+        toast(data.message || (t("perm.jsDonePrefix") + action), data.ok ? "ok" : "err");
         if (data.ok) loadUsers();
       }).catch(function () {});
   }
@@ -448,13 +490,13 @@ function toggleUser(username, enable) {
       api("/users", { method: "PUT", body: JSON.stringify(body) })
         .then(function (data) {
           if (!data.ok && modal && modal.error) {
-            modal.error(data.message || "验证失败");
+            modal.error(data.message || t("perm.jsVerifyFail"));
             return;
           }
-          toast(data.message || ("已" + action), data.ok ? "ok" : "err");
+          toast(data.message || (t("perm.jsDonePrefix") + action), data.ok ? "ok" : "err");
           if (data.ok) { if (modal && modal.dismiss) modal.dismiss(); loadUsers(); }
         }).catch(function () {
-          if (modal && modal.error) modal.error("网络请求失败");
+          if (modal && modal.error) modal.error(t("perm.jsNetFail"));
         });
     });
   }
@@ -478,8 +520,8 @@ if (modalConfirm) modalConfirm.addEventListener("click", function () {
   var role = $("modalRole").value;
   var isEdit = $("modalUsername").disabled;
   _showUserModalMsg("");
-  if (!username) { _showUserModalMsg("请输入用户名", true); return; }
-  if (!isEdit && !password) { _showUserModalMsg("请输入密码", true); return; }
+  if (!username) { _showUserModalMsg(t("perm.jsNeedUsername"), true); return; }
+  if (!isEdit && !password) { _showUserModalMsg(t("perm.jsNeedPassword"), true); return; }
   var permData = collectUserPermOverrides();
   var permOverrides = permData.permissions;
   var noRoleInherit = permData.no_role_inherit;
@@ -517,21 +559,21 @@ function _doUserSave(isEdit, username, body, modal) {
     .then(function (data) {
       if (!data.ok) {
         if (modal && modal.error) {
-          modal.error(data.message || "操作失败");
+          modal.error(data.message || t("perm.jsOpFail"));
         } else {
-          _showUserModalMsg(data.message || "操作失败", true);
+          _showUserModalMsg(data.message || t("perm.jsOpFail"), true);
         }
         return;
       }
-      toast(data.message || (isEdit ? "已更新" : "已创建"), "ok");
+      toast(data.message || (isEdit ? t("perm.jsUpdated") : t("perm.jsCreated")), "ok");
       if (modal && modal.dismiss) modal.dismiss();
       $("userModal").style.display = "none";
       loadUsers();
     }).catch(function () {
       if (modal && modal.error) {
-        modal.error("网络请求失败");
+        modal.error(t("perm.jsNetFail"));
       } else {
-        _showUserModalMsg("网络请求失败", true);
+        _showUserModalMsg(t("perm.jsNetFail"), true);
       }
     });
 }
@@ -561,8 +603,8 @@ function _promptAdminPassword(onConfirm) {
   };
   function doConfirm() {
     var pw = $("adminPwInput").value;
-    if (!pw) { $("adminPwMsg").textContent = "请输入 admin 密码"; return; }
-    $("adminPwMsg").textContent = "验证中...";
+    if (!pw) { $("adminPwMsg").textContent = t("perm.jsNeedAdminPw"); return; }
+    $("adminPwMsg").textContent = t("perm.jsVerifying");
     $("adminPwMsg").style.color = "var(--muted)";
     onConfirm(pw, modal);
   }
@@ -585,10 +627,10 @@ loadRoles();
 
 // 删除自定义角色
 function deleteRole(name) {
-  if (!confirm("确定要删除角色 " + name + " 吗?")) return;
+  if (!confirm(t("perm.jsConfirmDeleteRolePrefix") + name + t("perm.jsConfirmSuffix"))) return;
   api("/roles", { method: "DELETE", body: JSON.stringify({ name: name }) })
     .then(function (data) {
-      toast(data.message || "已删除", data.ok ? "ok" : "err");
+      toast(data.message || t("perm.jsDeleted"), data.ok ? "ok" : "err");
       if (data.ok) { loadRoles(); loadUsers(); }
     }).catch(function () {});
 }

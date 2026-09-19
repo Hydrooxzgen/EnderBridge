@@ -22,4 +22,4 @@ mod/bot/.minecraft/
 mod/bot/TheCandyBot/
 CHANGELOG.md
 users.json
-security_audit.py
+/security_audit.py

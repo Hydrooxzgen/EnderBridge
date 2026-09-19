@@ -786,3 +786,173 @@ a.nav-item { text-decoration: none; }
   background: var(--input-bg);
   color: var(--text);
 }
+
+/* ===== 进度条与步骤指示器 ===== */
+.progress-container {
+  margin: 14px 0 8px 0;
+}
+.progress-bar-wrap {
+  width: 100%;
+  height: 8px;
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: 999px;
+  overflow: hidden;
+  position: relative;
+}
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  border-radius: 999px;
+  width: 0%;
+  transition: width 0.25s ease;
+}
+.progress-bar-fill.indeterminate {
+  width: 40% !important;
+  position: absolute;
+  animation: progressIndeterminate 1.6s infinite ease-in-out;
+}
+@keyframes progressIndeterminate {
+  0% { left: -40%; }
+  50% { left: 40%; }
+  100% { left: 100%; }
+}
+.progress-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.step-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 16px 0;
+}
+.step-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-dim);
+  transition: color 0.2s ease;
+}
+.step-item.active {
+  color: var(--text);
+  font-weight: 600;
+}
+.step-item.done {
+  color: var(--ok);
+}
+.step-item.error {
+  color: var(--danger);
+}
+.step-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+.step-item.active .step-icon {
+  border-color: var(--accent);
+  color: #fff;
+  background: var(--accent);
+  box-shadow: 0 0 8px rgba(99, 102, 241, 0.5);
+  animation: pulseStep 1.2s infinite ease-in-out;
+}
+.step-item.done .step-icon {
+  border-color: var(--ok);
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--ok);
+}
+.step-item.error .step-icon {
+  border-color: var(--danger);
+  background: rgba(244, 63, 94, 0.15);
+  color: var(--danger);
+}
+@keyframes pulseStep {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+
+/* ===== 依赖安全审计组件 ===== */
+.sec-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+  margin: 12px 0;
+}
+.sec-stat-box {
+  background: var(--input-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sec-stat-box .sec-num {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.sec-stat-box .sec-label {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.sec-stat-box.safe .sec-num { color: var(--ok); }
+.sec-stat-box.warn .sec-num { color: var(--warn); }
+.sec-stat-box.danger .sec-num { color: var(--danger); }
+.badge-sec-safe {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--ok);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.badge-sec-warn {
+  background: rgba(234, 179, 8, 0.15);
+  color: var(--warn);
+  border: 1px solid rgba(234, 179, 8, 0.3);
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.badge-sec-danger {
+  background: rgba(244, 63, 94, 0.15);
+  color: var(--danger);
+  border: 1px solid rgba(244, 63, 94, 0.3);
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.vuln-item {
+  margin-top: 4px;
+  padding: 6px 8px;
+  background: rgba(244, 63, 94, 0.08);
+  border-left: 3px solid var(--danger);
+  border-radius: 4px;
+  font-size: 11px;
+}
