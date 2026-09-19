@@ -104,12 +104,52 @@ def parse_requirements(filepath: Optional[str] = None) -> List[Dict[str, str]]:
     return results
 
 
+def is_spec_satisfied(installed_ver: Optional[str], spec: str) -> bool:
+    """检查安装版本是否符合 requirements.txt 中的规范要求"""
+    if not installed_ver:
+        return False
+    if not spec or spec == "*":
+        return True
+    try:
+        from packaging.specifiers import SpecifierSet
+        return SpecifierSet(spec).contains(installed_ver)
+    except Exception:
+        pass
+
+    # 备用轻量比较器
+    try:
+        m = re.match(r"^([=><~^!]+)\s*([A-Za-z0-9_\-\.]+)$", spec.strip())
+        if not m:
+            return True
+        op, req_v = m.group(1), m.group(2)
+        v_inst = _parse_version(installed_ver)
+        v_req = _parse_version(req_v)
+        if op in ("==", "==="):
+            return v_inst == v_req
+        elif op == ">=":
+            return v_inst >= v_req
+        elif op == "<=":
+            return v_inst <= v_req
+        elif op == ">":
+            return v_inst > v_req
+        elif op == "<":
+            return v_inst < v_req
+        elif op == "!=":
+            return v_inst != v_req
+        elif op == "~=":
+            return v_inst >= v_req
+    except Exception:
+        pass
+    return True
+
+
 def run_security_audit(req_file: Optional[str] = None) -> Dict[str, Any]:
-    """执行依赖项健康检查与 CVE 漏洞比对，返回完整审计报告"""
+    """执行依赖项健康检查、版本规范符合性与 CVE 漏洞比对，返回完整审计报告"""
     reqs = parse_requirements(req_file)
     packages_report = []
     total_vulns = 0
     missing_count = 0
+    mismatch_count = 0
 
     for item in reqs:
         name = item["name"]
@@ -118,11 +158,14 @@ def run_security_audit(req_file: Optional[str] = None) -> Dict[str, Any]:
 
         matched_vulns = []
         status = "safe"
+        spec_ok = True
 
         if installed_ver is None:
             status = "missing"
+            spec_ok = False
             missing_count += 1
         else:
+            spec_ok = is_spec_satisfied(installed_ver, spec)
             # 比对漏洞库
             for rule in VULNERABILITY_RULES:
                 if rule["package"].lower() == name.lower():
@@ -141,12 +184,16 @@ def run_security_audit(req_file: Optional[str] = None) -> Dict[str, Any]:
             if matched_vulns:
                 status = "vulnerable"
                 total_vulns += len(matched_vulns)
+            elif not spec_ok:
+                status = "mismatch"
+                mismatch_count += 1
 
         packages_report.append({
             "name": name,
             "installed": installed_ver is not None,
             "version": installed_ver or "",
             "spec": spec,
+            "spec_satisfied": spec_ok,
             "status": status,
             "vulnerabilities": matched_vulns,
         })
@@ -154,7 +201,7 @@ def run_security_audit(req_file: Optional[str] = None) -> Dict[str, Any]:
     # 计算总体安全评估等级
     if total_vulns > 0:
         overall_status = "danger" if any(v["severity"] == "high" for p in packages_report for v in p["vulnerabilities"]) else "warning"
-    elif missing_count > 0:
+    elif missing_count > 0 or mismatch_count > 0:
         overall_status = "warning"
     else:
         overall_status = "safe"
@@ -166,6 +213,7 @@ def run_security_audit(req_file: Optional[str] = None) -> Dict[str, Any]:
             "total_packages": len(packages_report),
             "safe_count": sum(1 for p in packages_report if p["status"] == "safe"),
             "vulnerable_count": sum(1 for p in packages_report if p["status"] == "vulnerable"),
+            "mismatch_count": mismatch_count,
             "missing_count": missing_count,
             "total_vulnerabilities": total_vulns,
         },

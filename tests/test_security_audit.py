@@ -138,6 +138,38 @@ custom-pkg
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
 
+    def test_spec_satisfaction(self):
+        """测试版本规范匹配函数 is_spec_satisfied"""
+        from lib.security_audit import is_spec_satisfied
+        self.assertTrue(is_spec_satisfied("12.3.0", "==12.3.0"))
+        self.assertFalse(is_spec_satisfied("12.2.0", "==12.3.0"))
+        self.assertTrue(is_spec_satisfied("12.2.0", ">=12.0.0"))
+        self.assertFalse(is_spec_satisfied("11.9.0", ">=12.0.0"))
+        self.assertTrue(is_spec_satisfied("1.35.0", "*"))
+        self.assertFalse(is_spec_satisfied(None, "==1.0.0"))
+
+    def test_run_security_audit_with_version_mismatch(self):
+        """测试版本不符合要求但无 CVE 漏洞时报告 mismatch 状态"""
+        from lib.security_audit import run_security_audit
+        content = "Pillow==12.3.0\n"
+        with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8", suffix=".txt") as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+
+        try:
+            with patch("lib.security_audit.get_installed_version", return_value="12.2.0"):
+                report = run_security_audit(tmp_path)
+                self.assertTrue(report["ok"])
+                self.assertEqual(report["status"], "warning")
+                self.assertEqual(report["summary"]["mismatch_count"], 1)
+                self.assertEqual(report["summary"]["safe_count"], 0)
+                pillow_info = report["packages"][0]
+                self.assertEqual(pillow_info["status"], "mismatch")
+                self.assertFalse(pillow_info["spec_satisfied"])
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
     def test_real_project_requirements_audit(self):
         """对实际项目 requirements.txt 运行审计，确保不崩溃且环境信息健全"""
         report = run_security_audit()

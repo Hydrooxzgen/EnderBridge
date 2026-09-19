@@ -328,6 +328,8 @@ function loadSecurityAudit() {
             statusHtml = '<span class="badge-sec-safe">✔ ' + t("sec.badgeSafe") + '</span>';
           } else if (pkg.status === "missing") {
             statusHtml = '<span class="badge-sec-warn">✖ ' + t("sec.badgeMissing") + '</span>';
+          } else if (pkg.status === "mismatch") {
+            statusHtml = '<span class="badge-sec-warn">⚠ ' + t("sec.badgeMismatch") + '</span>';
           } else {
             statusHtml = '<span class="badge-sec-danger">⚠ ' + t("sec.badgeVuln") + '</span>';
           }
@@ -345,9 +347,16 @@ function loadSecurityAudit() {
                 '</div>';
             });
           } else if (pkg.status === "missing") {
-            detailHtml = '<span class="muted" style="font-size:12px;">未在当前环境安装此依赖 (pip install ' + escapeHtml(pkg.name) + ')</span>';
+            detailHtml = '<span class="muted" style="font-size:12px;">' + t("sec.missingTip") + ' (<code>pip install ' + escapeHtml(pkg.name) + '</code>)</span>';
+          } else if (pkg.status === "mismatch") {
+            var targetSpec = (pkg.spec && pkg.spec !== "*") ? pkg.spec : "";
+            var installCmd = "pip install " + pkg.name + targetSpec;
+            detailHtml = '<div style="color:var(--warn, #f59e0b);font-size:12px;font-weight:500;">⚠ ' +
+              escapeHtml(t("sec.mismatchTip").replace("{ver}", pkg.version).replace("{spec}", pkg.spec)) +
+              '<div style="margin-top:2px;" class="muted">💡 ' + t("sec.mismatchAction") + ': <code style="color:var(--text);">' + escapeHtml(installCmd) + '</code></div>' +
+              '</div>';
           } else {
-            detailHtml = '<span class="muted" style="color:var(--ok);font-size:12px;">✔ 符合安全基线规范</span>';
+            detailHtml = '<span class="muted" style="color:var(--ok);font-size:12px;">✔ ' + t("sec.safeBaseline") + '</span>';
           }
 
           var instVer = pkg.installed ? '<code>' + escapeHtml(pkg.version) + '</code>' : '<span class="muted">-</span>';
