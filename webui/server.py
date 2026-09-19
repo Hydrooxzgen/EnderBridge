@@ -877,6 +877,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if path == "/api/logs/stream":
             self._api_logs_stream()
             return
+        if path == "/api/ws/console":
+            self._handle_ws_console()
+            return
         if path == "/api/auth/me":
             self._api_auth_me()
             return
@@ -2428,6 +2431,164 @@ class WebUIHandler(BaseHTTPRequestHandler):
             finally:
                 _live_log.unsubscribe(_on_log)
         except (ConnectionAbortedError, BrokenPipeError, OSError):
+            pass
+
+    def _handle_ws_console(self) -> None:
+        """WebSocket 实时双向控制台 (需要 console 权限)
+
+        握手后完成：
+        1. 初始下发最近 50 条历史日志 {"type": "history", "logs": [...]}
+        2. 实时推送新日志 {"type": "log", "record": {...}}
+        3. 双向接收客户端执行命令请求 {"type": "command", "command": "...", "id": "..."} 并返回结果
+        4. 自动心跳保持与异常断开安全回收
+        """
+        if not _require_permission("console")(self):
+            return
+        sec_key = self.headers.get("Sec-WebSocket-Key", "").strip()
+        if not sec_key:
+            self._respond({"ok": False, "message": "缺少 Sec-WebSocket-Key 请求头"}, status=400)
+            return
+
+        try:
+            from webui.websocket import (
+                compute_accept_key,
+                WebSocketConnection,
+                read_frame,
+                OP_TEXT,
+                OP_PING,
+                OP_PONG,
+                OP_CLOSE,
+            )
+            accept_val = compute_accept_key(sec_key)
+            self.send_response(101, "Switching Protocols")
+            self.send_header("Upgrade", "websocket")
+            self.send_header("Connection", "Upgrade")
+            self.send_header("Sec-WebSocket-Accept", accept_val)
+            self.end_headers()
+            self.wfile.flush()
+            self.close_connection = True
+
+            ws = WebSocketConnection(self.request)
+            from lib.logger import _live_log
+
+            # 1) 下发历史日志
+            recent = _live_log.get_recent(50)
+            ws.send_json({"type": "history", "logs": recent})
+
+            # 2) 订阅实时日志
+            def _on_log(record):
+                if not ws.is_closed:
+                    try:
+                        ws.send_json({"type": "log", "record": record})
+                    except Exception:
+                        pass
+
+            _live_log.subscribe(_on_log)
+
+            # 3) 消息循环
+            self.request.settimeout(1.0)
+            last_ping_time = time.time()
+
+            try:
+                while not ws.is_closed:
+                    now = time.time()
+                    if now - last_ping_time >= 15.0:
+                        ws.send_ping()
+                        last_ping_time = now
+
+                    try:
+                        opcode, payload = read_frame(self.request)
+                    except socket.timeout:
+                        continue
+                    except (EOFError, ConnectionResetError, BrokenPipeError, OSError):
+                        break
+
+                    if opcode == OP_CLOSE:
+                        ws.send_close()
+                        break
+                    elif opcode == OP_PING:
+                        ws.send_pong(payload)
+                    elif opcode == OP_PONG:
+                        pass
+                    elif opcode == OP_TEXT:
+                        try:
+                            msg_text = payload.decode("utf-8")
+                            data = json.loads(msg_text)
+                        except Exception:
+                            continue
+
+                        msg_type = data.get("type")
+                        if msg_type == "ping":
+                            ws.send_json({"type": "pong"})
+                        elif msg_type == "command":
+                            command = data.get("command", "").strip()
+                            req_id = data.get("id")
+
+                            user = _auth_user(self)
+                            if user.get("is_guest") or "console" not in user.get("permissions", []):
+                                ws.send_json({
+                                    "type": "cmd-result",
+                                    "id": req_id,
+                                    "ok": False,
+                                    "message": "无命令执行权限",
+                                })
+                                continue
+
+                            if not command:
+                                ws.send_json({
+                                    "type": "cmd-result",
+                                    "id": req_id,
+                                    "ok": False,
+                                    "message": "缺少 command 参数",
+                                })
+                                continue
+
+                            if _event_loop is None or _event_loop.is_closed():
+                                ws.send_json({
+                                    "type": "cmd-result",
+                                    "id": req_id,
+                                    "ok": False,
+                                    "message": "事件循环未就绪,请稍后重试",
+                                })
+                                continue
+
+                            try:
+                                from lib.current import Current
+                                client = Current.client
+                                if client is None:
+                                    ws.send_json({
+                                        "type": "cmd-result",
+                                        "id": req_id,
+                                        "ok": False,
+                                        "message": "无客户端连接",
+                                    })
+                                    continue
+
+                                import asyncio
+                                fut = asyncio.run_coroutine_threadsafe(
+                                    client.runCommand(command), _event_loop
+                                )
+                                result = fut.result(timeout=15)
+                                body_data = result.get("body", {}) if isinstance(result, dict) else {}
+                                ws.send_json({
+                                    "type": "cmd-result",
+                                    "id": req_id,
+                                    "ok": True,
+                                    "statusCode": body_data.get("statusCode"),
+                                    "statusMessage": body_data.get("statusMessage"),
+                                })
+                                _audit(self, "command", f"执行了命令: {command}")
+                            except Exception as e:
+                                ws.send_json({
+                                    "type": "cmd-result",
+                                    "id": req_id,
+                                    "ok": False,
+                                    "message": f"命令执行失败: {e}",
+                                })
+            finally:
+                _live_log.unsubscribe(_on_log)
+                ws.close()
+        except (ConnectionAbortedError, BrokenPipeError, ConnectionResetError, OSError):
             pass
 
 

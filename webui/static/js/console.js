@@ -2,7 +2,11 @@
 var _logLines = [];
 var MAX_LOG_LINES = 1000;
 var _logPaused = false;
+var _logWS = null;
 var _logSSE = null;
+var _wsRetryCount = 0;
+var _wsRetryTimer = null;
+var _pendingCommands = {};
 var _logAutoScroll = true;
 var _logLevelFilter = "all";
 var _logConnected = false;
@@ -114,16 +118,29 @@ function updateLogCount() {
   if (el) el.textContent = _logLines.length + t("console.countSuffix");
 }
 
-function updateLogStatus(connected) {
+function updateLogStatus(connected, mode) {
   _logConnected = connected;
   var el = $("logStatus");
   if (!el) return;
   if (connected) {
-    el.textContent = t("console.connected");
-    el.style.color = "#4ade80";
+    if (mode === "ws") {
+      el.textContent = t("console.connectedWs");
+      el.style.color = "#4ade80";
+    } else if (mode === "sse") {
+      el.textContent = t("console.connectedSse");
+      el.style.color = "#38bdf8";
+    } else {
+      el.textContent = t("console.connected");
+      el.style.color = "#4ade80";
+    }
   } else {
-    el.textContent = t("console.disconnected");
-    el.style.color = "#f87171";
+    if (mode === "reconnecting") {
+      el.textContent = t("console.reconnecting");
+      el.style.color = "#fbbf24";
+    } else {
+      el.textContent = t("console.disconnected");
+      el.style.color = "#f87171";
+    }
   }
 }
 
@@ -131,7 +148,22 @@ function nowTs() {
   return new Date().toLocaleTimeString("zh-CN");
 }
 
-// ===== 命令发送(结果插入统一终端) =====
+// ===== 命令发送(优先 WebSocket，失败回退 HTTP POST) =====
+
+function _handleCmdResult(data) {
+  var reqId = data.id;
+  var callback = _pendingCommands[reqId];
+  if (callback) {
+    delete _pendingCommands[reqId];
+    if (callback.timer) clearTimeout(callback.timer);
+    callback.fn(data);
+  } else {
+    var ok = data.ok !== false;
+    var msg = data.statusMessage || (ok ? t("console.noReturn") : (data.message || t("console.execFail")));
+    var code = data.statusCode !== undefined ? " [" + data.statusCode + "]" : "";
+    addEntry({ _type: "cmd-result", _ts: nowTs(), _ok: ok, _text: msg + code });
+  }
+}
 
 function sendCommand() {
   var input = $("consoleInput");
@@ -144,9 +176,49 @@ function sendCommand() {
   addEntry({ _type: "cmd", _ts: nowTs(), _text: "> " + cmd });
   var execBtn = $("consoleExecBtn");
   if (execBtn) { execBtn.disabled = true; execBtn.textContent = t("console.execing"); }
+
+  function onDone() {
+    if (execBtn) { execBtn.disabled = false; execBtn.textContent = t("console.exec"); }
+  }
+
+  // 1) 优先使用已连接的 WebSocket 通道
+  if (_logWS && _logWS.readyState === WebSocket.OPEN) {
+    var reqId = "c_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5);
+    var timer = setTimeout(function () {
+      if (_pendingCommands[reqId]) {
+        delete _pendingCommands[reqId];
+        onDone();
+        addEntry({ _type: "cmd-result", _ts: nowTs(), _ok: false, _text: t("console.netFail") });
+      }
+    }, 15000);
+
+    _pendingCommands[reqId] = {
+      timer: timer,
+      fn: function (data) {
+        onDone();
+        if (!data.ok) {
+          addEntry({ _type: "cmd-result", _ts: nowTs(), _ok: false, _text: data.message || t("console.execFail") });
+        } else {
+          var msg = data.statusMessage || t("console.noReturn");
+          var code = data.statusCode !== undefined ? " [" + data.statusCode + "]" : "";
+          addEntry({ _type: "cmd-result", _ts: nowTs(), _ok: true, _text: msg + code });
+        }
+      }
+    };
+
+    try {
+      _logWS.send(JSON.stringify({ type: "command", command: cmd, id: reqId }));
+      return;
+    } catch (e) {
+      delete _pendingCommands[reqId];
+      clearTimeout(timer);
+    }
+  }
+
+  // 2) 回退 HTTP POST /api/console
   api("/console", { method: "POST", body: JSON.stringify({ command: cmd }) })
     .then(function (data) {
-      if (execBtn) { execBtn.disabled = false; execBtn.textContent = t("console.exec"); }
+      onDone();
       if (!data.ok) {
         addEntry({ _type: "cmd-result", _ts: nowTs(), _ok: false, _text: data.message || t("console.execFail") });
       } else {
@@ -156,44 +228,115 @@ function sendCommand() {
       }
     })
     .catch(function () {
-      if (execBtn) { execBtn.disabled = false; execBtn.textContent = t("console.exec"); }
+      onDone();
       addEntry({ _type: "cmd-result", _ts: nowTs(), _ok: false, _text: t("console.netFail") });
     });
 }
 
-// ===== SSE 实时日志流 =====
+// ===== WebSocket 实时推流 (含 SSE 自动降级) =====
 
 function connectLogStream() {
+  if (_logWS) {
+    _logWS.onclose = null;
+    _logWS.onerror = null;
+    _logWS.close();
+    _logWS = null;
+  }
+  if (_logSSE) {
+    _logSSE.close();
+    _logSSE = null;
+  }
+  if (_wsRetryTimer) {
+    clearTimeout(_wsRetryTimer);
+    _wsRetryTimer = null;
+  }
+
+  var role = sessionStorage.getItem(ROLE_KEY) || "";
+  var token = sessionStorage.getItem(TOKEN_KEY) || "";
+  var q = "";
+  if (role === "guest") {
+    q = "?guest=1";
+  } else if (token) {
+    q = "?token=" + encodeURIComponent(token);
+  }
+
+  // 若支持 WebSocket 且未超重试上限，优先使用 WebSocket
+  if (window.WebSocket && _wsRetryCount < 3) {
+    var proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+    var wsUrl = proto + "//" + window.location.host + "/api/ws/console" + q;
+
+    try {
+      updateLogStatus(false, "reconnecting");
+      _logWS = new WebSocket(wsUrl);
+
+      _logWS.onopen = function () {
+        _wsRetryCount = 0;
+        updateLogStatus(true, "ws");
+      };
+
+      _logWS.onmessage = function (e) {
+        try {
+          var data = JSON.parse(e.data);
+          if (data.type === "history" && Array.isArray(data.logs)) {
+            _logLines = data.logs;
+            renderAll();
+          } else if (data.type === "log" && data.record) {
+            addEntry(data.record);
+          } else if (data.type === "cmd-result") {
+            _handleCmdResult(data);
+          } else if (data.level && data.message) {
+            addEntry(data);
+          }
+        } catch (err) {}
+      };
+
+      _logWS.onerror = function () {};
+
+      _logWS.onclose = function () {
+        _logWS = null;
+        _wsRetryCount++;
+        if (_wsRetryCount >= 3) {
+          // 连续失败 3 次，无缝降级到 SSE
+          _fallbackToSSE(q);
+        } else {
+          updateLogStatus(false, "reconnecting");
+          var delay = Math.min(2000 * Math.pow(2, _wsRetryCount - 1), 8000);
+          _wsRetryTimer = setTimeout(connectLogStream, delay);
+        }
+      };
+      return;
+    } catch (e) {
+      // 实例化异常直接降级
+    }
+  }
+
+  _fallbackToSSE(q);
+}
+
+function _fallbackToSSE(q) {
   if (_logSSE) { _logSSE.close(); _logSSE = null; }
-  // 先加载历史
+  // 加载最近历史
   api("/logs/recent?limit=200").then(function (data) {
     if (data.ok && data.logs) {
       _logLines = data.logs;
       renderAll();
     }
   }).catch(function () {});
-  // 建立 SSE 连接(EventSource 不支持自定义头,token 通过查询参数传递)
-  var role = sessionStorage.getItem(ROLE_KEY) || "";
-  var token = sessionStorage.getItem(TOKEN_KEY) || "";
-  var url = "/api/logs/stream";
-  if (role === "guest") {
-    url += "?guest=1";
-  } else if (token) {
-    url += "?token=" + encodeURIComponent(token);
-  }
+
+  var url = "/api/logs/stream" + q;
   _logSSE = new EventSource(url);
   _logSSE.onmessage = function (e) {
     try {
       var record = JSON.parse(e.data);
       addEntry(record);
-      updateLogStatus(true);
+      updateLogStatus(true, "sse");
     } catch (err) {}
   };
   _logSSE.onerror = function () {
     updateLogStatus(false);
   };
   _logSSE.onopen = function () {
-    updateLogStatus(true);
+    updateLogStatus(true, "sse");
   };
 }
 

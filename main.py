@@ -40,6 +40,7 @@ feat4: 更新安装与上传进度反馈
 feat5: Banlist 批量操作
 feat6: 审计日志一键导出
 safe_feat: 依赖安全态势检测与已知cve漏洞告警
+feat7: webui控制台改为websocket连接
 """
 MINIMIUM_ALLOWED_VERSION = "b0.4.0" # 因为b0.4.0版本大量重写了账户登录逻辑, 所以, 设置了拒绝降级到b0.4.0-的版本
                                     # 但是如果你需要降级低于b0.4.0的版本，请更改这里的值为b0.0.0以删除限制
@@ -112,7 +113,7 @@ def _check_minimum_version(new_version: str) -> None:
         if new_ver < min_ver:
             _update_err(
                 f"目标版本 {new_version} 低于最低允许版本 {MINIMIUM_ALLOWED_VERSION},\n"
-                f"  不允许降级"
+                f"操作终止"
             )
     except Exception:
         pass  # 版本格式异常时跳过检查,不阻塞升级
