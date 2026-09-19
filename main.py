@@ -25,9 +25,10 @@ USERS_JSON = os.path.join(CONFIG_DIR, "users.json")
 UPDATE_MARKER = os.path.join(ROOT, ".update_pending")
 
 # --- 版本常量 ---
-VERSION = "b0.4.2 dev"
+VERSION = "b0.4.2"
 # ↓仅当不为None时从Github拉取更新日志, 反之则直接显示该变量内容。
-DESCRIPTION = """
+DESCRIPTION = None
+"""
 safefix1: 修复了14个漏洞
 codechange1: 把update/export等逻辑放入version_manager中
 feat1: rollback功能,可回滚到指定备份包
