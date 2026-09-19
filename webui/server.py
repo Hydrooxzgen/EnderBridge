@@ -1881,8 +1881,8 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if not _require_permission("config")(self):
             return
         body = self._read_body()
-        if not body or "config" not in body:
-            self._respond({"ok": False, "message": "请求数据格式错误"})
+        if not body or "config" not in body or not isinstance(body.get("config"), dict):
+            self._respond({"ok": False, "message": "请求数据格式错误: config 必须为 JSON 对象"})
             return
         # 保存前记录 localOnly 和 port 状态
         _old_cfg = _load_config_module().get("webuiConfig", {})

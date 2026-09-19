@@ -42,6 +42,7 @@ feat6: 审计日志一键导出
 safe_feat: 依赖安全态势检测与已知cve漏洞告警
 feat7: webui控制台改为websocket连接
 feat8: mod界面搜索功能
+feat9: 配置文件保存前json语法校验与行号定位
 """
 MINIMIUM_ALLOWED_VERSION = "b0.4.0" # 因为b0.4.0版本大量重写了账户登录逻辑, 所以, 设置了拒绝降级到b0.4.0-的版本
                                     # 但是如果你需要降级低于b0.4.0的版本，请更改这里的值为b0.0.0以删除限制

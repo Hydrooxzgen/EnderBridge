@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -34,6 +34,9 @@
       </div>
       <div class="cfg-sidebar-item" data-cfg-cat="resources">
         <span class="icon">📂</span><span class="label-text" data-i18n="cfg.catResources">资源路径</span>
+      </div>
+      <div class="cfg-sidebar-item" data-cfg-cat="raw">
+        <span class="icon">📝</span><span class="label-text" data-i18n="cfg.catRaw">高级 JSON</span>
       </div>
     </div>
 
@@ -473,6 +476,48 @@
             <div class="cfg-field">
               <label data-i18n="cfg.resImage">🖼️ image 路径</label>
               <input id="cfg-path-image" class="cfg-input" data-i18n-ph="cfg.resImagePh" placeholder="留空则使用默认 resources/pictures" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== 高级 JSON 配置 (Raw JSON) ===== -->
+      <div class="cfg-category" data-cfg-cat="raw">
+        <div class="cfg-section">
+          <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
+            <h3 data-i18n="cfg.rawTitle" style="margin:0;">📝 高级 JSON 源码配置</h3>
+            <div class="row gap-10" style="flex-wrap:wrap;">
+              <button type="button" class="btn btn-sm" id="cfgJsonFormatBtn" data-i18n="cfg.jsonFormat">✨ 格式化</button>
+              <button type="button" class="btn btn-sm" id="cfgJsonSyncFromFormBtn" data-i18n="cfg.jsonSyncFromForm">🔄 从表单同步</button>
+              <button type="button" class="btn btn-sm" id="cfgJsonCopyBtn" data-i18n="cfg.jsonCopy">📋 复制</button>
+            </div>
+          </div>
+          <p class="hint" data-i18n="cfg.rawHint" style="margin-bottom:12px;">直接查看并编辑 <code>config.json</code> 完整结构。保存前将自动执行精确语法校验并定位错误行号，防止因语法损坏导致服务器崩溃。</p>
+
+          <!-- 错误提示横幅 (语法错误时动态展现) -->
+          <div id="cfgJsonErrorBanner" style="display:none;margin-bottom:12px;padding:12px 14px;border-radius:8px;background:rgba(244,63,94,0.12);border-left:4px solid var(--danger);">
+            <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px;">
+              <span style="font-weight:700;color:var(--danger);" id="cfgJsonErrorTitle">❌ JSON 语法错误</span>
+              <button type="button" class="btn btn-sm btn-danger" id="cfgJsonGotoErrorBtn" style="padding:2px 8px;font-size:12px;" data-i18n="cfg.jsonGotoError">📍 定位到出错行</button>
+            </div>
+            <div style="font-size:12px;color:var(--text);margin-bottom:6px;" id="cfgJsonErrorMsg"></div>
+            <pre id="cfgJsonErrorSnippet" style="margin:0;padding:8px 10px;background:rgba(0,0,0,0.3);border-radius:4px;font-size:12px;font-family:'Cascadia Code',Consolas,monospace;color:#fca5a5;overflow-x:auto;"></pre>
+          </div>
+
+          <!-- 编辑器文本域 -->
+          <div style="position:relative;">
+            <textarea id="cfgRawJsonEditor" style="width:100%;min-height:500px;font-family:'Cascadia Code',Consolas,monospace;font-size:13px;line-height:1.5;padding:12px;border:1px solid var(--card-border);border-radius:8px;background:var(--input-bg);color:var(--text);resize:vertical;white-space:pre;tab-size:2;" spellcheck="false" autocomplete="off"></textarea>
+          </div>
+
+          <!-- 底部状态指示栏 -->
+          <div class="row" style="justify-content:space-between;align-items:center;margin-top:8px;font-size:12px;color:var(--text-dim);">
+            <div>
+              <span id="cfgJsonValidationBadge" class="badge-sec-safe">✔ 语法有效</span>
+            </div>
+            <div>
+              <span id="cfgJsonLineColInfo">第 1 行, 第 1 列</span>
+              <span style="margin:0 6px;">|</span>
+              <span id="cfgJsonTotalLines">共 0 行</span>
             </div>
           </div>
         </div>
