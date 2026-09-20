@@ -25,25 +25,10 @@ USERS_JSON = os.path.join(CONFIG_DIR, "users.json")
 UPDATE_MARKER = os.path.join(ROOT, ".update_pending")
 
 # --- 版本常量 ---
-VERSION = "b0.4.2"
+VERSION = "b0.4.3 dev"
 # ↓仅当不为None时从Github拉取更新日志, 反之则直接显示该变量内容。
-DESCRIPTION = None
-"""
-safefix1: 修复了14个漏洞
-codechange1: 把update/export等逻辑放入version_manager中
-feat1: rollback功能,可回滚到指定备份包
-fix1: 日志轮转防撑爆磁盘
-feat2: 多语言支持
-feat1-1: webui rollback入口
-fix2: 完整的中英双语显示
-feat3: console界面支持↑/↓键的历史命令切换
-feat4: 更新安装与上传进度反馈
-feat5: Banlist 批量操作
-feat6: 审计日志一键导出
-safe_feat: 依赖安全态势检测与已知cve漏洞告警
-feat7: webui控制台改为websocket连接
-feat8: mod界面搜索功能
-feat9: 配置文件保存前json语法校验与行号定位
+DESCRIPTION = """
+feat1: WebUI 实时性能监控仪表盘
 """
 MINIMIUM_ALLOWED_VERSION = "b0.4.0" # 因为b0.4.0版本大量重写了账户登录逻辑, 所以, 设置了拒绝降级到b0.4.0-的版本
                                     # 但是如果你需要降级低于b0.4.0的版本，请更改这里的值为b0.0.0以删除限制
@@ -984,6 +969,11 @@ async def connection_handler(ws):
     async def message_loop():
         nonlocal client_mod, initialized
         async for message in ws:
+            try:
+                from lib.sys_metrics import metrics_collector
+                metrics_collector.record_message()
+            except Exception:
+                pass
             if not initialized or conn.utils is None:
                 continue
             # 仅 JSON 解析需捕获,非 JSON 消息直接忽略

@@ -829,6 +829,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if path == "/api/status":
             self._api_status()
             return
+        if path == "/api/performance":
+            self._api_performance()
+            return
         if path == "/api/release-notes":
             self._api_release_notes()
             return
@@ -1505,6 +1508,12 @@ class WebUIHandler(BaseHTTPRequestHandler):
                 extra = _status_provider() or {}
             except Exception:
                 extra = {}
+        metrics = {}
+        try:
+            from lib.sys_metrics import metrics_collector
+            metrics = metrics_collector.get_snapshot().get("current", {})
+        except Exception:
+            metrics = {}
         self._respond({
             "ok": True,
             "name": cfg.get("name", "EnderBridge"),
@@ -1515,7 +1524,16 @@ class WebUIHandler(BaseHTTPRequestHandler):
             "players": extra.get("players", []),
             "version": _app_version or "EnderBridge",
             "systemMode": _system_mode,
+            "metrics": metrics,
         })
+
+    def _api_performance(self) -> None:
+        """获取系统资源与 WebSocket 性能指标(实时当前值与 60s 时序历史)"""
+        try:
+            from lib.sys_metrics import metrics_collector
+            self._respond(metrics_collector.get_snapshot())
+        except Exception as e:
+            self._respond({"ok": False, "message": str(e)})
 
     def _api_release_notes(self) -> None:
         """获取 Release Notes:优先使用 main.py 注入的 DESCRIPTION,否则从 GitHub API 拉取"""
@@ -2704,12 +2722,22 @@ def start_webui() -> WebUIServer:
     from lib import shared
     bind_desc = "仅本机" if local_only else "所有接口"
     shared.logger.info(f"Web 管理界面已启动: http://127.0.0.1:{_instance.port} ({bind_desc})")
+    try:
+        from lib.sys_metrics import metrics_collector
+        metrics_collector.start()
+    except Exception:
+        pass
     return _instance
 
 
 def stop_webui() -> None:
     """停止 Web 管理服务器(置空实例,支持热重启后再次启动) """
     global _instance
+    try:
+        from lib.sys_metrics import metrics_collector
+        metrics_collector.stop()
+    except Exception:
+        pass
     if _instance:
         _instance.stop()
         _instance = None
