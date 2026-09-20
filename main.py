@@ -29,6 +29,7 @@ VERSION = "b0.4.3 dev"
 # ↓仅当不为None时从Github拉取更新日志, 反之则直接显示该变量内容。
 DESCRIPTION = """
 feat1: WebUI 实时性能监控仪表盘
+feat2: 现在可以设置更新时是否自动备份
 """
 MINIMIUM_ALLOWED_VERSION = "b0.4.0" # 因为b0.4.0版本大量重写了账户登录逻辑, 所以, 设置了拒绝降级到b0.4.0-的版本
                                     # 但是如果你需要降级低于b0.4.0的版本，请更改这里的值为b0.0.0以删除限制
@@ -217,7 +218,7 @@ if WANT_HELP:
     print()
     print("命令:")
     print("  (无参数)              正常启动服务器")
-    print("  update <压缩包>       一键升级(保留配置,自动备份)")
+    print("  update <压缩包>       一键升级(保留配置,默认自动备份)")
     print("  export [输出路径]     一键导出为zip")
     print("  --rollback [备份包]   回滚到指定备份(默认最新)")
     print()
@@ -228,14 +229,16 @@ if WANT_HELP:
     print("  --load-without-config 跳过配置直接启动(调试用)")
     print("  --system              启用系统保留账户模式")
     print("  --goto-oobe           重新进入配置向导(保留当前配置)")
+    print("  --bypass-backup       配合 update 命令使用,跳过更新前自动备份")
     print()
     print("示例:")
-    print("  python main.py                           启动服务器")
-    print("  python main.py update update.zip         从压缩包升级")
-    print("  python main.py export                    导出为zip")
-    print("  python main.py export D:/backup/eb.zip   导出到指定路径")
-    print("  python main.py --reset-all               重置所有配置")
-    print("  python main.py --version                 查看版本")
+    print("  python main.py                                      启动服务器")
+    print("  python main.py update update.zip                    从压缩包升级")
+    print("  python main.py update update.zip --bypass-backup    跳过备份直接升级")
+    print("  python main.py export                               导出为zip")
+    print("  python main.py export D:/backup/eb.zip              导出到指定路径")
+    print("  python main.py --reset-all                          重置所有配置")
+    print("  python main.py --version                            查看版本")
     sys.exit(0)
 
 # ===== 回滚:python main.py --rollback [备份包] =====
@@ -317,7 +320,7 @@ if WANT_UPDATE:
         except PackageError as e:
             _update_err(str(e))
 
-    def _do_update(archive, new_version=None):
+    def _do_update(archive, new_version=None, auto_backup=True):
         if not os.path.isfile(archive):
             _update_err(f"找不到压缩包: {archive}")
 
@@ -355,11 +358,14 @@ if WANT_UPDATE:
                 pass
 
         # 1.6 更新前自动备份(失败则中止,不动现有文件)
-        try:
-            backup_path = backup_dir(ROOT)
-        except PackageError as e:
-            _update_err(str(e))
-        print(f"  已备份当前版本: {backup_path}")
+        if auto_backup:
+            try:
+                backup_path = backup_dir(ROOT)
+            except PackageError as e:
+                _update_err(str(e))
+            print(f"  已备份当前版本: {backup_path}")
+        else:
+            print("  [提示] 已跳过更新前自动备份")
 
         # 2-4. 解压到临时目录(跳过数据区,模板放行) → 校验 → 覆盖到项目根目录
         try:
@@ -596,23 +602,39 @@ if WANT_UPDATE:
             _update_err(f"下载失败: {e}")
 
     # update 命令解析
+    bypass_backup = "--bypass-backup" in sys.argv
+    cfg_auto_backup = True
+    try:
+        if os.path.exists(CONFIG_JSON):
+            with open(CONFIG_JSON, "r", encoding="utf-8") as f:
+                _c = json.load(f)
+                cfg_auto_backup = bool((_c.get("updateConfig") or {}).get("autoBackup", True))
+    except Exception:
+        pass
+
+    should_backup = (not bypass_backup) and cfg_auto_backup
+
+    upd_pos = sys.argv.index("update")
+    pos_args = [a for a in sys.argv[upd_pos + 1:] if not a.startswith("--")]
+
     if "--local" in sys.argv:
-        # 本地更新:py main.py update --local <压缩包>
+        # 本地更新:py main.py update --local <压缩包> [--bypass-backup]
         idx = sys.argv.index("--local")
-        if len(sys.argv) > idx + 1:
-            _do_update(sys.argv[idx + 1])
+        local_args = [a for a in sys.argv[idx + 1:] if not a.startswith("--")]
+        if local_args:
+            _do_update(local_args[0], auto_backup=should_backup)
         else:
-            _update_err("用法: python main.py update --local <新版本压缩包路径>")
+            _update_err("用法: python main.py update --local <新版本压缩包路径> [--bypass-backup]")
     elif "--online" in sys.argv:
         idx = sys.argv.index("--online")
-        rest = sys.argv[idx + 1:]
+        rest = [a for a in sys.argv[idx + 1:] if not a.startswith("--")]
 
         if rest and rest[0].lower() == "commit":
-            # commit 模式:py main.py update --online commit [HEAD|commitID]
+            # commit 模式:py main.py update --online commit [HEAD|commitID] [--bypass-backup]
             ref = rest[1] if len(rest) > 1 else None
             dl_path, new_ver = _download_commit(ref)  # type: ignore[misc]
             try:
-                _do_update(dl_path, new_version=new_ver)
+                _do_update(dl_path, new_version=new_ver, auto_backup=should_backup)
             finally:
                 try:
                     if dl_path:
@@ -620,7 +642,7 @@ if WANT_UPDATE:
                 except Exception:
                     pass
         else:
-            # release 模式:py main.py update --online [release] [版本号]
+            # release 模式:py main.py update --online [release] [版本号] [--bypass-backup]
             tag = None
             if rest:
                 if rest[0].lower() == "release":
@@ -630,21 +652,21 @@ if WANT_UPDATE:
                     tag = rest[0]
             dl_path = _download_release(tag)
             try:
-                _do_update(dl_path, new_version=tag)
+                _do_update(dl_path, new_version=tag, auto_backup=should_backup)
             finally:
                 try:
                     if dl_path:
                         os.unlink(dl_path)
                 except Exception:
                     pass
-    elif len(sys.argv) > sys.argv.index("update") + 1:
-        # 无标志但有参数:py main.py update <压缩包> → 当作 --local
-        _do_update(sys.argv[sys.argv.index("update") + 1])
+    elif pos_args:
+        # 无标志但有参数:py main.py update <压缩包> [--bypass-backup] → 当作 --local
+        _do_update(pos_args[0], auto_backup=should_backup)
     else:
         # 无参数:默认从 GitHub 下载最新 release
         dl_path = _download_release()
         try:
-            _do_update(dl_path)
+            _do_update(dl_path, auto_backup=should_backup)
         finally:
             try:
                 if dl_path:
@@ -675,8 +697,22 @@ if os.path.isfile(UPDATE_MARKER) and not WANT_UPDATE:
 
         try:
             try:
-                backup_path = backup_dir(ROOT)
-                print(f"  已备份当前版本: {backup_path}")
+                # 检查配置判断是否自动备份
+                do_backup = True
+                try:
+                    if os.path.exists(CONFIG_JSON):
+                        with open(CONFIG_JSON, "r", encoding="utf-8") as f:
+                            _cfg = json.load(f)
+                            do_backup = bool((_cfg.get("updateConfig") or {}).get("autoBackup", True))
+                except Exception:
+                    pass
+
+                if do_backup:
+                    backup_path = backup_dir(ROOT)
+                    print(f"  已备份当前版本: {backup_path}")
+                else:
+                    print("  [提示] 根据配置已跳过更新前自动备份 (updateConfig.autoBackup = false)")
+
                 copied = apply_archive(pending_path, ROOT)
             except PackageError as e:
                 print(f"  更新失败: {e}")

@@ -442,6 +442,15 @@
           </div>
         </div>
 
+        <div class="cfg-section" id="cfgCardUpdate">
+          <h3 data-i18n="cfg.updTitle">🔄 更新与自动备份</h3>
+          <div class="cfg-switch">
+            <label class="switch"><input type="checkbox" id="cfg-autobackup" checked><span class="track"></span></label>
+            <span class="switch-label" data-i18n="cfg.updAutoBackup">更新前自动备份 (updateConfig.autoBackup)</span>
+          </div>
+          <p class="hint" data-i18n="cfg.updAutoBackupHint">在 WebUI 或命令行更新升级前自动备份当前版本（保留最近 3 个历史备份），便于出现异常时一键回滚。关闭后将跳过备份直接覆盖。</p>
+        </div>
+
         <div class="cfg-section">
           <h3 data-i18n="cfg.ghTitle">🔗 GitHub API Token</h3>
           <div class="cfg-grid">

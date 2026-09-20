@@ -144,6 +144,11 @@ function loadConfig() {
     $("cfg-weblockal").checked = webui.localOnly === true || webui.localOnly === "true";
     toggleSub("webuiFields", $("cfg-webui").checked);
 
+    var upd = data.config.updateConfig || {};
+    if ($("cfg-autobackup")) {
+      $("cfg-autobackup").checked = upd.autoBackup !== false;
+    }
+
     $("cfg-github-token").value = data.config.githubToken || "";
 
     var ai = data.config.ai || {};
@@ -626,6 +631,9 @@ function collectFormConfig() {
     messageConfig: { announcements: announce },
     commandAliases: cfgData.commandAliases || {},
     playerListPolling: plp,
+    updateConfig: {
+      autoBackup: $("cfg-autobackup") ? $("cfg-autobackup").checked : true,
+    },
   };
 }
 

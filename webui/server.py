@@ -407,6 +407,7 @@ def load_config() -> dict:
         "githubToken": config.get("githubToken", ""),
         "commandAliases": command_aliases,
         "playerListPolling": config.get("playerListPolling", {"enabled": False, "intervalSeconds": 30}),
+        "updateConfig": config.get("updateConfig", {"autoBackup": True}),
     }
 
 
@@ -559,6 +560,12 @@ def save_config(new: dict) -> None:
     config["playerListPolling"] = {
         "enabled": bool(plp.get("enabled", False)),
         "intervalSeconds": int(plp.get("intervalSeconds", 30)),
+    }
+
+    # 更新与备份设置
+    upd = new.get("updateConfig") or {}
+    config["updateConfig"] = {
+        "autoBackup": bool(upd.get("autoBackup", True)),
     }
 
     # 版本信息
