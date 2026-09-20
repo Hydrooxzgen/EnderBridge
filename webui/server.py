@@ -863,6 +863,10 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if path == "/api/mods":
             self._api_get_mods()
             return
+        if path == "/api/mods/config":
+            self._api_get_mod_config()
+            return
+
         if path == "/api/bot/xbox-accounts":
             self._api_bot_xbox_accounts()
             return
@@ -967,6 +971,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/mods/reload":
             self._api_reload_mod()
+            return
+        if parsed.path == "/api/mods/config":
+            self._api_save_mod_config()
             return
         if parsed.path == "/api/restart":
             self._api_restart()
@@ -2030,6 +2037,205 @@ class WebUIHandler(BaseHTTPRequestHandler):
             self._respond({"ok": ok, "message": result.get("message", "重载完成")})
         except Exception as e:
             self._respond({"ok": False, "message": f"重载失败: {e}"})
+
+    def _resolve_mod_config(self, name: str, side: str) -> dict:
+        """解析 Mod 配置的目标文件或 config.json 节"""
+        mod_section_map = {
+            "ai": "AIConfig",
+            "bot": "botConfig",
+            "message": "messageConfig",
+            "spam": "spam",
+            "chat": "spam",
+            "tool": "utilsConfig",
+        }
+        # 1. 检查专属独立配置文件 (config/mods/<name>.json)
+        candidate_files = [
+            os.path.join(ROOT, "config", "mods", f"{name}.json"),
+            os.path.join(ROOT, "config", "mods", f"{name.lower()}.json"),
+        ]
+        for cf in candidate_files:
+            if os.path.exists(cf):
+                rel = os.path.relpath(cf, ROOT).replace("\\", "/")
+                return {"configType": "file", "target": rel, "filePath": cf, "section": None}
+
+        # 2. 检查 config.json 对应配置节
+        key_lower = name.strip().lower()
+        if key_lower in mod_section_map:
+            sec = mod_section_map[key_lower]
+            return {"configType": "section", "target": f"config/config.json -> {sec}", "filePath": CONFIG_JSON, "section": sec}
+
+        # 3. 默认独立配置文件 (位于 config/mods/<name>.json)
+        default_file = os.path.join(ROOT, "config", "mods", f"{name}.json")
+        rel = os.path.relpath(default_file, ROOT).replace("\\", "/")
+        return {"configType": "file", "target": rel, "filePath": default_file, "section": None}
+
+    def _api_get_mod_config(self) -> None:
+        """获取指定 Mod 的配置文件或配置节 (需要 mods 权限)"""
+        if not _require_permission("mods")(self):
+            return
+        parsed = urllib.parse.urlparse(self.path)
+        qs = urllib.parse.parse_qs(parsed.query)
+        name = (qs.get("name", [""])[0] or "").strip()
+        side = (qs.get("side", ["client"])[0] or "").strip()
+        if not name:
+            self._respond({"ok": False, "message": "缺少 name 参数"})
+            return
+        if side not in ("client", "server"):
+            side = "client"
+
+        resolved = self._resolve_mod_config(name, side)
+        try:
+            if resolved["configType"] == "file":
+                filepath = resolved["filePath"]
+                if os.path.exists(filepath):
+                    with open(filepath, "r", encoding="utf-8") as f:
+                        content = f.read()
+                else:
+                    default_obj = {
+                        "enabled": True,
+                        "name": name,
+                    }
+                    content = json.dumps(default_obj, ensure_ascii=False, indent=2) + "\n"
+            else:
+                full_cfg = {}
+                if os.path.exists(CONFIG_JSON):
+                    with open(CONFIG_JSON, "r", encoding="utf-8") as f:
+                        full_cfg = json.load(f)
+                elif os.path.exists(CONFIG_PY):
+                    ns = _load_config_module()
+                    full_cfg = {k: getattr(ns, k) for k in dir(ns) if not k.startswith("_") and not callable(getattr(ns, k))}
+                elif os.path.exists(os.path.join(CONFIG_DIR, "config.example.json")):
+                    with open(os.path.join(CONFIG_DIR, "config.example.json"), "r", encoding="utf-8") as f:
+                        full_cfg = json.load(f)
+                sec_val = full_cfg.get(resolved["section"], {})
+                content = json.dumps(sec_val, ensure_ascii=False, indent=2) + "\n"
+
+            self._respond({
+                "ok": True,
+                "name": name,
+                "side": side,
+                "configType": resolved["configType"],
+                "target": resolved["target"],
+                "content": content,
+            })
+        except Exception as e:
+            self._respond({"ok": False, "message": f"读取 Mod 配置失败: {e}"})
+
+    def _api_save_mod_config(self) -> None:
+        """保存指定 Mod 的配置并执行热重载 (需要 mods 权限)"""
+        if not _require_permission("mods")(self):
+            return
+        body = self._read_body()
+        name = (body.get("name") or "").strip()
+        side = (body.get("side") or "client").strip()
+        content = body.get("content")
+        do_reload = bool(body.get("reload", True))
+
+        if not name:
+            self._respond({"ok": False, "message": "缺少 name 参数"})
+            return
+        if content is None or not isinstance(content, str):
+            self._respond({"ok": False, "message": "缺少 content 参数"})
+            return
+
+        # 实时语法校验
+        try:
+            parsed_data = json.loads(content)
+        except json.JSONDecodeError as e:
+            self._respond({
+                "ok": False,
+                "message": f"JSON 语法错误 (第 {e.lineno} 行, 第 {e.colno} 列): {e.msg}",
+                "error": {
+                    "line": e.lineno,
+                    "column": e.colno,
+                    "msg": e.msg,
+                }
+            })
+            return
+
+        resolved = self._resolve_mod_config(name, side)
+        try:
+            if resolved["configType"] == "file":
+                filepath = resolved["filePath"]
+                os.makedirs(os.path.dirname(filepath), exist_ok=True)
+                if os.path.exists(filepath):
+                    try:
+                        import shutil
+                        shutil.copy2(filepath, filepath + ".bak")
+                    except Exception:
+                        pass
+                with open(filepath, "w", encoding="utf-8") as f:
+                    json.dump(parsed_data, f, ensure_ascii=False, indent=2)
+                    f.write("\n")
+            else:
+                full_cfg = {}
+                if os.path.exists(CONFIG_JSON):
+                    with open(CONFIG_JSON, "r", encoding="utf-8") as f:
+                        full_cfg = json.load(f)
+                    try:
+                        import shutil
+                        shutil.copy2(CONFIG_JSON, CONFIG_JSON + ".bak")
+                    except Exception:
+                        pass
+                elif os.path.exists(CONFIG_PY):
+                    ns = _load_config_module()
+                    full_cfg = {k: getattr(ns, k) for k in dir(ns) if not k.startswith("_") and not callable(getattr(ns, k))}
+                elif os.path.exists(os.path.join(CONFIG_DIR, "config.example.json")):
+                    with open(os.path.join(CONFIG_DIR, "config.example.json"), "r", encoding="utf-8") as f:
+                        full_cfg = json.load(f)
+
+                full_cfg[resolved["section"]] = parsed_data
+                with open(CONFIG_JSON, "w", encoding="utf-8") as f:
+                    json.dump(full_cfg, f, ensure_ascii=False, indent=2)
+                    f.write("\n")
+
+                # 刷新配置缓存与命令别名
+                try:
+                    from lib.config_loader import reload_config
+                    from lib.command import reload_all_aliases
+                    reload_config()
+                    reload_all_aliases()
+                except Exception:
+                    pass
+
+            # 执行热重载
+            reload_res = {"success": True, "message": "配置已保存"}
+            if do_reload:
+                import asyncio
+                if side == "server":
+                    from lib.mods import ServerModManager
+                    r = asyncio.run(ServerModManager.reload(name))
+                    reload_res = {"success": r.get("success", False), "message": r.get("message", "重载完成")}
+                else:
+                    from lib.current import Current
+                    from lib.mods import ClientModManager
+                    success_all = []
+                    failed_all = []
+                    for client, manager in list(Current.client_mods.items()):
+                        if not manager or not hasattr(manager, "reload"):
+                            continue
+                        r = asyncio.run(manager.reload(name))
+                        cid = getattr(client, "id", None) or "?"
+                        if r.get("success"):
+                            success_all.append(f"{cid}:{name}")
+                        else:
+                            failed_all.append(f"{cid}:{name}")
+                    if not Current.client_mods:
+                        reload_res = {"success": True, "message": "配置已保存并同步（当前无活跃客户端连接，重载将在客户端连接时生效）"}
+                    elif success_all:
+                        reload_res = {"success": True, "message": f"Client Mod {name} 已热重载 ({len(success_all)} 个客户端)"}
+                    else:
+                        reload_res = {"success": False, "message": failed_all[0] if failed_all else f"Client Mod {name} 重载失败"}
+
+            self._respond({
+                "ok": True,
+                "reloadOk": reload_res.get("success", False),
+                "message": f"配置已保存。{reload_res.get('message', '')}".rstrip("。") if reload_res.get("message") != "配置已保存" else "配置已保存",
+                "target": resolved["target"],
+                "configType": resolved["configType"],
+            })
+        except Exception as e:
+            self._respond({"ok": False, "message": f"保存 Mod 配置失败: {e}"})
 
     def _api_firewall_add_rule(self) -> None:
         """添加 Windows 防火墙入站规则,允许 WebUI 端口(需要 config 权限)"""
