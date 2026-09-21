@@ -878,6 +878,15 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if path == "/api/studio/palette":
             self._api_studio_get_palette()
             return
+        if path == "/api/studio/blueprint-voxels":
+            self._api_studio_get_blueprint_voxels()
+            return
+        if path == "/api/studio/blueprint-html":
+            self._api_studio_get_blueprint_html()
+            return
+        if path == "/api/studio/textures/status":
+            self._api_studio_textures_status()
+            return
 
         if path == "/api/bot/xbox-accounts":
             self._api_bot_xbox_accounts()
@@ -998,6 +1007,15 @@ class WebUIHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/studio/action":
             self._api_studio_action()
+            return
+        if parsed.path == "/api/studio/blueprint-voxels":
+            self._api_studio_post_blueprint_voxels()
+            return
+        if parsed.path == "/api/studio/textures/download":
+            self._api_studio_textures_download()
+            return
+        if parsed.path == "/api/studio/textures/uninstall":
+            self._api_studio_textures_uninstall()
             return
         if parsed.path == "/api/restart":
             self._api_restart()
@@ -2329,6 +2347,149 @@ class WebUIHandler(BaseHTTPRequestHandler):
             self._respond({"ok": True, "blocks": blocks})
         except Exception as e:
             self._respond({"ok": False, "message": f"读取调色板失败: {e}"})
+
+    def _api_studio_get_blueprint_voxels(self) -> None:
+        """获取蓝图离线 3D 体素渲染数据 (需要 mods 权限)"""
+        if not _require_permission("mods")(self):
+            return
+        from lib.studio import parse_blueprint_voxels
+        query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        filename = (query.get("file") or [""])[0]
+        category = (query.get("category") or ["ezmatic"])[0]
+        max_blocks_str = (query.get("max_blocks") or ["50000"])[0]
+        try:
+            max_blocks = max(100, min(200000, int(max_blocks_str)))
+        except ValueError:
+            max_blocks = 50000
+
+        if not filename:
+            self._respond({"ok": False, "message": "未指定蓝图文件名 (file 参数)"}, status=400)
+            return
+
+        try:
+            data = parse_blueprint_voxels(category=category, filename=filename, max_blocks=max_blocks)
+            self._respond({"ok": True, **data})
+        except FileNotFoundError:
+            self._respond({"ok": False, "message": f"蓝图文件未找到: {filename}"}, status=404)
+        except Exception as e:
+            self._respond({"ok": False, "message": f"蓝图解析失败: {e}"}, status=400)
+
+    def _api_studio_post_blueprint_voxels(self) -> None:
+        """从客户端直接接收本地蓝图文件并实时返回 3D 体素 (无需连接 MC 客户端)"""
+        if not _require_permission("mods")(self):
+            return
+        import base64
+        import tempfile
+        from lib.studio import parse_blueprint_voxels
+        body = self._read_body()
+        filename = (body.get("filename") or "local.litematic").strip()
+        data_b64 = body.get("dataBase64") or ""
+        max_blocks = int(body.get("max_blocks") or 50000)
+
+        if not data_b64:
+            self._respond({"ok": False, "message": "未提供蓝图数据 (dataBase64)"}, status=400)
+            return
+
+        try:
+            raw_bytes = base64.b64decode(data_b64)
+            with tempfile.NamedTemporaryFile(suffix=".litematic", delete=False) as tf:
+                tf.write(raw_bytes)
+                tf_path = tf.name
+            try:
+                data = parse_blueprint_voxels(file_path=tf_path, max_blocks=max_blocks)
+                data["name"] = filename
+                self._respond({"ok": True, **data})
+            finally:
+                try:
+                    os.unlink(tf_path)
+                except Exception:
+                    pass
+        except Exception as e:
+            self._respond({"ok": False, "message": f"本地蓝图解析失败: {e}"}, status=400)
+
+    def _api_studio_get_blueprint_html(self) -> None:
+        """导出独立离线单文件 3D 蓝图预览 HTML"""
+        if not _require_permission("mods")(self):
+            return
+        from lib.studio import parse_blueprint_voxels, generate_standalone_blueprint_html
+        query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        filename = (query.get("file") or [""])[0]
+        category = (query.get("category") or ["ezmatic"])[0]
+        if not filename:
+            self._respond({"ok": False, "message": "未指定蓝图文件名"}, status=400)
+            return
+        try:
+            data = parse_blueprint_voxels(category=category, filename=filename)
+            html_str = generate_standalone_blueprint_html(data)
+            content = html_str.encode("utf-8")
+            stem = os.path.splitext(filename)[0]
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(content)))
+            self.send_header("Content-Disposition", f'attachment; filename="{urllib.parse.quote(stem)}_3d_preview.html"')
+            self.end_headers()
+            self.wfile.write(content)
+        except FileNotFoundError:
+            self._respond({"ok": False, "message": "文件不存在"}, status=404)
+        except Exception as e:
+            self._respond({"ok": False, "message": f"生成 HTML 失败: {e}"}, status=400)
+
+    def _api_studio_textures_status(self) -> None:
+        """获取方块纹理包当前状态与统计 (需要 config 或 mods 权限)"""
+        user = _auth_user(self)
+        perms = user.get("permissions", [])
+        if "config" not in perms and "mods" not in perms and "*" not in perms and "admin" not in perms:
+            if not user.get("role"):
+                self._respond_denied()
+            else:
+                self._respond({"ok": False, "message": "无权限:需要 config 或 mods 权限"}, status=403)
+            return
+        from lib.studio import get_textures_status
+        try:
+            stat = get_textures_status()
+            self._respond({"ok": True, "data": stat})
+        except Exception as e:
+            self._respond({"ok": False, "message": f"获取材质包状态失败: {e}"}, status=500)
+
+    def _api_studio_textures_download(self) -> None:
+        """下载/更新方块材质包，或从本机客户端提取 (需要 config 或 mods 权限)"""
+        user = _auth_user(self)
+        perms = user.get("permissions", [])
+        if "config" not in perms and "mods" not in perms and "*" not in perms and "admin" not in perms:
+            if not user.get("role"):
+                self._respond_denied()
+            else:
+                self._respond({"ok": False, "message": "无权限:需要 config 或 mods 权限"}, status=403)
+            return
+        body = self._read_body()
+        source = str(body.get("source") or "online").strip().lower()
+        url = str(body.get("url") or "").strip()
+        from lib.studio import download_online_textures, extract_local_minecraft_textures
+        try:
+            if source == "local":
+                res = extract_local_minecraft_textures(force=True)
+            else:
+                res = download_online_textures(source_url=url, fallback_local=True)
+            self._respond(res)
+        except Exception as e:
+            self._respond({"ok": False, "message": f"材质包操作失败: {e}"}, status=500)
+
+    def _api_studio_textures_uninstall(self) -> None:
+        """卸载方块材质包并释放空间 (需要 config 或 mods 权限)"""
+        user = _auth_user(self)
+        perms = user.get("permissions", [])
+        if "config" not in perms and "mods" not in perms and "*" not in perms and "admin" not in perms:
+            if not user.get("role"):
+                self._respond_denied()
+            else:
+                self._respond({"ok": False, "message": "无权限:需要 config 或 mods 权限"}, status=403)
+            return
+        from lib.studio import uninstall_textures
+        try:
+            res = uninstall_textures()
+            self._respond(res)
+        except Exception as e:
+            self._respond({"ok": False, "message": f"卸载失败: {e}"}, status=500)
 
     def _api_studio_upload(self) -> None:
         """上传资产文件 (支持 Base64 JSON 与 multipart/form-data)"""

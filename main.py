@@ -32,6 +32,8 @@ feat1: WebUI 实时性能监控仪表盘
 feat2: 现在可以设置更新时是否自动备份
 feat3: Mod 在线专属配置文件编辑与热重载
 feature4: webui 多维游戏资产&蓝图工坊
+feat5: 创意工坊现在无需连接MC客户端就可预览投影文件
+feat6: block textures改为在线下载
 """
 MINIMIUM_ALLOWED_VERSION = "b0.4.0" # 因为b0.4.0版本大量重写了账户登录逻辑, 所以, 设置了拒绝降级到b0.4.0-的版本
                                     # 但是如果你需要降级低于b0.4.0的版本，请更改这里的值为b0.0.0以删除限制
@@ -55,10 +57,11 @@ WANT_VIEW_DESCRIPTION = "--description" in sys.argv
 WANT_GOTO_OOBE = "--goto-oobe" in sys.argv
 WANT_UPDATE = "update" in sys.argv
 WANT_ROLLBACK = "--rollback" in sys.argv
+WANT_PREVIEW = "preview" in sys.argv
 ARGV_NOT_EXIST = not WANT_RESET\
 and not WANT_VIEW_VERSION and not WANT_EXPORT \
 and not WANT_VIEW_DESCRIPTION and not WANT_HELP \
-and not WANT_ROLLBACK
+and not WANT_ROLLBACK and not WANT_PREVIEW
 
 # --- 终端提示符常量 ---
 CONSOLE_PROMPT = "EnderBridge> "
@@ -220,6 +223,7 @@ if WANT_HELP:
     print()
     print("命令:")
     print("  (无参数)              正常启动服务器")
+    print("  preview [蓝图文件]    离线本地 3D 预览蓝图(无需启动MC或客户端)")
     print("  update <压缩包>       一键升级(保留配置,默认自动备份)")
     print("  export [输出路径]     一键导出为zip")
     print("  --rollback [备份包]   回滚到指定备份(默认最新)")
@@ -235,6 +239,8 @@ if WANT_HELP:
     print()
     print("示例:")
     print("  python main.py                                      启动服务器")
+    print("  python main.py preview 樱花塔.litematic             在本地浏览器 3D 预览蓝图")
+    print("  python main.py preview 樱花塔 --export out.html     导出独立离线 HTML 预览网页")
     print("  python main.py update update.zip                    从压缩包升级")
     print("  python main.py update update.zip --bypass-backup    跳过备份直接升级")
     print("  python main.py export                               导出为zip")
@@ -675,6 +681,44 @@ if WANT_UPDATE:
                     os.unlink(dl_path)
             except Exception:
                 pass
+
+# ===== 离线本地蓝图 3D 预览: python main.py preview <蓝图文件/路径> =====
+# 无需启动 Minecraft 服务器或连接客户端，秒级在本地浏览器呈现三维体素投影
+if WANT_PREVIEW:
+    import argparse
+    from lib.studio import preview_blueprint_locally
+
+    idx = sys.argv.index("preview")
+    sub_args = sys.argv[idx + 1:]
+
+    parser = argparse.ArgumentParser(prog="python main.py preview", description="EnderBridge 离线 3D 蓝图本地预览")
+    parser.add_argument("file", nargs="?", default="", help="蓝图文件名 (如 樱花塔.litematic) 或完整物理路径")
+    parser.add_argument("--export", "-o", default=None, help="导出独立的单文件离线 HTML 路径 (不指定则默认保存在 logs/ 并自动唤起浏览器)")
+    parser.add_argument("--no-browser", action="store_true", help="仅生成本地 HTML 预览文件，不自动唤起默认浏览器")
+
+    parsed = parser.parse_args(sub_args)
+    target_file = parsed.file.strip()
+
+    try:
+        out_path = preview_blueprint_locally(
+            target=target_file,
+            export_path=parsed.export,
+            open_browser=not parsed.no_browser
+        )
+        print("========================================")
+        print("  EnderBridge 蓝图离线 3D 本地预览")
+        print("========================================")
+        print(f"  已成功生成本地 3D 预览文件:")
+        print(f"  {out_path}")
+        if not parsed.no_browser:
+            print("  已在默认浏览器打开 3D 视轨交互界面")
+        print("========================================")
+        sys.exit(0)
+    except Exception as e:
+        print("========================================")
+        print(f"  本地预览失败: {e}")
+        print("========================================")
+        sys.exit(1)
 
 # ===== WebUI 触发的更新:检测 .update_pending 标记文件(路径常量见顶部) =====
 if os.path.isfile(UPDATE_MARKER) and not WANT_UPDATE:
@@ -1576,6 +1620,18 @@ async def _dispatch_console_command(text):
         fut = _main_future
         if loop is not None and not loop.is_closed() and fut is not None and not fut.done():
             loop.call_soon_threadsafe(fut.cancel)  # type: ignore[union-attr]
+        return
+
+    # preview [蓝图名称/路径]: 本地离线 3D 预览(无需连接客户端)
+    if text.startswith("preview") or text.startswith("$preview"):
+        parts = text.split(maxsplit=1)
+        target = parts[1].strip() if len(parts) > 1 else ""
+        from lib.studio import preview_blueprint_locally
+        try:
+            out_file = preview_blueprint_locally(target=target, open_browser=True)
+            console_out(f"已在默认浏览器打开 3D 离线蓝图预览: {out_file}")
+        except Exception as e:
+            console_out(f"蓝图预览失败: {e}")
         return
 
     # 以 / 开头:转发为游戏命令

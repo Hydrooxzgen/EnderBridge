@@ -488,6 +488,55 @@
             </div>
           </div>
         </div>
+
+        <!-- 在线资源与方块材质包管理 -->
+        <div class="cfg-section" id="cfgCardTexturePack" style="margin-top:20px;">
+          <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
+            <h3 data-i18n="cfg.texPackTitle" style="margin:0;">🎨 在线资源与材质包管理</h3>
+            <span id="texPackBadge" class="badge" style="font-size:12px;padding:4px 10px;background:rgba(255,255,255,0.1);color:var(--text-dim);border-radius:12px;">检测中...</span>
+          </div>
+          <p class="hint" data-i18n="cfg.texPackHint" style="margin-bottom:14px;">
+            提供 3D 蓝图与投影预览所需的 16x16 真实方块材质包。支持在线一键下载/更新、从本机客户端快速提取以及安全卸载。若未安装，3D 预览引擎将自动降级为平滑调色板色彩渲染。
+          </p>
+
+          <!-- 状态展示条 -->
+          <div class="cfg-grid" style="grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:12px;margin-bottom:16px;background:rgba(255,255,255,0.03);padding:12px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);">
+            <div>
+              <div style="font-size:11px;color:var(--text-muted);" data-i18n="cfg.texPackCountLabel">已安装方块材质</div>
+              <div id="texPackCount" style="font-size:18px;font-weight:700;margin-top:2px;color:var(--text-main);">--</div>
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--text-muted);" data-i18n="cfg.texPackSizeLabel">磁盘占用容量</div>
+              <div id="texPackSize" style="font-size:18px;font-weight:700;margin-top:2px;color:var(--text-main);">--</div>
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--text-muted);" data-i18n="cfg.texPackDirLabel">存储目录</div>
+              <div id="texPackDir" style="font-size:12px;font-family:monospace;margin-top:4px;word-break:break-all;color:var(--text-dim);">webui/static/textures/blocks</div>
+            </div>
+          </div>
+
+          <!-- 操作表单 -->
+          <div class="cfg-grid">
+            <div class="cfg-field cfg-grid-full">
+              <label data-i18n="cfg.texSourceUrl">材质包下载源 (ZIP 压缩包 URL / 镜像地址)</label>
+              <input id="cfg-tex-url" class="cfg-input" placeholder="https://github.com/InventivetalentDev/minecraft-assets/archive/refs/heads/1.20.4.zip" />
+              <span class="hint" data-i18n="cfg.texSourceHint">留空则使用默认官方开源 Assets 仓库，也可填入自定义包含 textures/block/*.png 的 ZIP 下载链接。</span>
+            </div>
+          </div>
+
+          <div class="row gap-10" style="margin-top:16px;flex-wrap:wrap;">
+            <button type="button" class="btn btn-primary" id="btnTexDownload">
+              <span id="texDlSpinner" class="spinner-inline" style="display:none;margin-right:6px;"></span>
+              <span id="btnTexDownloadText" data-i18n="cfg.btnTexDownload">⬇️ 在线下载 / 更新材质包</span>
+            </button>
+            <button type="button" class="btn btn-secondary" id="btnTexLocalExtract" data-i18n="cfg.btnTexLocalExtract">
+              💻 从本机客户端提取
+            </button>
+            <button type="button" class="btn btn-danger" id="btnTexUninstall" data-i18n="cfg.btnTexUninstall">
+              🗑️ 卸载材质包 (释放空间)
+            </button>
+          </div>
+        </div>
       </div>
 
       <!-- ===== 高级 JSON 配置 (Raw JSON) ===== -->
