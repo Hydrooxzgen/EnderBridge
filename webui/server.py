@@ -824,6 +824,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if path == "/mods":
             self._serve_page("mods.html")
             return
+        if path == "/studio":
+            self._serve_page("studio.html")
+            return
         if path == "/update":
             self._serve_page("update.html")
             return
@@ -865,6 +868,15 @@ class WebUIHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/mods/config":
             self._api_get_mod_config()
+            return
+        if path == "/api/studio/assets":
+            self._api_studio_get_assets()
+            return
+        if path == "/api/studio/asset-file":
+            self._api_studio_get_asset_file()
+            return
+        if path == "/api/studio/palette":
+            self._api_studio_get_palette()
             return
 
         if path == "/api/bot/xbox-accounts":
@@ -949,6 +961,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/banlist":
             self._api_banlist_remove()
             return
+        if parsed.path == "/api/studio/asset":
+            self._api_studio_delete_asset()
+            return
         self._respond({"ok": False, "message": "Not Found"}, status=404)
 
     def do_POST(self):
@@ -974,6 +989,15 @@ class WebUIHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/mods/config":
             self._api_save_mod_config()
+            return
+        if parsed.path == "/api/studio/upload":
+            self._api_studio_upload()
+            return
+        if parsed.path == "/api/studio/save-text":
+            self._api_studio_save_text()
+            return
+        if parsed.path == "/api/studio/action":
+            self._api_studio_action()
             return
         if parsed.path == "/api/restart":
             self._api_restart()
@@ -2236,6 +2260,201 @@ class WebUIHandler(BaseHTTPRequestHandler):
             })
         except Exception as e:
             self._respond({"ok": False, "message": f"保存 Mod 配置失败: {e}"})
+
+    # ===== Studio 创意资产工坊 API =====
+
+    def _api_studio_get_assets(self) -> None:
+        """获取指定分类或全部资产列表 (需要 mods 权限)"""
+        if not _require_permission("mods")(self):
+            return
+        parsed = urllib.parse.urlparse(self.path)
+        qs = urllib.parse.parse_qs(parsed.query)
+        cat = (qs.get("category", [""])[0] or "").strip()
+        from lib.studio import list_assets, CATEGORIES
+        try:
+            if cat:
+                assets = list_assets(cat)
+                self._respond({"ok": True, "category": cat, "assets": assets})
+            else:
+                all_assets = {}
+                for c in CATEGORIES:
+                    all_assets[c] = list_assets(c)
+                self._respond({"ok": True, "assets": all_assets})
+        except Exception as e:
+            self._respond({"ok": False, "message": f"获取资产失败: {e}"})
+
+    def _api_studio_get_asset_file(self) -> None:
+        """读取/下载指定资产文件 (需要 mods 权限)"""
+        if not _require_permission("mods")(self):
+            return
+        parsed = urllib.parse.urlparse(self.path)
+        qs = urllib.parse.parse_qs(parsed.query)
+        cat = (qs.get("category", [""])[0] or "").strip()
+        fn = (qs.get("file", [""])[0] or "").strip()
+        as_text = qs.get("text", ["0"])[0] in ("1", "true")
+        if not cat or not fn:
+            self._respond({"ok": False, "message": "缺少 category 或 file 参数"})
+            return
+        try:
+            import mimetypes
+            from lib.studio import get_asset_file_path, CATEGORIES
+            filepath = get_asset_file_path(cat, fn)
+            if as_text:
+                with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+                    content = f.read()
+                self._respond({"ok": True, "filename": fn, "category": cat, "content": content})
+                return
+
+            mime = CATEGORIES.get(cat, {}).get("mime") or mimetypes.guess_type(fn)[0] or "application/octet-stream"
+            with open(filepath, "rb") as f:
+                content = f.read()
+            self.send_response(200)
+            self.send_header("Content-Type", mime)
+            self.send_header("Content-Length", str(len(content)))
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(content)
+        except FileNotFoundError:
+            self._respond({"ok": False, "message": "文件不存在"}, status=404)
+        except Exception as e:
+            self._respond({"ok": False, "message": f"读取失败: {e}"})
+
+    def _api_studio_get_palette(self) -> None:
+        """获取方块调色板 (需要 mods 权限)"""
+        if not _require_permission("mods")(self):
+            return
+        from lib.studio import get_block_palette
+        try:
+            blocks = get_block_palette()
+            self._respond({"ok": True, "blocks": blocks})
+        except Exception as e:
+            self._respond({"ok": False, "message": f"读取调色板失败: {e}"})
+
+    def _api_studio_upload(self) -> None:
+        """上传资产文件 (支持 Base64 JSON 与 multipart/form-data)"""
+        if not _require_permission("mods")(self):
+            return
+        import base64
+        from lib.studio import save_asset_file
+        content_type = self.headers.get("Content-Type", "")
+
+        # 1. 支持 JSON Base64 上传
+        if "application/json" in content_type:
+            body = self._read_body()
+            cat = (body.get("category") or "").strip()
+            fn = (body.get("filename") or "").strip()
+            b64_data = body.get("dataBase64") or ""
+            raw_text = body.get("text")
+            if not cat or not fn:
+                self._respond({"ok": False, "message": "缺少 category 或 filename 参数"})
+                return
+            try:
+                if b64_data:
+                    data = base64.b64decode(b64_data)
+                elif raw_text is not None:
+                    data = raw_text.encode("utf-8")
+                else:
+                    self._respond({"ok": False, "message": "缺少文件数据"})
+                    return
+                res = save_asset_file(cat, fn, data)
+                self._respond(res)
+            except Exception as e:
+                self._respond({"ok": False, "message": f"保存文件失败: {e}"})
+            return
+
+        # 2. 支持 multipart/form-data 上传
+        if "multipart/form-data" in content_type:
+            boundary = content_type.split("boundary=")[-1].strip()
+            if not boundary:
+                self._respond({"ok": False, "message": "无效上传格式"})
+                return
+            length = int(self.headers.get("Content-Length", 0))
+            raw = self.rfile.read(length)
+            boundary_bytes = ("--" + boundary).encode()
+            parts = raw.split(boundary_bytes)
+
+            category = ""
+            filename = ""
+            file_data = b""
+
+            for part in parts:
+                if b'name="category"' in part:
+                    header_end = part.find(b"\r\n\r\n")
+                    if header_end >= 0:
+                        category = part[header_end + 4:].rstrip(b"\r\n").decode("utf-8", errors="ignore").strip()
+                if b'filename="' in part:
+                    fn_match = re.search(rb'filename="([^"]+)"', part)
+                    if fn_match:
+                        filename = fn_match.group(1).decode("utf-8", errors="replace")
+                    header_end = part.find(b"\r\n\r\n")
+                    if header_end >= 0:
+                        file_data = part[header_end + 4:].rstrip(b"\r\n")
+
+            if not category or not filename or not file_data:
+                self._respond({"ok": False, "message": "解析上传数据失败 (缺少 category、filename 或 file)"})
+                return
+            try:
+                res = save_asset_file(category, filename, file_data)
+                self._respond(res)
+            except Exception as e:
+                self._respond({"ok": False, "message": f"保存文件失败: {e}"})
+            return
+
+        self._respond({"ok": False, "message": "不支持的上传 Content-Type"})
+
+    def _api_studio_save_text(self) -> None:
+        """保存文本资产 (如 .mcfunc 脚本文件)"""
+        if not _require_permission("mods")(self):
+            return
+        body = self._read_body()
+        cat = (body.get("category") or "").strip()
+        fn = (body.get("filename") or "").strip()
+        content = body.get("content")
+        if not cat or not fn or content is None:
+            self._respond({"ok": False, "message": "缺少 category、filename 或 content 参数"})
+            return
+        from lib.studio import save_asset_file
+        try:
+            res = save_asset_file(cat, fn, content.encode("utf-8"))
+            self._respond(res)
+        except Exception as e:
+            self._respond({"ok": False, "message": f"保存失败: {e}"})
+
+    def _api_studio_delete_asset(self) -> None:
+        """删除指定资产文件 (需要 mods 权限)"""
+        if not _require_permission("mods")(self):
+            return
+        body = self._read_body()
+        cat = (body.get("category") or "").strip()
+        fn = (body.get("filename") or "").strip()
+        if not cat or not fn:
+            self._respond({"ok": False, "message": "缺少 category 或 filename 参数"})
+            return
+        from lib.studio import delete_asset_file
+        try:
+            res = delete_asset_file(cat, fn)
+            self._respond(res)
+        except Exception as e:
+            self._respond({"ok": False, "message": f"删除失败: {e}"})
+
+    def _api_studio_action(self) -> None:
+        """在游戏内执行 Studio 动作 (需要 mods 权限)"""
+        if not _require_permission("mods")(self):
+            return
+        body = self._read_body()
+        action = (body.get("action") or "").strip()
+        cat = (body.get("category") or "").strip()
+        fn = (body.get("filename") or "").strip()
+        params = body.get("params") or {}
+        if not action:
+            self._respond({"ok": False, "message": "缺少 action 参数"})
+            return
+        from lib.studio import execute_studio_action
+        try:
+            res = execute_studio_action(action, cat, fn, params)
+            self._respond(res)
+        except Exception as e:
+            self._respond({"ok": False, "message": f"执行失败: {e}"})
 
     def _api_firewall_add_rule(self) -> None:
         """添加 Windows 防火墙入站规则,允许 WebUI 端口(需要 config 权限)"""

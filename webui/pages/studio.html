@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EnderBridge - 创意资产与蓝图工坊</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<script>document.documentElement.setAttribute('data-theme',localStorage.getItem('enderbridge_theme')||(window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark'));</script>
+<style>
+  .studio-tab-bar {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--card-border);
+    padding-bottom: 10px;
+  }
+  .studio-dropzone {
+    border: 2px dashed var(--card-border);
+    border-radius: 10px;
+    padding: 20px;
+    text-align: center;
+    background: var(--input-bg);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-bottom: 16px;
+  }
+  .studio-dropzone.dragover {
+    border-color: var(--primary, #3b82f6);
+    background: rgba(59, 130, 246, 0.08);
+  }
+  .studio-player-card {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .pixel-canvas-container {
+    background: #111827;
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px;
+    min-height: 280px;
+    overflow: auto;
+  }
+  .pixel-canvas-preview {
+    image-rendering: pixelated;
+    max-width: 100%;
+    height: auto;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  }
+  .mcfunc-layout {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 860px) {
+    .mcfunc-layout {
+      grid-template-columns: 1fr;
+    }
+  }
+  .blueprint-card {
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    padding: 14px;
+    background: var(--card);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+</style>
+</head>
+<body>
+<aside class="sidebar" data-auto-sidebar></aside>
+<div class="main">
+  <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:16px;">
+    <div>
+      <h2 data-i18n="studio.title" style="margin:0 0 4px 0;">🎨 创意资产与蓝图工坊</h2>
+      <div class="hint" data-i18n="studio.desc" style="font-size:13px;margin:0;">可视化管理与在线预览 MIDI 音乐、MCFunc 指令宏、Ezmatic 建筑蓝图、ImageMod 像素画方块调色板，并一键推送到游戏。</div>
+    </div>
+    <div class="row gap-10">
+      <button class="btn btn-sm" id="studioRefreshBtn" data-i18n="studio.refresh">🔄 刷新</button>
+      <button class="btn btn-primary btn-sm" id="studioTriggerUploadBtn" data-i18n="studio.uploadBtn">📤 上传资产</button>
+      <input type="file" id="studioFileInput" style="display:none;" />
+    </div>
+  </div>
+
+  <!-- 分类工作台 Tab 导航 -->
+  <div class="studio-tab-bar" id="studioTabs">
+    <span class="chip-tab active" data-tab="midi"><span data-i18n="studio.tabMidi">🎵 MIDI 音乐</span> <code id="cntMidi" style="font-size:11px;opacity:0.8;">(0)</code></span>
+    <span class="chip-tab" data-tab="image"><span data-i18n="studio.tabImage">🖼️ 像素画工坊</span> <code id="cntImage" style="font-size:11px;opacity:0.8;">(0)</code></span>
+    <span class="chip-tab" data-tab="ezmatic"><span data-i18n="studio.tabEzmatic">🏗️ 蓝图模型</span> <code id="cntEzmatic" style="font-size:11px;opacity:0.8;">(0)</code></span>
+    <span class="chip-tab" data-tab="mcfunc"><span data-i18n="studio.tabMcfunc">📜 MCFunc 脚本</span> <code id="cntMcfunc" style="font-size:11px;opacity:0.8;">(0)</code></span>
+  </div>
+
+  <!-- 搜索与筛选工具栏 -->
+  <div class="card card-gap" style="padding:12px 16px;">
+    <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+      <div style="position:relative;flex:1;min-width:240px;max-width:420px;">
+        <input type="text" id="studioSearchInput" style="width:100%;padding:7px 32px 7px 12px;border:1px solid var(--card-border);border-radius:6px;background:var(--input-bg);color:var(--text);font-size:13px;" placeholder="🔍 搜索资产文件名..." data-i18n-ph="studio.searchPh" autocomplete="off" />
+        <span id="studioSearchClear" style="display:none;position:absolute;right:10px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--text-dim);font-size:12px;" title="清空">✖</span>
+      </div>
+      <div id="studioTabToolbar" class="row gap-10">
+        <!-- 动态工具按钮:如 MCFunc 的新建脚本 -->
+      </div>
+    </div>
+  </div>
+
+  <!-- 拖拽上传区 (可折叠或点击) -->
+  <div class="studio-dropzone" id="studioDropzone">
+    <div style="font-size:22px;margin-bottom:6px;">☁️</div>
+    <div style="font-weight:600;font-size:14px;margin-bottom:4px;" data-i18n="studio.uploadDrop">拖拽文件至此，或点击选择文件</div>
+    <div class="hint" style="font-size:12px;margin:0;" data-i18n="studio.uploadHint">支持 .mid / .litematic / .mcstructure / .mcfunc / 图片格式</div>
+  </div>
+
+  <!-- ===== 1. MIDI 音乐工作台 ===== -->
+  <div id="panelMidi" class="studio-panel">
+    <!-- Web Audio 网页端试听播放器卡片 -->
+    <div class="studio-player-card" id="webMidiPlayerCard">
+      <div class="row gap-10" style="align-items:center;">
+        <button class="btn btn-sm" id="webAudioToggleBtn" style="padding:6px 14px;">▶ 播放</button>
+        <button class="btn btn-sm" id="webAudioStopBtn" style="padding:6px 12px;">⏹ 停止</button>
+        <div>
+          <div style="font-weight:600;font-size:13px;" id="webAudioTrackTitle">未加载音频</div>
+          <div style="font-size:11px;color:var(--text-dim);" id="webAudioTimeInfo">00:00 / 00:00</div>
+        </div>
+      </div>
+      <div class="row gap-10" style="align-items:center;">
+        <label style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer;">
+          <input type="checkbox" id="midiPercussionToggle" checked />
+          <span data-i18n="studio.percussionOn">伴奏打击乐</span>
+        </label>
+        <button class="btn btn-sm btn-primary" id="midiPlayInGameCurrentBtn" style="display:none;" data-i18n="studio.playInGame">🎮 游戏内播放</button>
+        <button class="btn btn-sm btn-danger" id="midiStopInGameBtn" data-i18n="studio.stopInGame">⏹️ 游戏内停止</button>
+      </div>
+    </div>
+
+    <!-- MIDI 列表 -->
+    <div class="card">
+      <table class="perm-table">
+        <thead>
+          <tr>
+            <th>音乐文件</th>
+            <th data-i18n="studio.duration">时长</th>
+            <th data-i18n="studio.tracks">音轨数</th>
+            <th data-i18n="studio.notes">音符数</th>
+            <th>文件大小</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="midiTableBody">
+          <tr><td colspan="6" class="td-faint" data-i18n="common.loading">加载中...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ===== 2. 像素画工坊 ===== -->
+  <div id="panelImage" class="studio-panel" style="display:none;">
+    <div style="display:grid;grid-template-columns:300px 1fr;gap:16px;">
+      <!-- 左侧:图片列表 -->
+      <div class="card" style="padding:14px;">
+        <div style="font-weight:600;margin-bottom:10px;">图片库</div>
+        <div id="imageAssetList" style="max-height:550px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;">
+          <!-- 动态图片列表 -->
+        </div>
+      </div>
+
+      <!-- 右侧:实时方块像素调色仿真画布 -->
+      <div class="card" style="padding:16px;">
+        <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <h3 style="margin:0;" data-i18n="studio.pixelPreview">🎨 像素画方块实时仿真</h3>
+          <div class="row gap-10">
+            <button class="btn btn-sm btn-primary" id="imgDrawInGameBtn" data-i18n="studio.drawInGame">🚀 推送到游戏绘制</button>
+            <button class="btn btn-sm" id="imgDrawConfirmBtn" data-i18n="studio.drawConfirm">✔️ 确认绘制 (y)</button>
+          </div>
+        </div>
+
+        <!-- 调节控制器 -->
+        <div class="row gap-10" style="flex-wrap:wrap;align-items:center;margin-bottom:12px;background:var(--input-bg);padding:10px;border-radius:8px;">
+          <div style="font-size:12px;">
+            <label data-i18n="studio.pixelWidth">目标宽度</label>:
+            <input type="number" id="pixelTargetWidth" value="64" min="16" max="256" style="width:64px;padding:3px 6px;border-radius:4px;border:1px solid var(--card-border);background:var(--card);color:var(--text);" />
+          </div>
+          <div style="font-size:12px;">
+            <label data-i18n="studio.pixelAxis">朝向</label>:
+            <select id="pixelTargetAxis" style="padding:3px 6px;border-radius:4px;border:1px solid var(--card-border);background:var(--card);color:var(--text);">
+              <option value="x">X 轴立面 (南北)</option>
+              <option value="z">Z 轴立面 (东西)</option>
+              <option value="y">Y 轴平面 (地面)</option>
+            </select>
+          </div>
+          <div style="font-size:12px;">
+            <label data-i18n="studio.pixelDither">算法</label>:
+            <select id="pixelDitherAlgo" style="padding:3px 6px;border-radius:4px;border:1px solid var(--card-border);background:var(--card);color:var(--text);">
+              <option value="none" data-i18n="studio.ditherNone">最近邻采样</option>
+              <option value="floyd" data-i18n="studio.ditherFs">Floyd-Steinberg 误差扩散</option>
+            </select>
+          </div>
+          <div style="font-size:12px;flex:1;min-width:180px;">
+            <label data-i18n="studio.pixelCoords">起始坐标</label>:
+            <input type="text" id="pixelCoordsInput" placeholder="~ ~ ~ (默认当前位置)" style="width:100%;padding:3px 6px;border-radius:4px;border:1px solid var(--card-border);background:var(--card);color:var(--text);font-size:12px;" />
+          </div>
+        </div>
+
+        <!-- 仿真预览 Canvas -->
+        <div class="pixel-canvas-container">
+          <canvas id="pixelArtCanvas" class="pixel-canvas-preview"></canvas>
+        </div>
+
+        <!-- 方块材料清单统计 -->
+        <div style="margin-top:14px;">
+          <div class="row" style="justify-content:space-between;margin-bottom:6px;">
+            <span style="font-weight:600;font-size:13px;" data-i18n="studio.pixelBlocksNeeded">所需方块物料清单</span>
+            <span id="pixelTotalBlocksCount" style="font-size:12px;color:var(--text-dim);">共 0 方块</span>
+          </div>
+          <div id="pixelBOMContainer" style="max-height:140px;overflow-y:auto;display:flex;flex-wrap:wrap;gap:6px;padding:8px;border:1px solid var(--card-border);border-radius:6px;background:var(--input-bg);">
+            <div class="td-faint" style="font-size:12px;">请从左侧选择图片生成物料清单</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 3. Ezmatic 蓝图模型工坊 ===== -->
+  <div id="panelEzmatic" class="studio-panel" style="display:none;">
+    <div id="ezmaticGrid" style="display:grid;grid-template-columns:repeat(auto-fill, minmax(280px, 1fr));gap:16px;">
+      <!-- 动态蓝图卡片 -->
+    </div>
+  </div>
+
+  <!-- ===== 4. MCFunc 脚本工坊 ===== -->
+  <div id="panelMcfunc" class="studio-panel" style="display:none;">
+    <div class="mcfunc-layout">
+      <!-- 脚本列表 -->
+      <div class="card" style="padding:14px;">
+        <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <span style="font-weight:600;">脚本文件</span>
+          <button class="btn btn-sm" id="mcfuncNewBtn" data-i18n="studio.newScript">➕ 新建</button>
+        </div>
+        <div id="mcfuncFileList" style="max-height:550px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;">
+          <!-- 动态列表 -->
+        </div>
+      </div>
+
+      <!-- 脚本编辑器 -->
+      <div class="card" style="padding:16px;display:flex;flex-direction:column;">
+        <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
+          <div class="row gap-10" style="align-items:center;">
+            <input type="text" id="mcfuncCurrentName" style="font-weight:700;font-size:14px;padding:4px 8px;border:1px solid var(--card-border);border-radius:4px;background:var(--input-bg);color:var(--text);" placeholder="demo.mcfunc" />
+            <span id="mcfuncStatsBadge" class="badge-sec-safe" style="font-size:11px;">0 行</span>
+          </div>
+          <div class="row gap-10" style="flex-wrap:wrap;">
+            <button class="btn btn-sm" id="mcfuncSaveBtn" data-i18n="studio.save">💾 保存</button>
+            <button class="btn btn-sm btn-primary" id="mcfuncRunOnceBtn" data-i18n="studio.runInGame">⚡ 运行函数</button>
+            <button class="btn btn-sm" id="mcfuncLoopBtn" data-i18n="studio.loopInGame">🔁 循环执行</button>
+            <button class="btn btn-sm btn-danger" id="mcfuncDeleteBtn" data-i18n="studio.delete">🗑️ 删除</button>
+          </div>
+        </div>
+
+        <textarea id="mcfuncCodeEditor" style="width:100%;height:440px;box-sizing:border-box;font-family:'Cascadia Code',Consolas,monospace;font-size:13px;line-height:1.5;padding:12px;border:1px solid var(--card-border);border-radius:8px;background:var(--input-bg);color:var(--text);resize:vertical;white-space:pre;tab-size:2;" spellcheck="false" autocomplete="off" placeholder="# 在此编写 Minecraft 指令流...&#10;say Hello from Studio!&#10;time set day"></textarea>
+      </div>
+    </div>
+  </div>
+
+</div>
+<div id="toast"></div>
+<script src="/static/js/app.js"></script>
+<script src="/static/js/i18n.js"></script>
+<script src="/static/js/studio.js"></script>
+</body>
+</html>
+
