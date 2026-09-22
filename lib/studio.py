@@ -8,6 +8,7 @@ import re
 import time
 import json
 import datetime
+import asyncio
 from pathlib import Path
 
 # 项目根目录
@@ -349,86 +350,177 @@ def get_block_palette() -> list[dict]:
         return []
 
 
-def execute_studio_action(action: str, category: str, filename: str, params: dict = None) -> dict:
-    """调度游戏内动作 (播放音乐、执行投影、绘制像素画、运行函数)"""
+async def _async_execute_studio_action(action: str, category: str, filename: str, params: dict = None) -> dict:
+    """在主事件循环中调度 Studio 动作，直接与 ClientModManager 及对应 Mod 实例交互"""
     params = params or {}
     safe_name = sanitize_filename(filename) if filename else ""
 
     from lib.current import Current
     client = Current.client
     if not client:
-        return {"ok": False, "message": "当前无活跃 Minecraft 客户端连接，无法在游戏内执行动作"}
+        return {"ok": False, "message": "当前无活跃 Minecraft 客户端连接。请先在游戏内执行 /connect 连接。"}
 
-    import asyncio
-    from lib.command import Command
-    Command.reload_prefix()
-    cp = Command.command_prefix
+    manager = Current.client_mods.get(client)
+    if not manager:
+        return {"ok": False, "message": "当前客户端的 Mod 模块尚未加载"}
 
     try:
         if action == "play_midi":
-            # $music run <filename>
-            cmd = f"{cp}music run {safe_name}"
-            # 伴奏打击乐参数
+            mod = manager.mod_instances.get("Music")
+            if not mod:
+                return {"ok": False, "message": "Music 模块未加载"}
             if params.get("percussion") is not None:
-                perc_cmd = f"{cp}music percussion {'on' if params.get('percussion') else 'off'}"
-                asyncio.run(client.runCommand(perc_cmd))
-            res = asyncio.run(client.runCommand(cmd))
-            return {"ok": True, "message": f"已在游戏内点播: {safe_name}", "raw": res}
+                mod.playPercussion = bool(params.get("percussion"))
+            await mod._cmd_music("Studio", "run", safe_name)
+            return {"ok": True, "message": f"已在游戏内点播: {safe_name}"}
 
         elif action == "stop_midi":
-            cmd = f"{cp}music stop"
-            res = asyncio.run(client.runCommand(cmd))
-            return {"ok": True, "message": "已停止音乐播放", "raw": res}
+            mod = manager.mod_instances.get("Music")
+            if mod:
+                await mod._cmd_music("Studio", "stop")
+            return {"ok": True, "message": "已停止音乐播放"}
 
         elif action == "run_mcfunc":
-            # $function function <filename> 或 loop
+            mod = manager.mod_instances.get("MCFunc")
+            if not mod:
+                return {"ok": False, "message": "MCFunc 模块未加载"}
             loop_name = params.get("loopName")
             interval = params.get("interval")
             if loop_name and interval:
-                cmd = f"{cp}function loop {safe_name} {loop_name} {interval}"
+                await mod._cmd_function("Studio", "loop", safe_name, loop_name, str(interval))
             else:
-                cmd = f"{cp}function function {safe_name}"
-            res = asyncio.run(client.runCommand(cmd))
-            return {"ok": True, "message": f"已执行函数脚本: {safe_name}", "raw": res}
+                await mod._cmd_function("Studio", "function", safe_name)
+            return {"ok": True, "message": f"已执行函数脚本: {safe_name}"}
 
         elif action == "stop_mcfunc":
-            loop_name = params.get("loopName", "")
-            cmd = f"{cp}function stop {loop_name}".strip()
-            res = asyncio.run(client.runCommand(cmd))
-            return {"ok": True, "message": "已停止函数循环", "raw": res}
+            mod = manager.mod_instances.get("MCFunc")
+            if mod:
+                loop_name = params.get("loopName", "")
+                await mod._cmd_function("Studio", "stop", loop_name)
+            return {"ok": True, "message": "已停止函数循环"}
 
-        elif action == "preview_ezmatic":
-            # $ezmatic preview <filename>
-            cmd = f"{cp}ezmatic preview {safe_name}"
-            res = asyncio.run(client.runCommand(cmd))
-            return {"ok": True, "message": f"已在游戏内启动蓝图投影: {safe_name}", "raw": res}
+        elif action in ("preview_ezmatic", "toggle_preview_ezmatic"):
+            mod = manager.mod_instances.get("Ezmatic")
+            if not mod:
+                return {"ok": False, "message": "Ezmatic 模块未加载"}
+
+            # 若为 toggle 操作且当前正在预览该文件，则关闭全息
+            if action == "toggle_preview_ezmatic" and getattr(mod, "preview_data", None):
+                curr_file = mod.preview_data.get("file", "")
+                if not safe_name or curr_file == safe_name or curr_file == safe_name.replace(".litematic", "") or curr_file.replace(".litematic", "") == safe_name.replace(".litematic", ""):
+                    await mod.clear_preview("Studio")
+                    return {"ok": True, "active": False, "message": "已关闭游戏内全息投影"}
+
+            x = params.get("x")
+            y = params.get("y")
+            z = params.get("z")
+            mode = params.get("mode") or "trim"
+            await mod.preview(safe_name, "Studio", x, y, z, mode)
+            if getattr(mod, "preview_data", None):
+                origin = mod.preview_data.get("origin", {})
+                return {
+                    "ok": True,
+                    "active": True,
+                    "message": f"已在游戏内启动全息投影: {safe_name} (原点: {origin.get('x', '~')}, {origin.get('y', '~')}, {origin.get('z', '~')})"
+                }
+            return {"ok": True, "active": False, "message": f"已下发蓝图全息投影指令: {safe_name}"}
+
+        elif action == "unpreview_ezmatic":
+            mod = manager.mod_instances.get("Ezmatic")
+            if mod:
+                await mod.clear_preview("Studio")
+            return {"ok": True, "active": False, "message": "已清除游戏内全息投影"}
 
         elif action == "build_ezmatic":
-            # $ezmatic create <filename>
-            cmd = f"{cp}ezmatic create {safe_name}"
-            res = asyncio.run(client.runCommand(cmd))
-            return {"ok": True, "message": f"已在游戏内触发蓝图建造: {safe_name}", "raw": res}
+            mod = manager.mod_instances.get("Ezmatic")
+            if not mod:
+                return {"ok": False, "message": "Ezmatic 模块未加载"}
+            x = params.get("x")
+            y = params.get("y")
+            z = params.get("z")
+            mode = params.get("mode") or "trim"
+            auto_confirm = params.get("auto_confirm", True)
+            await mod.create(safe_name, "WebUI", x, y, z, mode)
+            if getattr(mod, "pending", None):
+                task_id = mod.pending.get("taskId", "")
+                if auto_confirm:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(mod.run())
+                    return {"ok": True, "message": f"已开始在游戏内建造蓝图: {safe_name} (任务 #{task_id})"}
+                return {"ok": True, "message": f"已准备蓝图建造任务 #{task_id}，等待确认"}
+            return {"ok": False, "message": "蓝图准备失败，请检查文件或坐标"}
 
         elif action == "draw_image":
-            # $image create <filename> [axis] [x] [y] [z]
+            mod = manager.mod_instances.get("ImageMod")
+            if not mod:
+                return {"ok": False, "message": "ImageMod 模块未加载"}
             axis = params.get("axis", "x").lower()
             x = params.get("x", "~")
             y = params.get("y", "~")
             z = params.get("z", "~")
-            cmd = f"{cp}image create {safe_name} {axis} {x} {y} {z}"
-            res = asyncio.run(client.runCommand(cmd))
-            return {"ok": True, "message": f"已下发像素画绘制任务: {safe_name}", "raw": res}
+            await mod._cmd_image("Studio", "create", safe_name, axis, str(x), str(y), str(z))
+            return {"ok": True, "message": f"已下发像素画绘制任务: {safe_name}"}
 
         elif action == "confirm_image":
-            cmd = f"{cp}image y"
-            res = asyncio.run(client.runCommand(cmd))
-            return {"ok": True, "message": "已确认像素画绘制", "raw": res}
+            mod = manager.mod_instances.get("ImageMod")
+            if mod:
+                await mod._cmd_image("Studio", "y")
+            return {"ok": True, "message": "已确认像素画绘制"}
 
         else:
             return {"ok": False, "message": f"未知的 Studio 动作指令: {action}"}
 
     except Exception as e:
         return {"ok": False, "message": f"执行动作失败: {e}"}
+
+
+def execute_studio_action(action: str, category: str, filename: str, params: dict = None) -> dict:
+    """调度游戏内动作 (播放音乐、执行投影、绘制像素画、运行函数)"""
+    from lib.current import Current
+    client = Current.client
+    if not client:
+        return {
+            "ok": False,
+            "message": "当前无活跃 Minecraft 客户端连接。游戏内投影与建造需在游戏内执行 /connect 连接。\n若仅查看蓝图外观，请点击「3D 预览」（完全无需连接游戏客户端）！"
+        }
+
+    import asyncio
+    try:
+        import webui.server as ws
+        loop = getattr(ws, "_event_loop", None)
+    except Exception:
+        loop = None
+
+    if loop is not None and not loop.is_closed():
+        fut = asyncio.run_coroutine_threadsafe(
+            _async_execute_studio_action(action, category, filename, params),
+            loop
+        )
+        try:
+            return fut.result(timeout=25)
+        except Exception as e:
+            return {"ok": False, "message": f"动作执行超时或异常: {e}"}
+    else:
+        # 无运行中循环时的回退(例如单元测试环境)
+        try:
+            cur_loop = asyncio.get_event_loop()
+            if cur_loop.is_running():
+                fut = asyncio.run_coroutine_threadsafe(
+                    _async_execute_studio_action(action, category, filename, params),
+                    cur_loop
+                )
+                return fut.result(timeout=25)
+            else:
+                return cur_loop.run_until_complete(
+                    _async_execute_studio_action(action, category, filename, params)
+                )
+        except Exception:
+            try:
+                return asyncio.run(
+                    _async_execute_studio_action(action, category, filename, params)
+                )
+            except Exception as ex:
+                return {"ok": False, "message": f"执行动作失败: {ex}"}
 
 
 def _format_size(size_bytes: int) -> str:
@@ -736,7 +828,9 @@ def download_online_textures(source_url: str = None, fallback_local: bool = True
 
 
 def ensure_minecraft_textures(force: bool = False) -> int:
-    """向后兼容接口: 返回当前已安装方块纹理数 (不再后台静默提取)"""
+    """向后兼容接口: 返回当前已安装方块纹理数 (若指定 force=True 则从本机提取)"""
+    if force:
+        extract_local_minecraft_textures(force=True)
     return get_textures_status()["count"]
 
 

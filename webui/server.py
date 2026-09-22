@@ -1011,6 +1011,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/studio/blueprint-voxels":
             self._api_studio_post_blueprint_voxels()
             return
+        if parsed.path == "/api/studio/blueprint-html":
+            self._api_studio_post_blueprint_html()
+            return
         if parsed.path == "/api/studio/textures/download":
             self._api_studio_textures_download()
             return
@@ -2431,6 +2434,30 @@ class WebUIHandler(BaseHTTPRequestHandler):
             self.wfile.write(content)
         except FileNotFoundError:
             self._respond({"ok": False, "message": "文件不存在"}, status=404)
+        except Exception as e:
+            self._respond({"ok": False, "message": f"生成 HTML 失败: {e}"}, status=400)
+
+    def _api_studio_post_blueprint_html(self) -> None:
+        """从客户端传入的体素数据直接生成并导出独立离线单文件 3D 网页"""
+        if not _require_permission("mods")(self):
+            return
+        from lib.studio import generate_standalone_blueprint_html
+        body = self._read_body()
+        data = body.get("data") or {}
+        filename = (body.get("filename") or data.get("name") or "blueprint.litematic").strip()
+        if not data or not data.get("voxels"):
+            self._respond({"ok": False, "message": "缺少蓝图体素数据"}, status=400)
+            return
+        try:
+            html_str = generate_standalone_blueprint_html(data)
+            content = html_str.encode("utf-8")
+            stem = os.path.splitext(filename)[0]
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(content)))
+            self.send_header("Content-Disposition", f'attachment; filename="{urllib.parse.quote(stem)}_3d_preview.html"')
+            self.end_headers()
+            self.wfile.write(content)
         except Exception as e:
             self._respond({"ok": False, "message": f"生成 HTML 失败: {e}"}, status=400)
 

@@ -34,6 +34,11 @@ feat3: Mod 在线专属配置文件编辑与热重载
 feature4: webui 多维游戏资产&蓝图工坊
 feat5: 创意工坊现在无需连接MC客户端就可预览投影文件
 feat6: block textures改为在线下载
+feat7: 创意工坊4个标签改成按钮式
+devfeat1: .exportignore文件可以设置export时忽略哪些文件
+devfeat2: .noneeds文件可以在每次更新完后检测并删除不需要的文件/文件夹
+feat3: 现在--reset指令也可实现--reset-all参数的功能
+fix1: 修复导出投影独立html文件提示需要认证bug
 """
 MINIMIUM_ALLOWED_VERSION = "b0.4.0" # 因为b0.4.0版本大量重写了账户登录逻辑, 所以, 设置了拒绝降级到b0.4.0-的版本
                                     # 但是如果你需要降级低于b0.4.0的版本，请更改这里的值为b0.0.0以删除限制
@@ -46,7 +51,7 @@ MINIMIUM_ALLOWED_VERSION = "b0.4.0" # 因为b0.4.0版本大量重写了账户登
 GITHUB_REPO = "Hydrooxzgen/EnderBridge"  # You can edit this to your own repository if you fork it :)
 
 # --- 命令行开关常量 ---
-WANT_RESET = "--reset-all" in sys.argv
+WANT_RESET = ("--reset-all" in sys.argv) or ("--reset" in sys.argv)
 WANT_EXPORT = "export" in sys.argv
 WANT_EXPORT_CLEAR = WANT_EXPORT and "-clear" in sys.argv
 WANT_LOAD_WITHOUT_CONFIG = "--load-without-config" in sys.argv
@@ -848,19 +853,28 @@ if WANT_EXPORT:
     if out == ROOT or out.startswith(ROOT + os.sep):
         _export_err("输出路径不能位于项目目录内,请放到上级目录或指定其他位置")
 
+    export_ignore_path = os.path.join(ROOT, ".exportignore")
+    ignore_spec = None
+    if os.path.isfile(export_ignore_path):
+        from version_manager.package import ExportIgnore
+        ignore_spec = ExportIgnore.from_file(export_ignore_path)
+
     try:
-        files = collect_export_files(ROOT)
+        files = collect_export_files(ROOT, export_ignore=ignore_spec)
     except PackageError as e:
         _export_err(str(e))
 
     print("======================================")
     print(f"  正在导出 EnderBridge ...")
+    if ignore_spec and ignore_spec.rules:
+        # print(f"  已加载忽略规则: .exportignore ({len(ignore_spec.rules)} 条规则)")
+        pass
     print(f"  文件数量: {len(files)}")
     print(f"  输出路径: {out}")
     print("======================================")
 
     try:
-        create_export_zip(ROOT, out)
+        create_export_zip(ROOT, out, export_ignore=ignore_spec)
     except PackageError as e:
         _export_err(str(e))
 

@@ -921,12 +921,20 @@ class Mod:
             try:
                 pos = await self.client.getPosition("@s")
                 if not pos:
-                    self.client.tell("§cEzmatic | §fError > §i无法获取你的坐标", sender)
+                    pos = await self.client.getPosition("@p")
+                if not pos and hasattr(self.client, "getLocalPlayer"):
+                    local_name = await self.client.getLocalPlayer()
+                    if local_name:
+                        pos = await self.client.getPosition(local_name)
+                if not pos and sender and sender not in ("Console", "WebUI", "Studio", "Terminal"):
+                    pos = await self.client.getPosition(sender)
+                if not pos:
+                    self.client.tell("§cEzmatic | §fError > §i无法获取坐标，请提供 X Y Z 参数或确保游戏内有玩家", sender)
                     return
                 # 玩家脚底的 Y 是其脚下方块的上表面,减 1 使建筑底部对齐到脚下那层方块
                 origin = {"x": math.floor(pos["x"]), "y": math.floor(pos["y"]) - 1, "z": math.floor(pos["z"])}
             except Exception:
-                self.client.tell("§cEzmatic | §fError > §i无法获取你的坐标", sender)
+                self.client.tell("§cEzmatic | §fError > §i无法获取坐标，请提供 X Y Z 参数", sender)
                 return
 
         if origin["y"] < -64 or origin["y"] + data["sy"] - 1 > 320:
@@ -983,7 +991,10 @@ class Mod:
         )
         if unmapped_count:
             self.client.tellAll(f"§cEzmatic | §fWarn > §i无法映射方块: {unmapped_count} 个 （可用 {Command.command_prefix}ezmatic verify {task_id} map 检查，{Command.command_prefix}ezmatic fix {task_id} 修复）")
-        self.client.tellAll(f"§f确认请发送 §e{Command.command_prefix}ezmatic y，取消请发送 §c{Command.command_prefix}ezmatic n")
+        if sender not in ("WebUI", "Studio"):
+            self.client.tellAll(f"§f确认请发送 §e{Command.command_prefix}ezmatic y，取消请发送 §c{Command.command_prefix}ezmatic n")
+        else:
+            self.client.tellAll(f"§aEzmatic | §fImport > §iWeb 触发建造, 任务开始...")
 
     async def run(self):
         task = self.pending
@@ -1384,11 +1395,19 @@ class Mod:
             try:
                 pos = await self.client.getPosition("@s")
                 if not pos:
-                    self.client.tell("§cEzmatic | §fError > §i无法获取你的坐标", sender)
+                    pos = await self.client.getPosition("@p")
+                if not pos and hasattr(self.client, "getLocalPlayer"):
+                    local_name = await self.client.getLocalPlayer()
+                    if local_name:
+                        pos = await self.client.getPosition(local_name)
+                if not pos and sender and sender not in ("Console", "WebUI", "Studio", "Terminal"):
+                    pos = await self.client.getPosition(sender)
+                if not pos:
+                    self.client.tell("§cEzmatic | §fError > §i无法获取坐标，请提供 X Y Z 参数或确保游戏内有玩家", sender)
                     return
                 origin = {"x": math.floor(pos["x"]), "y": math.floor(pos["y"]) - 1, "z": math.floor(pos["z"])}
             except Exception:
-                self.client.tell("§cEzmatic | §fError > §i无法获取你的坐标", sender)
+                self.client.tell("§cEzmatic | §fError > §i无法获取坐标，请提供 X Y Z 参数", sender)
                 return
         if origin["y"] < -64 or origin["y"] + data["sy"] - 1 > 320:
             self.client.tell(f"§cEzmatic | §fError > §iY 轴超出限制: {origin['y']} ~ {origin['y'] + data['sy'] - 1} (允许 -64 ~ 320)", sender)
@@ -1468,14 +1487,14 @@ class Mod:
         x1, y1, z1 = origin["x"], origin["y"], origin["z"]
         x2, y2, z2 = x1 + data["sx"] - 1, y1 + data["sy"] - 1, z1 + data["sz"] - 1
         step = max(3, math.ceil(max(data["sx"], data["sy"], data["sz"]) / 60))
-        # 底边 4 条 + 立柱 4 条(顶部省略,避免粒子过多)
-        edges = Mod.preview_edges(x1, y1, z1, x2, y2, z2)[:8]
+        # 完整渲染全部 12 条棱边(X 轴 4 条、Y 轴 4 条、Z 轴 4 条)
+        edges = Mod.preview_edges(x1, y1, z1, x2, y2, z2)
         for a, b in edges:
             dx = b[0] - a[0]
             dy = b[1] - a[1]
             dz = b[2] - a[2]
             length = max(abs(dx), abs(dy), abs(dz))
-            n = math.floor(length / step)
+            n = max(1, math.floor(length / step))
             for i in range(n + 1):
                 await self.client.sendCommand(
                     f"/particle minecraft:endrod {a[0] + dx * i / n + 0.5} {a[1] + dy * i / n + 0.5} {a[2] + dz * i / n + 0.5}"

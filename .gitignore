@@ -26,3 +26,4 @@ users.json
 # WebUI 方块材质包 (通过设置-在线资源管理动态下载/更新/卸载，不污染 Git 仓库)
 webui/static/textures/blocks/*
 !webui/static/textures/blocks/.gitkeep
+.exportignore

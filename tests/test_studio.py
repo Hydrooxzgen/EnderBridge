@@ -68,6 +68,7 @@ DummyHandler._api_studio_get_palette = WebUIHandler._api_studio_get_palette
 DummyHandler._api_studio_get_blueprint_voxels = WebUIHandler._api_studio_get_blueprint_voxels
 DummyHandler._api_studio_post_blueprint_voxels = WebUIHandler._api_studio_post_blueprint_voxels
 DummyHandler._api_studio_get_blueprint_html = WebUIHandler._api_studio_get_blueprint_html
+DummyHandler._api_studio_post_blueprint_html = WebUIHandler._api_studio_post_blueprint_html
 DummyHandler._api_studio_upload = WebUIHandler._api_studio_upload
 DummyHandler._api_studio_save_text = WebUIHandler._api_studio_save_text
 DummyHandler._api_studio_delete_asset = WebUIHandler._api_studio_delete_asset
@@ -348,6 +349,19 @@ class TestStudioBlueprint:
         assert b"<!DOCTYPE html>" in handler.wfile.data
         assert b"const DATA =" in handler.wfile.data
 
+    def test_api_post_blueprint_html(self):
+        from lib.studio import parse_blueprint_voxels
+        vox = parse_blueprint_voxels("ezmatic", "樱花塔.litematic")
+        handler = DummyHandler(
+            path="/api/studio/blueprint-html",
+            body={"filename": "test_local.litematic", "data": vox}
+        )
+        handler._api_studio_post_blueprint_html()
+        assert handler.status == 200
+        assert "text/html" in handler.response_headers.get("Content-Type", "")
+        assert b"<!DOCTYPE html>" in handler.wfile.data
+        assert b"test_local_3d_preview.html" in handler.response_headers.get("Content-Disposition", "").encode("utf-8")
+
     def test_resolve_block_texture_filenames(self):
         from lib.studio import resolve_block_texture_filenames
         sample_avail = {
@@ -383,7 +397,7 @@ class TestStudioBlueprint:
 
     def test_ensure_minecraft_textures(self):
         from lib.studio import ensure_minecraft_textures
-        count = ensure_minecraft_textures()
+        count = ensure_minecraft_textures(force=True)
         assert count > 50
 
     def test_blueprint_palette_has_textures(self):
@@ -513,5 +527,133 @@ class TestStudioTextureManagement:
         assert s == 200
         assert data["ok"] is True
         assert not (test_dir / "glass.png").exists()
+
+
+class TestStudioActions:
+    def test_execute_studio_action_without_client(self, monkeypatch):
+        from lib.current import Current
+        from lib.studio import execute_studio_action
+
+        monkeypatch.setattr(Current, "client", None)
+        res = execute_studio_action("preview_ezmatic", "ezmatic", "test.litematic")
+        assert res["ok"] is False
+        assert "无活跃 Minecraft 客户端连接" in res["message"]
+        assert "3D 预览" in res["message"]
+
+    def test_execute_studio_action_with_mock_client(self, monkeypatch):
+        import asyncio
+        from lib.current import Current
+        from lib.studio import execute_studio_action
+
+        class MockEzmaticMod:
+            def __init__(self):
+                self.preview_called = False
+                self.create_called = False
+                self.run_called = False
+                self.clear_called = False
+                self.preview_data = {"origin": {"x": 10, "y": 64, "z": 20}}
+                self.pending = {"taskId": 42}
+
+            async def preview(self, name, sender, x, y, z, mode):
+                self.preview_called = True
+
+            async def clear_preview(self, sender):
+                self.clear_called = True
+
+            async def create(self, name, sender, x, y, z, mode):
+                self.create_called = True
+
+            async def run(self):
+                self.run_called = True
+
+        class MockMusicMod:
+            def __init__(self):
+                self.cmd_calls = []
+                self.playPercussion = True
+
+            async def _cmd_music(self, sender, method, *args):
+                self.cmd_calls.append((method, args))
+
+        class MockMCFuncMod:
+            def __init__(self):
+                self.func_calls = []
+
+            async def _cmd_function(self, sender, method, *args):
+                self.func_calls.append((method, args))
+
+        class MockClient:
+            pass
+
+        client = MockClient()
+        mock_ez = MockEzmaticMod()
+        mock_music = MockMusicMod()
+        mock_mcfunc = MockMCFuncMod()
+
+        class MockManager:
+            mod_instances = {
+                "Ezmatic": mock_ez,
+                "Music": mock_music,
+                "MCFunc": mock_mcfunc,
+            }
+
+        monkeypatch.setattr(Current, "client", client)
+        monkeypatch.setattr(Current, "client_mods", {client: MockManager()})
+
+        # 1. 蓝图预览
+        p_res = execute_studio_action("preview_ezmatic", "ezmatic", "castle.litematic")
+        assert p_res["ok"] is True
+        assert mock_ez.preview_called is True
+        assert "全息投影" in p_res["message"]
+
+        # 2. 蓝图清除预览
+        c_res = execute_studio_action("unpreview_ezmatic", "ezmatic", "castle.litematic")
+        assert c_res["ok"] is True
+        assert mock_ez.clear_called is True
+
+        # 3. 蓝图自动建造
+        b_res = execute_studio_action(
+            "build_ezmatic", "ezmatic", "castle.litematic",
+            params={"x": 100, "y": 70, "z": 200, "auto_confirm": True}
+        )
+        assert b_res["ok"] is True
+        assert mock_ez.create_called is True
+        assert mock_ez.run_called is True
+        assert "#42" in b_res["message"]
+
+        # 4. 点播音乐
+        m_res = execute_studio_action("play_midi", "midi", "song.mid", params={"percussion": False})
+        assert m_res["ok"] is True
+        assert mock_music.playPercussion is False
+        assert mock_music.cmd_calls[0] == ("run", ("song.mid",))
+
+        # 5. 运行函数
+        f_res = execute_studio_action("run_mcfunc", "mcfunc", "macro.mcfunc")
+        assert f_res["ok"] is True
+        assert mock_mcfunc.func_calls[0] == ("function", ("macro.mcfunc",))
+
+        # 6. 全息切换 (Toggle Preview)
+        mock_ez.preview_data = {"file": "castle.litematic", "origin": {"x": 0, "y": 0, "z": 0}}
+        t_res = execute_studio_action("toggle_preview_ezmatic", "ezmatic", "castle.litematic")
+        assert t_res["ok"] is True
+        assert t_res["active"] is False
+        assert "关闭" in t_res["message"]
+
+    def test_ezmatic_preview_edges_has_all_three_axes(self):
+        from mod.ezmatic.main import Mod
+        edges = Mod.preview_edges(0, 0, 0, 10, 20, 30)
+        assert len(edges) == 12
+
+        # 验证包含 X 轴变化 (4条)
+        x_edges = [e for e in edges if e[0][0] != e[1][0] and e[0][1] == e[1][1] and e[0][2] == e[1][2]]
+        assert len(x_edges) == 4
+
+        # 验证包含 Y 轴变化 (4条立柱)
+        y_edges = [e for e in edges if e[0][0] == e[1][0] and e[0][1] != e[1][1] and e[0][2] == e[1][2]]
+        assert len(y_edges) == 4
+
+        # 验证包含 Z 轴变化 (4条) - 确认 Z 轴未丢失
+        z_edges = [e for e in edges if e[0][0] == e[1][0] and e[0][1] == e[1][1] and e[0][2] != e[1][2]]
+        assert len(z_edges) == 4
+
 
 

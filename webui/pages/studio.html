@@ -11,9 +11,60 @@
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
-    margin-bottom: 16px;
-    border-bottom: 1px solid var(--card-border);
-    padding-bottom: 10px;
+    margin-bottom: 18px;
+    padding: 6px;
+    background: var(--input-bg, rgba(255, 255, 255, 0.03));
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+  }
+  .studio-tab-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: 9px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-dim, #94a3b8);
+    font-size: 13.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    user-select: none;
+    outline: none;
+  }
+  .studio-tab-btn:hover {
+    color: var(--text, #f8fafc);
+    background: var(--hover-bg, rgba(255, 255, 255, 0.06));
+    border-color: rgba(255, 255, 255, 0.08);
+    transform: translateY(-1px);
+  }
+  .studio-tab-btn:active {
+    transform: scale(0.97);
+  }
+  .studio-tab-btn:focus-visible {
+    outline: 2px solid var(--accent, #6366f1);
+    outline-offset: 2px;
+  }
+  .studio-tab-btn.active {
+    color: #ffffff;
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+  }
+  .studio-tab-badge {
+    display: inline-block;
+    padding: 1px 7px;
+    font-size: 11px;
+    font-weight: 700;
+    border-radius: 9999px;
+    background: rgba(0, 0, 0, 0.2);
+    color: inherit;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  .studio-tab-btn.active .studio-tab-badge {
+    background: rgba(255, 255, 255, 0.25);
+    border-color: rgba(255, 255, 255, 0.35);
   }
   .studio-dropzone {
     border: 2px dashed var(--card-border);
@@ -96,10 +147,22 @@
 
   <!-- 分类工作台 Tab 导航 -->
   <div class="studio-tab-bar" id="studioTabs">
-    <span class="chip-tab active" data-tab="midi"><span data-i18n="studio.tabMidi">🎵 MIDI 音乐</span> <code id="cntMidi" style="font-size:11px;opacity:0.8;">(0)</code></span>
-    <span class="chip-tab" data-tab="image"><span data-i18n="studio.tabImage">🖼️ 像素画工坊</span> <code id="cntImage" style="font-size:11px;opacity:0.8;">(0)</code></span>
-    <span class="chip-tab" data-tab="ezmatic"><span data-i18n="studio.tabEzmatic">🏗️ 蓝图模型</span> <code id="cntEzmatic" style="font-size:11px;opacity:0.8;">(0)</code></span>
-    <span class="chip-tab" data-tab="mcfunc"><span data-i18n="studio.tabMcfunc">📜 MCFunc 脚本</span> <code id="cntMcfunc" style="font-size:11px;opacity:0.8;">(0)</code></span>
+    <button type="button" class="studio-tab-btn chip-tab active" data-tab="midi">
+      <span data-i18n="studio.tabMidi">🎵 MIDI 音乐</span>
+      <span class="studio-tab-badge" id="cntMidi">(0)</span>
+    </button>
+    <button type="button" class="studio-tab-btn chip-tab" data-tab="image">
+      <span data-i18n="studio.tabImage">🖼️ 像素画工坊</span>
+      <span class="studio-tab-badge" id="cntImage">(0)</span>
+    </button>
+    <button type="button" class="studio-tab-btn chip-tab" data-tab="ezmatic">
+      <span data-i18n="studio.tabEzmatic">🏗️ 蓝图模型</span>
+      <span class="studio-tab-badge" id="cntEzmatic">(0)</span>
+    </button>
+    <button type="button" class="studio-tab-btn chip-tab" data-tab="mcfunc">
+      <span data-i18n="studio.tabMcfunc">📜 MCFunc 脚本</span>
+      <span class="studio-tab-badge" id="cntMcfunc">(0)</span>
+    </button>
   </div>
 
   <!-- 搜索与筛选工具栏 -->
@@ -244,6 +307,7 @@
       <div class="row gap-10">
         <input type="file" id="bpLocalFileInput" accept=".litematic" style="display:none;" />
         <button class="btn btn-sm btn-primary" id="bpLocalPickBtn"><span data-i18n="studio.bpSelectLocal">选择本地文件预览</span></button>
+        <button class="btn btn-sm btn-danger" id="ezmaticClearHoloBtn" title="清除游戏内正在显示的全息粒子边框"><span data-i18n="studio.clearHolo">清除全息</span></button>
       </div>
     </div>
 
@@ -377,7 +441,8 @@
 
         <!-- Footer Actions -->
         <div style="padding:10px 14px;border-top:1px solid var(--card-border);background:var(--input-bg);display:flex;gap:8px;">
-          <button class="btn btn-sm btn-primary" id="bpModalBuildInGameBtn" style="flex:1;" data-i18n="studio.buildHolo">开始建造</button>
+          <button class="btn btn-sm" id="bpModalHoloInGameBtn" style="flex:1;" data-i18n="studio.previewHolo">游戏内全息</button>
+          <button class="btn btn-sm btn-primary" id="bpModalBuildInGameBtn" style="flex:1;" data-i18n="studio.buildHolo">游戏内建造</button>
         </div>
       </div>
     </div>

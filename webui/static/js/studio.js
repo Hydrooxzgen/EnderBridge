@@ -6,6 +6,7 @@ var _searchKeyword = "";
 var _blockPalette = []; // mod/image/blocks.json 方块调色板
 var _selectedImageName = "";
 var _currentMcfuncFile = "";
+var _activeHoloFile = null;
 
 // Web Audio 播放器状态
 var _audioCtx = null;
@@ -668,9 +669,10 @@ function renderEzmaticTab(list) {
     var dim = meta.dimensions || {};
     var dimStr = dim.x ? dim.x + " × " + dim.y + " × " + dim.z : "--";
     var volStr = meta.volume ? meta.volume.toLocaleString() + " 方块" : "--";
+    var isHolo = _activeHoloFile === item.name;
     var author = meta.author || "Unknown";
 
-    return '<div class="blueprint-card">'
+    return '<div class="blueprint-card' + (isHolo ? ' holo-active' : '') + '">'
       + '<div>'
       + '  <div class="row" style="justify-content:space-between;align-items:flex-start;margin-bottom:8px;">'
       + '    <strong style="font-size:14px;word-break:break-all;">' + escapeHtml(item.name) + '</strong>'
@@ -683,9 +685,12 @@ function renderEzmaticTab(list) {
       + '</div>'
       + '<div class="row gap-10" style="margin-top:8px;justify-content:space-between;flex-wrap:wrap;">'
       + '  <div class="row gap-6">'
-      + '    <button class="btn btn-sm ezmatic-3d-btn" data-name="' + escapeHtml(item.name) + '" style="background:rgba(59,130,246,0.15);border-color:#3b82f6;color:#60a5fa;">' + (t("studio.preview3D") || "3D 预览") + '</button>'
-      + '    <button class="btn btn-sm ezmatic-action-btn" data-action="preview_ezmatic" data-name="' + escapeHtml(item.name) + '">' + (t("studio.previewHolo") || "投影预览") + '</button>'
-      + '    <button class="btn btn-sm btn-primary ezmatic-action-btn" data-action="build_ezmatic" data-name="' + escapeHtml(item.name) + '">' + (t("studio.buildHolo") || "开始建造") + '</button>'
+      + '    <button class="btn btn-sm btn-primary ezmatic-3d-btn" data-name="' + escapeHtml(item.name) + '">' + (t("studio.preview3D") || "3D 预览 (离线)") + '</button>'
+      + (isHolo
+          ? '    <button class="btn btn-sm btn-danger ezmatic-action-btn" data-action="unpreview_ezmatic" data-name="' + escapeHtml(item.name) + '" title="清除游戏内全息粒子边框">' + (t("studio.clearHolo") || "清除全息") + '</button>'
+          : '    <button class="btn btn-sm ezmatic-action-btn" data-action="preview_ezmatic" data-name="' + escapeHtml(item.name) + '" title="' + (t("studio.holoHint") || "在游戏中生成全息粒子边框") + '">' + (t("studio.previewHolo") || "游戏内全息") + '</button>'
+        )
+      + '    <button class="btn btn-sm ezmatic-action-btn" data-action="build_ezmatic" data-name="' + escapeHtml(item.name) + '" title="' + (t("studio.buildHint") || "在游戏中自动摆放方块建造") + '">' + (t("studio.buildHolo") || "游戏内建造") + '</button>'
       + '  </div>'
       + '  <button class="btn btn-sm btn-danger studio-delete-btn" data-cat="ezmatic" data-name="' + escapeHtml(item.name) + '">🗑️</button>'
       + '</div>'
@@ -921,11 +926,27 @@ document.addEventListener("click", function (e) {
     return;
   }
 
-  // 3b) Ezmatic 蓝图游戏内操作 (投影/建造)
+  // 3b) Ezmatic 蓝图游戏内操作 (全息投影/建造)
   var ezBtn = e.target.closest(".ezmatic-action-btn");
   if (ezBtn) {
     var action = ezBtn.dataset.action;
     var ezName = ezBtn.dataset.name;
+    var params = {};
+
+    if (action === "build_ezmatic") {
+      var coordsInput = prompt(t("studio.buildCoordPrompt") || "请输入放置坐标 X Y Z（用空格分隔，留空则在玩家当前位置建造）:");
+      if (coordsInput === null) return; // 用户取消
+      coordsInput = coordsInput.trim();
+      if (coordsInput) {
+        var parts = coordsInput.split(/\s+/);
+        if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+          params.x = parts[0];
+          params.y = parts[1];
+          params.z = parts[2];
+        }
+      }
+    }
+
     ezBtn.disabled = true;
     api("/studio/action", {
       method: "POST",
@@ -933,8 +954,18 @@ document.addEventListener("click", function (e) {
         action: action,
         category: "ezmatic",
         filename: ezName,
+        params: params,
       }),
     }).then(function (res) {
+      if (res.ok) {
+        if (action === "preview_ezmatic") {
+          _activeHoloFile = ezName;
+        } else if (action === "unpreview_ezmatic") {
+          _activeHoloFile = null;
+        }
+        renderEzmaticTab(_allAssets.ezmatic || []);
+        updateModalHoloBtn();
+      }
       toast(res.message || t("studio.actionSent"), res.ok ? "ok" : "err");
     }).finally(function () {
       ezBtn.disabled = false;
@@ -1884,12 +1915,75 @@ function initBlueprintViewerEvents() {
     }
   });
 
-  // 导出独立离线 HTML 网页
+  // 导出独立离线 HTML 网页 (带身份令牌与 Blob 下载)
   var exportHtmlBtn = $("bpExportHtmlBtn");
   if (exportHtmlBtn) {
     exportHtmlBtn.addEventListener("click", function () {
       if (!_bpData) return;
-      window.location.href = "/api/studio/blueprint-html?file=" + encodeURIComponent(_bpData.name);
+      exportHtmlBtn.disabled = true;
+
+      var headers = {};
+      var role = sessionStorage.getItem(ROLE_KEY) || "";
+      var token = sessionStorage.getItem(TOKEN_KEY) || "";
+      if (role === "guest") {
+        headers["X-Auth-Guest"] = "1";
+      } else if (token) {
+        headers["X-Auth-Token"] = token;
+      }
+
+      var filename = (_bpData.name ? _bpData.name.replace(/\.[^.]+$/, "") : "blueprint") + "_3d_preview.html";
+
+      var fetchPromise;
+      if (_bpData.isLocal && _bpData.voxels) {
+        // 本地载入蓝图：POST 体素数据直接导出
+        headers["Content-Type"] = "application/json";
+        fetchPromise = fetch("/api/studio/blueprint-html", {
+          method: "POST",
+          headers: headers,
+          body: JSON.stringify({ filename: _bpData.name || "local.litematic", data: _bpData })
+        });
+      } else {
+        // 服务器端蓝图：GET 请求，同时携带请求头与查询参数兼容 token
+        var url = "/api/studio/blueprint-html?file=" + encodeURIComponent(_bpData.name);
+        if (token) url += "&token=" + encodeURIComponent(token);
+        if (role === "guest") url += "&guest=1";
+        fetchPromise = fetch(url, { headers: headers });
+      }
+
+      fetchPromise
+        .then(function (res) {
+          if (!res.ok) {
+            return res.json().then(function (err) {
+              throw new Error(err.message || "导出失败");
+            });
+          }
+          var disposition = res.headers.get("Content-Disposition") || "";
+          var match = disposition.match(/filename="?([^";]+)"?/);
+          if (match && match[1]) {
+            try {
+              filename = decodeURIComponent(match[1]);
+            } catch (e) {
+              filename = match[1];
+            }
+          }
+          return res.blob().then(function (blob) {
+            var blobUrl = window.URL.createObjectURL(blob);
+            var a = document.createElement("a");
+            a.href = blobUrl;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(blobUrl);
+            toast("已成功导出独立离线 3D 网页", "ok");
+          });
+        })
+        .catch(function (err) {
+          toast(err.message || "导出网页失败", "err");
+        })
+        .finally(function () {
+          exportHtmlBtn.disabled = false;
+        });
     });
   }
 
@@ -2010,17 +2104,77 @@ function initBlueprintViewerEvents() {
     });
   }
 
+  // 游戏内全息投影按钮及状态同步
+  var holoBtn = $("bpModalHoloInGameBtn");
+  if (holoBtn) {
+    holoBtn.addEventListener("click", function () {
+      if (!_bpData) return;
+      var isHolo = _activeHoloFile === _bpData.name;
+      var act = isHolo ? "unpreview_ezmatic" : "preview_ezmatic";
+      holoBtn.disabled = true;
+      api("/studio/action", {
+        method: "POST",
+        body: JSON.stringify({
+          action: act,
+          category: "ezmatic",
+          filename: _bpData.name,
+        }),
+      }).then(function (res) {
+        if (res.ok) {
+          _activeHoloFile = isHolo ? null : _bpData.name;
+          renderEzmaticTab(_allAssets.ezmatic || []);
+          updateModalHoloBtn();
+        }
+        toast(res.message || t("studio.actionSent"), res.ok ? "ok" : "err");
+      }).finally(function () {
+        holoBtn.disabled = false;
+      });
+    });
+  }
+
+  // 顶栏清除全息按钮
+  var clearHoloTopBtn = $("ezmaticClearHoloBtn");
+  if (clearHoloTopBtn) {
+    clearHoloTopBtn.addEventListener("click", function () {
+      clearHoloTopBtn.disabled = true;
+      api("/studio/action", {
+        method: "POST",
+        body: JSON.stringify({ action: "unpreview_ezmatic", category: "ezmatic" }),
+      }).then(function (res) {
+        _activeHoloFile = null;
+        renderEzmaticTab(_allAssets.ezmatic || []);
+        updateModalHoloBtn();
+        toast(res.message || t("studio.clearHolo") || "已清除全息投影", res.ok ? "ok" : "err");
+      }).finally(function () {
+        clearHoloTopBtn.disabled = false;
+      });
+    });
+  }
+
   // 游戏内建造
   var buildBtn = $("bpModalBuildInGameBtn");
   if (buildBtn) {
     buildBtn.addEventListener("click", function () {
       if (!_bpData) return;
+      var params = {};
+      var coordsInput = prompt(t("studio.buildCoordPrompt") || "请输入放置坐标 X Y Z（用空格分隔，留空则在玩家当前位置建造）:");
+      if (coordsInput === null) return; // 用户取消
+      coordsInput = coordsInput.trim();
+      if (coordsInput) {
+        var parts = coordsInput.split(/\s+/);
+        if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+          params.x = parts[0];
+          params.y = parts[1];
+          params.z = parts[2];
+        }
+      }
       api("/studio/action", {
         method: "POST",
         body: JSON.stringify({
           action: "build_ezmatic",
           category: "ezmatic",
           filename: _bpData.name,
+          params: params,
         }),
       }).then(function (res) {
         toast(res.message || t("studio.actionSent"), res.ok ? "ok" : "err");
@@ -2135,11 +2289,25 @@ function initBlueprintViewerEvents() {
   });
 }
 
+function updateModalHoloBtn() {
+  var holoBtn = $("bpModalHoloInGameBtn");
+  if (!holoBtn) return;
+  var isHolo = _bpData && _activeHoloFile === _bpData.name;
+  if (isHolo) {
+    holoBtn.textContent = t("studio.clearHolo") || "清除全息";
+    holoBtn.className = "btn btn-sm btn-danger";
+  } else {
+    holoBtn.textContent = t("studio.previewHolo") || "游戏内全息";
+    holoBtn.className = "btn btn-sm";
+  }
+}
+
 function setupBlueprintViewerWithData(res, filename, isLocal) {
   _bpData = res;
   _bpData.isLocal = !!isLocal;
   _bpSliceMin = res.minY;
   _bpSliceMax = res.maxY;
+  updateModalHoloBtn();
 
   var titleEl = $("bpModalTitle");
   if (titleEl) {
