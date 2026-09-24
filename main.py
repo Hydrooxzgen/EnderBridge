@@ -37,8 +37,9 @@ feat6: block textures改为在线下载
 feat7: 创意工坊4个标签改成按钮式
 devfeat1: .exportignore文件可以设置export时忽略哪些文件
 devfeat2: .noneeds文件可以在每次更新完后检测并删除不需要的文件/文件夹
-feat3: 现在--reset指令也可实现--reset-all参数的功能
+feat8: 现在--reset指令也可实现--reset-all参数的功能
 fix1: 修复导出投影独立html文件提示需要认证bug
+feat9: 自动化定时任务
 """
 MINIMIUM_ALLOWED_VERSION = "b0.4.0" # 因为b0.4.0版本大量重写了账户登录逻辑, 所以, 设置了拒绝降级到b0.4.0-的版本
                                     # 但是如果你需要降级低于b0.4.0的版本，请更改这里的值为b0.0.0以删除限制
@@ -1736,6 +1737,13 @@ async def main():
 
     # 启动玩家列表轮询任务(如果配置启用)
     asyncio.create_task(_player_list_polling_task())
+
+    # 启动自动化定时任务计划调度器 (Task Scheduler)
+    try:
+        from lib.scheduler import task_scheduler
+        asyncio.create_task(task_scheduler.run_loop())
+    except Exception as e:
+        shared.logger.warning(f"定时任务调度器启动异常: {e}")
 
     # 注入状态引用供游戏内命令(如 $help/$status/$list)使用
     shared.start_time = _start_time

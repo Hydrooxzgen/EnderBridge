@@ -897,6 +897,15 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if path == "/audit":
             self._serve_page("audit.html")
             return
+        if path == "/scheduler":
+            self._serve_page("scheduler.html")
+            return
+        if path == "/api/scheduler/tasks":
+            self._api_scheduler_get_tasks()
+            return
+        if path == "/api/scheduler/logs":
+            self._api_scheduler_get_logs()
+            return
         if path == "/banlist":
             self._serve_page("banlist.html")
             return
@@ -956,11 +965,17 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/roles":
             self._api_roles_update()
             return
+        if parsed.path == "/api/scheduler/tasks":
+            self._api_scheduler_update_task()
+            return
         self._respond({"ok": False, "message": "Not Found"}, status=404)
 
     def do_DELETE(self):
         if self._check_ban(): return
         parsed = urllib.parse.urlparse(self.path)
+        if parsed.path == "/api/scheduler/tasks":
+            self._api_scheduler_delete_task()
+            return
         if parsed.path == "/api/users":
             self._api_users_delete()
             return
@@ -1064,6 +1079,15 @@ class WebUIHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/bot/xbox-account/remove":
             self._api_bot_xbox_account_remove()
+            return
+        if parsed.path == "/api/scheduler/tasks":
+            self._api_scheduler_add_task()
+            return
+        if parsed.path == "/api/scheduler/tasks/toggle":
+            self._api_scheduler_toggle_task()
+            return
+        if parsed.path == "/api/scheduler/tasks/run":
+            self._api_scheduler_run_task()
             return
         self._respond({"ok": False, "message": "Not Found"}, status=404)
 
@@ -3228,6 +3252,136 @@ class WebUIHandler(BaseHTTPRequestHandler):
                 ws.close()
         except (ConnectionAbortedError, BrokenPipeError, ConnectionResetError, OSError):
             pass
+
+    # ---- 任务计划 (Scheduler) ----
+
+    def _api_scheduler_get_tasks(self) -> None:
+        """获取所有定时任务列表 (需要 scheduler 权限)"""
+        if not _require_permission("scheduler")(self):
+            return
+        try:
+            from lib.scheduler import task_scheduler
+            tasks = task_scheduler.get_tasks()
+            self._respond({"ok": True, "tasks": tasks})
+        except Exception as e:
+            self._respond({"ok": False, "message": f"获取任务失败: {e}"})
+
+    def _api_scheduler_get_logs(self) -> None:
+        """获取最近执行历史流水 (需要 scheduler 权限)"""
+        if not _require_permission("scheduler")(self):
+            return
+        try:
+            from lib.scheduler import task_scheduler
+            logs = task_scheduler.get_logs()
+            self._respond({"ok": True, "logs": logs})
+        except Exception as e:
+            self._respond({"ok": False, "message": f"获取日志失败: {e}"})
+
+    def _api_scheduler_add_task(self) -> None:
+        """新建定时任务 (需要 scheduler 权限)"""
+        if not _require_permission("scheduler")(self):
+            return
+        body = self._read_body()
+        try:
+            from lib.scheduler import task_scheduler
+            task = task_scheduler.add_task(body)
+            _audit(self, "scheduler", f"创建定时任务: {task.get('name')}")
+            self._respond({"ok": True, "task": task})
+        except Exception as e:
+            self._respond({"ok": False, "message": f"创建任务失败: {e}"})
+
+    def _api_scheduler_update_task(self) -> None:
+        """修改定时任务 (需要 scheduler 权限)"""
+        if not _require_permission("scheduler")(self):
+            return
+        body = self._read_body()
+        task_id = body.get("id")
+        if not task_id:
+            self._respond({"ok": False, "message": "缺少任务 ID"})
+            return
+        try:
+            from lib.scheduler import task_scheduler
+            task = task_scheduler.update_task(task_id, body)
+            if not task:
+                self._respond({"ok": False, "message": "任务不存在"}, status=404)
+                return
+            _audit(self, "scheduler", f"更新定时任务: {task.get('name')}")
+            self._respond({"ok": True, "task": task})
+        except Exception as e:
+            self._respond({"ok": False, "message": f"更新任务失败: {e}"})
+
+    def _api_scheduler_delete_task(self) -> None:
+        """删除定时任务 (需要 scheduler 权限)"""
+        if not _require_permission("scheduler")(self):
+            return
+        body = self._read_body()
+        task_id = body.get("id")
+        if not task_id:
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            task_id = (query.get("id") or [""])[0]
+        if not task_id:
+            self._respond({"ok": False, "message": "缺少任务 ID"})
+            return
+        try:
+            from lib.scheduler import task_scheduler
+            ok = task_scheduler.delete_task(task_id)
+            if ok:
+                _audit(self, "scheduler", f"删除定时任务 ID: {task_id}")
+                self._respond({"ok": True})
+            else:
+                self._respond({"ok": False, "message": "任务不存在"}, status=404)
+        except Exception as e:
+            self._respond({"ok": False, "message": f"删除任务失败: {e}"})
+
+    def _api_scheduler_toggle_task(self) -> None:
+        """切换任务启用/禁用状态 (需要 scheduler 权限)"""
+        if not _require_permission("scheduler")(self):
+            return
+        body = self._read_body()
+        task_id = body.get("id")
+        if not task_id:
+            self._respond({"ok": False, "message": "缺少任务 ID"})
+            return
+        try:
+            from lib.scheduler import task_scheduler
+            enabled = task_scheduler.toggle_task(task_id)
+            if enabled is None:
+                self._respond({"ok": False, "message": "任务不存在"}, status=404)
+                return
+            _audit(self, "scheduler", f"切换任务状态: ID {task_id} -> {enabled}")
+            self._respond({"ok": True, "enabled": enabled})
+        except Exception as e:
+            self._respond({"ok": False, "message": f"切换状态失败: {e}"})
+
+    def _api_scheduler_run_task(self) -> None:
+        """手动立即执行一次任务 (需要 scheduler 权限)"""
+        if not _require_permission("scheduler")(self):
+            return
+        body = self._read_body()
+        task_id = body.get("id")
+        if not task_id:
+            self._respond({"ok": False, "message": "缺少任务 ID"})
+            return
+        from lib.scheduler import task_scheduler
+        task = task_scheduler.get_task(task_id)
+        if not task:
+            self._respond({"ok": False, "message": "任务不存在"}, status=404)
+            return
+
+        if _event_loop is None or _event_loop.is_closed():
+            self._respond({"ok": False, "message": "事件循环未就绪，请稍后重试"})
+            return
+
+        try:
+            import asyncio
+            fut = asyncio.run_coroutine_threadsafe(
+                task_scheduler.execute_task(task, trigger_source="manual"), _event_loop
+            )
+            res = fut.result(timeout=30)
+            _audit(self, "scheduler", f"手动触发定时任务: {task.get('name')}")
+            self._respond({"ok": True, "result": res})
+        except Exception as e:
+            self._respond({"ok": False, "message": f"执行失败: {e}"})
 
 
 def _check_importable(mod_path: str) -> bool:

@@ -83,11 +83,12 @@ var _PAGE_PERM_MAP = {
   "mods": "mods",
   "studio": "mods",
   "console": "console",
+  "scheduler": "scheduler",
   "banlist": "banlist",
   "audit": "audit",
   "update": "update",
 };
-var _PAGE_ORDER = ["dashboard", "permissions", "config", "mods", "studio", "console", "audit", "update", "banlist"];
+var _PAGE_ORDER = ["dashboard", "permissions", "config", "mods", "studio", "console", "scheduler", "audit", "update", "banlist"];
 
 /** 找到当前路径对应的活跃页面名 */
 function _getActivePage() {
@@ -176,6 +177,7 @@ function initSidebar(activePage, role) {
     "config": "config",
     "mods": "mods",
     "console": "console",
+    "scheduler": "scheduler",
     "banlist": "banlist",
     "audit": "audit",
     "update": "update",
