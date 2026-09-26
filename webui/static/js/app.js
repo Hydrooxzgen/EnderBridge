@@ -45,7 +45,9 @@ function api(path, options) {
     var token = sessionStorage.getItem(TOKEN_KEY) || "";
     if (token) options.headers["X-Auth-Token"] = token;
   }
-  return fetch("/api" + path, options).then(function (res) {
+  var cleanPath = path || "";
+  var url = cleanPath.startsWith("/api/") ? cleanPath : ("/api" + (cleanPath.startsWith("/") ? cleanPath : ("/" + cleanPath)));
+  return fetch(url, options).then(function (res) {
     return res.json().then(function (data) {
       if (res.status === 401) { clearAuth(); location.href = "/login"; return Promise.reject(data); }
       if (res.status === 403) { var _t = (typeof t === "function") ? t : function (k) { return k; }; toast(data.message || _t("common.noPermission"), "err"); return Promise.reject(data); }
@@ -153,6 +155,7 @@ function requireAuth(callback) {
       }
     }
     else { clearAuth(); location.href = "/login"; }
+
   });
 }
 

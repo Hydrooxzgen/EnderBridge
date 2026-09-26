@@ -22,6 +22,7 @@ requireAuth(function (role) {
   loadConfig();
   initCategoryNav();
   initTexturePackManager();
+  initBackupManager();
 });
 
 // ===== 分类导航 =====
@@ -39,6 +40,10 @@ function initCategoryNav() {
       document.querySelectorAll(".cfg-category[data-cfg-cat]").forEach(function (sec) {
         sec.classList.toggle("active", sec.getAttribute("data-cfg-cat") === cat);
       });
+      // 切换到备份与恢复时自动刷新列表
+      if (cat === "backup") {
+        loadConfigBackups();
+      }
       // 切换到资源管理时刷新材质包状态
       if (cat === "resources") {
         loadTexturePackStatus();
@@ -152,6 +157,9 @@ function loadConfig() {
     var upd = data.config.updateConfig || {};
     if ($("cfg-autobackup")) {
       $("cfg-autobackup").checked = upd.autoBackup !== false;
+    }
+    if ($("cfg-backup-autobackup")) {
+      $("cfg-backup-autobackup").checked = upd.autoBackup !== false;
     }
 
     $("cfg-github-token").value = data.config.githubToken || "";
@@ -637,7 +645,7 @@ function collectFormConfig() {
     commandAliases: cfgData.commandAliases || {},
     playerListPolling: plp,
     updateConfig: {
-      autoBackup: $("cfg-autobackup") ? $("cfg-autobackup").checked : true,
+      autoBackup: $("cfg-backup-autobackup") ? $("cfg-backup-autobackup").checked : ($("cfg-autobackup") ? $("cfg-autobackup").checked : true),
     },
   };
 }
@@ -1062,5 +1070,251 @@ function doTexturePackUninstall() {
     .finally(function () {
       if (btnUn) btnUn.disabled = false;
     });
+}
+
+// ===== 备份与恢复管理 =====
+function initBackupManager() {
+  var createBtn = $("cfgCreateBackupBtn");
+  if (createBtn) {
+    createBtn.addEventListener("click", doCreateBackup);
+  }
+  var descInput = $("cfgBackupDescInput");
+  if (descInput) {
+    descInput.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        doCreateBackup();
+      }
+    });
+  }
+  var refreshBtn = $("cfgRefreshBackupsBtn");
+  if (refreshBtn) {
+    refreshBtn.addEventListener("click", loadConfigBackups);
+  }
+  var ab1 = $("cfg-autobackup");
+  var ab2 = $("cfg-backup-autobackup");
+  if (ab1 && ab2) {
+    ab1.addEventListener("change", function () { ab2.checked = this.checked; });
+    ab2.addEventListener("change", function () { ab1.checked = this.checked; });
+  }
+}
+
+function loadConfigBackups() {
+  var container = $("cfgBackupsContainer");
+  if (!container) return;
+  container.innerHTML = '<div class="td-dim" style="padding:16px 0;">' + (t("common.loading") || "加载中...") + '</div>';
+
+  api("/update/backups")
+    .then(function (res) {
+      if (!res || !res.ok) {
+        container.innerHTML = '<div style="color:var(--err,#ef4444);padding:16px 0;">' + escapeHtml((res && res.message) ? res.message : (t("cfg.backupLoadFail") || "获取备份列表失败")) + '</div>';
+        return;
+      }
+      var backups = res.backups || [];
+      if (backups.length === 0) {
+        container.innerHTML = '<div class="hint" style="padding:20px 0;text-align:center;">' + (t("cfg.backupEmpty") || "暂无可用备份文件") + '</div>';
+        return;
+      }
+
+      var html = '<div style="overflow-x:auto;"><table class="cfg-table" style="width:100%;border-collapse:collapse;margin-top:6px;">' +
+        '<thead><tr style="border-bottom:1px solid var(--card-border);text-align:left;font-size:12px;color:var(--text-dim);">' +
+        '<th style="padding:8px 10px;">' + (t("cfg.thTime") || t("upd.thTime") || "备份时间") + '</th>' +
+        '<th style="padding:8px 10px;">' + (t("cfg.thFile") || t("upd.thFile") || "文件名") + '</th>' +
+        '<th style="padding:8px 10px;">' + (t("cfg.thDesc") || t("upd.thDesc") || "备份描述") + '</th>' +
+        '<th style="padding:8px 10px;">' + (t("cfg.thSize") || t("upd.thSize") || "大小") + '</th>' +
+        '<th style="padding:8px 10px;text-align:right;">' + (t("cfg.thActions") || t("common.actions") || "操作") + '</th>' +
+        '</tr></thead><tbody>';
+
+      backups.forEach(function (b) {
+        var sizeMB = b.size ? (b.size / 1048576).toFixed(1) + " MB" : (b.size > 1024 ? (b.size / 1024).toFixed(0) + " KB" : (b.size || 0) + " B");
+        var timeStr = b.mtime ? new Date(b.mtime * 1000).toLocaleString() : (b.stamp || "—");
+        var descText = b.description ? escapeHtml(b.description) : '<span style="color:var(--text-dim);font-style:italic;">—</span>';
+        html += '<tr style="border-bottom:1px solid var(--card-border);font-size:13px;">' +
+          '<td style="padding:10px 10px;white-space:nowrap;color:var(--text-dim);">' + escapeHtml(timeStr) + '</td>' +
+          '<td style="padding:10px 10px;font-family:monospace;word-break:break-all;">' + escapeHtml(b.filename) + '</td>' +
+          '<td style="padding:10px 10px;max-width:240px;word-break:break-word;">' +
+          descText +
+          ' <button type="button" class="btn-ghost btn-cfg-edit-desc" data-path="' + escapeHtml(b.path) + '" data-desc="' + escapeHtml(b.description || "") + '" title="' + (t("cfg.backupEditDesc") || "编辑描述") + '" style="cursor:pointer;background:none;border:none;padding:1px 4px;font-size:12px;opacity:0.75;">✏️</button>' +
+          '</td>' +
+          '<td style="padding:10px 10px;white-space:nowrap;color:var(--text-dim);">' + sizeMB + '</td>' +
+          '<td style="padding:10px 10px;text-align:right;white-space:nowrap;">' +
+          '<button type="button" class="btn btn-sm btn-ghost btn-cfg-restore" data-path="' + escapeHtml(b.path) + '" data-file="' + escapeHtml(b.filename) + '" style="margin-right:6px;color:var(--accent,#818cf8);">' + (t("cfg.btnRestore") || "⏪ 恢复此备份") + '</button>' +
+          '<a class="btn btn-sm btn-ghost" href="/api/backups/download?path=' + encodeURIComponent(b.path) + '" download="' + escapeHtml(b.filename) + '" style="margin-right:6px;color:var(--text);text-decoration:none;">' + (t("cfg.btnDownload") || "📥 下载") + '</a>' +
+          '<button type="button" class="btn btn-sm btn-ghost btn-cfg-delete" data-path="' + escapeHtml(b.path) + '" data-file="' + escapeHtml(b.filename) + '" style="color:var(--danger,#ef4444);">' + (t("cfg.btnDelete") || "🗑️ 删除") + '</button>' +
+          '</td>' +
+          '</tr>';
+      });
+
+      html += '</tbody></table></div>';
+      container.innerHTML = html;
+
+      // 绑定编辑描述事件
+      container.querySelectorAll(".btn-cfg-edit-desc").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var p = this.getAttribute("data-path");
+          var oldDesc = this.getAttribute("data-desc") || "";
+          var newDesc = prompt(t("cfg.backupDescPrompt") || "请输入该备份的备注说明：", oldDesc);
+          if (newDesc === null) return;
+          api("/backups/description", {
+            method: "POST",
+            body: JSON.stringify({ path: p, description: newDesc })
+          }).then(function (res) {
+            if (res && res.ok) {
+              toast(t("cfg.backupDescUpdated") || "备份描述已更新", "ok");
+              loadConfigBackups();
+            } else {
+              toast((res && res.message) ? res.message : "更新描述失败", "err");
+            }
+          }).catch(function (err) {
+            toast((err && err.message) ? err.message : "更新描述异常", "err");
+          });
+        });
+      });
+
+      // 绑定恢复与删除按钮事件
+      container.querySelectorAll(".btn-cfg-restore").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var p = this.getAttribute("data-path");
+          var fn = this.getAttribute("data-file");
+          doRollbackBackup(p, fn);
+        });
+      });
+
+      container.querySelectorAll(".btn-cfg-delete").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var p = this.getAttribute("data-path");
+          var fn = this.getAttribute("data-file");
+          doDeleteBackup(p, fn);
+        });
+      });
+    })
+    .catch(function (err) {
+      container.innerHTML = '<div style="color:var(--err,#ef4444);padding:16px 0;">' + escapeHtml((err && err.message) ? err.message : (t("cfg.backupLoadFail") || "获取备份列表失败")) + '</div>';
+    });
+}
+
+function doCreateBackup() {
+  var btn = $("cfgCreateBackupBtn");
+  var descInput = $("cfgBackupDescInput");
+  var desc = descInput ? descInput.value.trim() : "";
+  if (btn) btn.disabled = true;
+  toast(t("cfg.backupCreating") || "正在创建备份中，请稍候...", "info", 3000);
+
+  api("/backups/create", { method: "POST", body: JSON.stringify({ description: desc }) })
+    .then(function (res) {
+      if (res && res.ok) {
+        toast((t("cfg.backupCreated") || "备份创建成功！") + (res.filename ? " (" + res.filename + ")" : ""), "ok");
+        if (descInput) descInput.value = "";
+        loadConfigBackups();
+      } else {
+        toast((res && res.message) ? res.message : "备份创建失败", "err");
+      }
+    })
+    .catch(function (err) {
+      toast((err && err.message) ? err.message : "创建备份异常", "err");
+    })
+    .finally(function () {
+      if (btn) btn.disabled = false;
+    });
+}
+
+function doDeleteBackup(path, filename) {
+  var promptMsg = (t("cfg.backupDeleteConfirm") || "确定要彻底删除备份文件 {file} 吗？此操作无法撤销！").replace("{file}", filename);
+  if (!confirm(promptMsg)) return;
+
+  toast(t("cfg.backupDeleting") || "正在删除备份...", "info", 2000);
+  api("/backups/delete", { method: "DELETE", body: JSON.stringify({ path: path }) })
+    .then(function (res) {
+      if (res && res.ok) {
+        toast(t("cfg.backupDeleted") || "备份已成功删除", "ok");
+        loadConfigBackups();
+      } else {
+        toast((res && res.message) ? res.message : "删除失败", "err");
+      }
+    })
+    .catch(function (err) {
+      toast((err && err.message) ? err.message : "删除备份异常", "err");
+    });
+}
+
+function doRollbackBackup(path, filename) {
+  var promptMsg = (t("cfg.backupRestoreConfirm") || "确定要将系统恢复到此备份快照吗？\n文件: {file}\n恢复后将自动重启服务器以加载旧版本。").replace("{file}", filename);
+  if (!confirm(promptMsg)) return;
+
+  var modal = $("cfgRollbackModal");
+  if (modal) modal.style.display = "flex";
+  var statusText = $("cfgRollbackStatusText");
+  if (statusText) statusText.textContent = t("cfg.rollbackProcessing") || "正在执行系统回滚并准备重启...";
+  var progressBar = $("cfgRollbackProgressBar");
+  if (progressBar) progressBar.style.width = "40%";
+
+  api("/update/rollback", { method: "POST", body: JSON.stringify({ path: path }) })
+    .then(function (res) {
+      if (res && res.ok) {
+        if (progressBar) progressBar.style.width = "75%";
+        var waitNotice = $("cfgRollbackNotice");
+        if (waitNotice) waitNotice.textContent = t("cfg.rollbackWait") || "请稍候，服务器正在重启上线...";
+        _pollAndRedirectConfig();
+      } else {
+        if (modal) modal.style.display = "none";
+        toast((res && res.message) ? res.message : "回滚失败", "err");
+      }
+    })
+    .catch(function (err) {
+      if (modal) modal.style.display = "none";
+      toast((err && err.message) ? err.message : "回滚触发异常", "err");
+    });
+}
+
+function _pollAndRedirectConfig() {
+  var basePort = parseInt(location.port || (location.protocol === "https:" ? 443 : 80), 10);
+  var ports = [basePort];
+  for (var i = 1; i <= 9; i++) { ports.push(basePort + i); }
+
+  function fetchWithTimeout(url, ms) {
+    var ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+    var opts = ctrl ? { signal: ctrl.signal } : {};
+    var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, ms) : null;
+    return fetch(url, opts).finally(function () { if (timer) clearTimeout(timer); });
+  }
+
+  function probe() {
+    var tryIdx = 0;
+    return new Promise(function (resolve) {
+      function tryPort() {
+        if (tryIdx >= ports.length) { resolve(null); return; }
+        var p = ports[tryIdx];
+        fetchWithTimeout(location.protocol + "//" + location.hostname + ":" + p + "/api/status", 2500)
+          .then(function (r) { return r.json(); })
+          .then(function (d) { resolve(d.ok ? p : (tryIdx++, tryPort())); })
+          .catch(function () { tryIdx++; tryPort(); });
+      }
+      tryPort();
+    });
+  }
+
+  var waitCount = 0;
+  var timer = setInterval(function () {
+    waitCount++;
+    var progressBar = $("cfgRollbackProgressBar");
+    if (progressBar) {
+      var pct = Math.min(95, 75 + waitCount * 2);
+      progressBar.style.width = pct + "%";
+    }
+
+    if (waitCount >= 3) {
+      probe().then(function (alivePort) {
+        if (alivePort !== null) {
+          clearInterval(timer);
+          if (progressBar) progressBar.style.width = "100%";
+          var statusText = $("cfgRollbackStatusText");
+          if (statusText) statusText.textContent = t("cfg.rollbackSuccess") || "回滚成功，服务器已重启就绪！";
+          setTimeout(function () {
+            location.href = location.protocol + "//" + location.hostname + ":" + alivePort + "/config";
+          }, 1500);
+        }
+      });
+    }
+  }, 1000);
 }
 

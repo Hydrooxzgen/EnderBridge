@@ -472,11 +472,12 @@
       <div class="cfg-category" data-cfg-cat="backup">
         <!-- 立即备份卡片 -->
         <div class="cfg-section">
-          <div class="row" style="justify-content:space-between;align-items:center;">
-            <h3 data-i18n="cfg.backupNowTitle" style="margin:0;">📦 立即备份</h3>
-            <button type="button" class="btn btn-primary btn-sm" id="cfgCreateBackupBtn" data-i18n="cfg.backupNowBtn">🚀 立即创建备份</button>
+          <h3 data-i18n="cfg.backupNowTitle" style="margin:0 0 6px 0;">📦 立即备份</h3>
+          <p class="hint" data-i18n="cfg.backupNowHint" style="margin:0 0 14px 0;">立即对当前 EnderBridge 项目代码、配置与资源完整打包备份，生成全量还原快照。自动遵循备份轮转策略（最多保留 3 份历史备份）。</p>
+          <div style="display:flex;align-items:center;gap:10px;max-width:680px;">
+            <input type="text" id="cfgBackupDescInput" class="cfg-input" style="flex:1;min-width:180px;padding:8px 12px;font-size:13px;" data-i18n-ph="cfg.backupDescPlaceholder" placeholder="输入备份备注说明（可选）" />
+            <button type="button" class="btn btn-primary" id="cfgCreateBackupBtn" data-i18n="cfg.backupNowBtn" style="flex-shrink:0;white-space:nowrap;padding:8px 18px;font-size:13px;letter-spacing:0.5px;min-width:fit-content;">🚀 立即创建备份</button>
           </div>
-          <p class="hint" data-i18n="cfg.backupNowHint" style="margin-top:8px;">立即对当前 EnderBridge 项目代码、配置与资源完整打包备份，生成全量还原快照。自动遵循备份轮转策略（最多保留 3 份历史备份）。</p>
         </div>
 
         <!-- 历史备份与恢复卡片 -->

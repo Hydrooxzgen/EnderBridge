@@ -177,3 +177,37 @@ class TestConfigBackupEndpoints:
         output = handler.wfile.getvalue()
         assert output == sample_bytes
         assert handler._response_data["headers"].get("Content-Disposition") is not None
+
+    def test_backup_create_with_description(self, temp_backup_env):
+        fake_root, fake_backups_dir = temp_backup_env
+        handler = create_mock_handler(
+            path="/api/backups/create",
+            body={"description": "手动备份测试备注"},
+            user_perms=["config"]
+        )
+        with patch("version_manager.package.backup_dir") as mock_bk:
+            mock_bk.return_value = str(fake_backups_dir / f"{BACKUP_PREFIX}20260926_999999.zip")
+            handler._api_backup_create()
+            output = handler.wfile.getvalue().decode("utf-8")
+            res = json.loads(output)
+            assert res.get("ok") is True
+            assert res.get("description") == "手动备份测试备注"
+            mock_bk.assert_called_once_with(str(fake_root), description="手动备份测试备注")
+
+    def test_backup_set_description(self, temp_backup_env):
+        _, fake_backups_dir = temp_backup_env
+        b1 = fake_backups_dir / f"{BACKUP_PREFIX}20260926_140000.zip"
+        b1.write_text("dummy")
+        handler = create_mock_handler(
+            path="/api/backups/description",
+            body={"path": str(b1), "description": "新备注说明"},
+            user_perms=["config"]
+        )
+        handler._api_backup_set_description()
+        output = handler.wfile.getvalue().decode("utf-8")
+        res = json.loads(output)
+        assert res.get("ok") is True
+        assert res.get("description") == "新备注说明"
+
+        from version_manager.package import get_backup_description
+        assert get_backup_description(str(b1)) == "新备注说明"

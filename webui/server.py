@@ -1064,6 +1064,12 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if parsed.path in ("/api/backups/create", "/api/update/backup-now"):
             self._api_backup_create()
             return
+        if parsed.path in ("/api/backups/description", "/api/backups/edit"):
+            self._api_backup_set_description()
+            return
+        if parsed.path in ("/api/backups/delete", "/api/backups/remove"):
+            self._api_backup_delete()
+            return
         if parsed.path in ("/api/update/rollback", "/api/backups/rollback"):
             self._api_update_rollback()
             return
@@ -1925,9 +1931,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
             self._respond({"ok": False, "message": f"上传处理失败: {e}"})
 
     def _api_update_backups(self) -> None:
-        """列出可用备份包（展示元数据）"""
+        """列出可用备份包（展示元数据与描述）"""
         try:
-            from version_manager.package import list_backups, BACKUP_PREFIX
+            from version_manager.package import list_backups, BACKUP_PREFIX, get_backup_description
             backup_dirs = [os.path.dirname(ROOT), os.path.join(ROOT, "backups")]
             found = []
             seen_files = set()
@@ -1949,12 +1955,14 @@ class WebUIHandler(BaseHTTPRequestHandler):
                     size = 0
                     mtime = 0
                 stamp = fname[len(BACKUP_PREFIX):].replace(".zip", "")
+                desc = get_backup_description(path)
                 items.append({
                     "filename": fname,
                     "path": path,
                     "size": size,
                     "mtime": mtime,
                     "stamp": stamp,
+                    "description": desc,
                 })
             self._respond({"ok": True, "backups": items})
         except Exception as e:
@@ -1970,11 +1978,14 @@ class WebUIHandler(BaseHTTPRequestHandler):
             else:
                 self._respond({"ok": False, "message": "未授权:需要 config 或 update 权限"}, status=403)
             return
+        body = self._read_body()
+        desc = str(body.get("description", "") or "").strip()
         try:
             from version_manager.package import backup_dir
-            backup_path = backup_dir(ROOT)
+            backup_path = backup_dir(ROOT, description=desc or None)
             fname = os.path.basename(backup_path)
-            _audit(self, "config", f"手动创建了系统备份: {fname}")
+            audit_msg = f"手动创建了系统备份: {fname}" + (f" (备注: {desc})" if desc else "")
+            _audit(self, "config", audit_msg)
             size = os.path.getsize(backup_path) if os.path.isfile(backup_path) else 0
             self._respond({
                 "ok": True,
@@ -1982,9 +1993,36 @@ class WebUIHandler(BaseHTTPRequestHandler):
                 "path": backup_path,
                 "filename": fname,
                 "size": size,
+                "description": desc,
             })
         except Exception as e:
             self._respond({"ok": False, "message": f"备份创建失败: {e}"})
+
+    def _api_backup_set_description(self) -> None:
+        """更新指定备份的描述信息（需要 config 或 update 权限）"""
+        user = _auth_user(self)
+        perms = user.get("permissions", [])
+        if "config" not in perms and "update" not in perms:
+            if not user.get("role"):
+                self._respond_denied()
+            else:
+                self._respond({"ok": False, "message": "未授权:需要 config 或 update 权限"}, status=403)
+            return
+        body = self._read_body()
+        backup_path = body.get("path", "").strip()
+        description = str(body.get("description", "") or "").strip()
+        if not backup_path:
+            self._respond({"ok": False, "message": "缺少备份路径参数"})
+            return
+        fname = os.path.basename(backup_path)
+        dest_dir = os.path.dirname(os.path.abspath(backup_path))
+        try:
+            from version_manager.package import save_backup_meta
+            save_backup_meta(dest_dir, fname, description)
+            _audit(self, "config", f"更新了备份描述 [{fname}]: {description}")
+            self._respond({"ok": True, "message": "描述已更新", "filename": fname, "description": description})
+        except Exception as e:
+            self._respond({"ok": False, "message": f"更新描述失败: {e}"})
 
     def _api_backup_delete(self) -> None:
         """删除指定备份文件（需要 config 或 update 权限）"""

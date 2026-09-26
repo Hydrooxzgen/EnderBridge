@@ -670,9 +670,11 @@ function loadBackups() {
       var btn = canRollback
         ? '<button class="btn btn-sm" data-path="' + escapeHtml(b.path) + '">' + t("upd.backupRollback") + '</button>'
         : '';
+      var descHtml = b.description ? '<span class="td-dim" style="margin-left:8px;font-size:12px;color:var(--accent,#818cf8);">📝 ' + escapeHtml(b.description) + '</span>' : '';
       return '<div class="release-item" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">' +
         '<div>' +
           '<span style="font-weight:600;">' + escapeHtml(b.filename) + '</span>' +
+          descHtml +
           '<span class="td-dim" style="margin-left:8px;font-size:12px;">' + date + '</span>' +
           (sizeMB ? '<span class="td-dim" style="margin-left:8px;font-size:12px;">' + t("upd.backupSize") + ': ' + sizeMB + '</span>' : '') +
         '</div>' +
