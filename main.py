@@ -25,9 +25,10 @@ USERS_JSON = os.path.join(CONFIG_DIR, "users.json")
 UPDATE_MARKER = os.path.join(ROOT, ".update_pending")
 
 # --- 版本常量 ---
-VERSION = "b0.4.3 dev"
+VERSION = "b0.4.3"
 # ↓仅当不为None时从Github拉取更新日志, 反之则直接显示该变量内容。
-DESCRIPTION = """
+DESCRIPTION = None
+"""
 feat1: WebUI 实时性能监控仪表盘
 feat2: 现在可以设置更新时是否自动备份
 feat3: Mod 在线专属配置文件编辑与热重载
