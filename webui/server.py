@@ -1064,6 +1064,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if parsed.path in ("/api/backups/create", "/api/update/backup-now"):
             self._api_backup_create()
             return
+        if parsed.path in ("/api/backups/delete", "/api/backups/remove"):
+            self._api_backup_delete()
+            return
         if parsed.path in ("/api/update/rollback", "/api/backups/rollback"):
             self._api_update_rollback()
             return

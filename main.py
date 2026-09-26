@@ -25,24 +25,11 @@ USERS_JSON = os.path.join(CONFIG_DIR, "users.json")
 UPDATE_MARKER = os.path.join(ROOT, ".update_pending")
 
 # --- 版本常量 ---
-VERSION = "b0.4.3"
+VERSION = "b0.4.3.1 dev"
 # ↓仅当不为None时从Github拉取更新日志, 反之则直接显示该变量内容。
 DESCRIPTION = None
 """
-feat1: WebUI 实时性能监控仪表盘
-feat2: 现在可以设置更新时是否自动备份
-feat3: Mod 在线专属配置文件编辑与热重载
-feature4: webui 多维游戏资产&蓝图工坊
-feat5: 创意工坊现在无需连接MC客户端就可预览投影文件
-feat6: block textures改为在线下载
-feat7: 创意工坊4个标签改成按钮式
-devfeat1: .exportignore文件可以设置export时忽略哪些文件
-devfeat2: .noneeds文件可以在每次更新完后检测并删除不需要的文件/文件夹
-feat8: 现在--reset指令也可实现--reset-all参数的功能
-fix1: 修复导出投影独立html文件提示需要认证bug
-feat9: 自动化定时任务
-feat10: 新增gui备份界面
-fix2: 修复英文版下被ban时“永久”不显示为Permanent的问题
+fix1: 修复无法使用webui备份功能
 """
 MINIMIUM_ALLOWED_VERSION = "b0.4.0" # 因为b0.4.0版本大量重写了账户登录逻辑, 所以, 设置了拒绝降级到b0.4.0-的版本
                                     # 但是如果你需要降级低于b0.4.0的版本，请更改这里的值为b0.0.0以删除限制

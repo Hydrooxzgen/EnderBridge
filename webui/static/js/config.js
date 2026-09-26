@@ -1160,7 +1160,7 @@ function doCreateBackup() {
   if (btn) btn.disabled = true;
   toast(t("cfg.backupCreating") || "正在创建备份中，请稍候...", "info", 3000);
 
-  api("/api/backups/create", { method: "POST" })
+  api("/backups/create", { method: "POST" })
     .then(function (res) {
       if (res && res.ok) {
         toast((t("cfg.backupCreated") || "备份创建成功！") + (res.filename ? " (" + res.filename + ")" : ""), "ok");
@@ -1182,7 +1182,7 @@ function doDeleteBackup(path, filename) {
   if (!confirm(promptMsg)) return;
 
   toast(t("cfg.backupDeleting") || "正在删除备份...", "info", 2000);
-  api("/api/backups/delete", { method: "POST", body: JSON.stringify({ path: path }) })
+  api("/backups/delete", { method: "DELETE", body: JSON.stringify({ path: path }) })
     .then(function (res) {
       if (res && res.ok) {
         toast(t("cfg.backupDeleted") || "备份已成功删除", "ok");
@@ -1207,7 +1207,7 @@ function doRollbackBackup(path, filename) {
   var progressBar = $("cfgRollbackProgressBar");
   if (progressBar) progressBar.style.width = "40%";
 
-  api("/api/update/rollback", { method: "POST", body: JSON.stringify({ path: path }) })
+  api("/update/rollback", { method: "POST", body: JSON.stringify({ path: path }) })
     .then(function (res) {
       if (res && res.ok) {
         if (progressBar) progressBar.style.width = "75%";
