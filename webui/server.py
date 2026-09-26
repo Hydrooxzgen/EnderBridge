@@ -780,16 +780,27 @@ class WebUIHandler(BaseHTTPRequestHandler):
             reason = ban_info.get("reason", "管理员封禁")
             ban_time = ban_info.get("time", "未知")
             expires_ts = ban_info.get("expires")
+            cookie_header = self.headers.get("Cookie", "") if hasattr(self, "headers") and self.headers else ""
+            accept_lang = (self.headers.get("Accept-Language", "") if hasattr(self, "headers") and self.headers else "").lower()
+            is_en = "enderbridge_lang=en" in cookie_header or (accept_lang.startswith("en") and "zh" not in accept_lang)
             if expires_ts:
                 from datetime import datetime
                 expires_str = datetime.fromtimestamp(expires_ts).strftime("%Y-%m-%d %H:%M:%S")
+                expires_attr = ""
             else:
-                expires_str = "永久"
+                expires_str = "Permanent" if is_en else "永久"
+                expires_attr = 'data-i18n="banned.permanent"'
             # 从 ban.html 模板读取并填充动态数据
             from string import Template
             _ban_tpl = os.path.join(os.path.dirname(__file__), "ban.html")
             with open(_ban_tpl, "r", encoding="utf-8") as _bf:
-                html = Template(_bf.read()).safe_substitute(ip=ip, reason=reason, ban_time=ban_time, expires_str=expires_str)
+                html = Template(_bf.read()).safe_substitute(
+                    ip=ip,
+                    reason=reason,
+                    ban_time=ban_time,
+                    expires_str=expires_str,
+                    expires_attr=expires_attr
+                )
             try:
                 data = html.encode("utf-8")
                 self.send_response(403)
@@ -851,8 +862,11 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if path == "/api/update/releases":
             self._api_update_releases()
             return
-        if path == "/api/update/backups":
+        if path in ("/api/update/backups", "/api/backups", "/api/backups/list"):
             self._api_update_backups()
+            return
+        if path in ("/api/backups/download", "/api/update/backup/download"):
+            self._api_backup_download()
             return
         if path == "/api/security/audit":
             self._api_security_audit()
@@ -985,6 +999,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/banlist":
             self._api_banlist_remove()
             return
+        if parsed.path in ("/api/backups", "/api/backups/delete", "/api/update/backup"):
+            self._api_backup_delete()
+            return
         if parsed.path == "/api/studio/asset":
             self._api_studio_delete_asset()
             return
@@ -1044,7 +1061,10 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/update/upload":
             self._api_update_upload()
             return
-        if parsed.path == "/api/update/rollback":
+        if parsed.path in ("/api/backups/create", "/api/update/backup-now"):
+            self._api_backup_create()
+            return
+        if parsed.path in ("/api/update/rollback", "/api/backups/rollback"):
             self._api_update_rollback()
             return
         if parsed.path == "/api/console":
@@ -1905,13 +1925,22 @@ class WebUIHandler(BaseHTTPRequestHandler):
             self._respond({"ok": False, "message": f"上传处理失败: {e}"})
 
     def _api_update_backups(self) -> None:
-        """列出可用备份包（无需鉴权，仅展示元数据）"""
+        """列出可用备份包（展示元数据）"""
         try:
             from version_manager.package import list_backups, BACKUP_PREFIX
-            backup_dir = os.path.dirname(ROOT)
-            found = list_backups(backup_dir)
+            backup_dirs = [os.path.dirname(ROOT), os.path.join(ROOT, "backups")]
+            found = []
+            seen_files = set()
+            for bdir in backup_dirs:
+                if os.path.isdir(bdir):
+                    for p in list_backups(bdir):
+                        fname = os.path.basename(p)
+                        if fname not in seen_files:
+                            seen_files.add(fname)
+                            found.append(p)
+            found.sort(key=lambda p: (os.path.getmtime(p) if os.path.isfile(p) else 0, os.path.basename(p)), reverse=True)
             items = []
-            for path in reversed(found):  # 最新的排最前
+            for path in found:
                 fname = os.path.basename(path)
                 try:
                     size = os.path.getsize(path)
@@ -1919,7 +1948,6 @@ class WebUIHandler(BaseHTTPRequestHandler):
                 except OSError:
                     size = 0
                     mtime = 0
-                # 从文件名解析时间戳：EnderBridge_backup_YYYYMMDD_HHMMSS.zip
                 stamp = fname[len(BACKUP_PREFIX):].replace(".zip", "")
                 items.append({
                     "filename": fname,
@@ -1932,9 +1960,125 @@ class WebUIHandler(BaseHTTPRequestHandler):
         except Exception as e:
             self._respond({"ok": False, "message": f"获取备份列表失败: {e}"})
 
+    def _api_backup_create(self) -> None:
+        """立即创建项目备份包（需要 config 或 update 权限）"""
+        user = _auth_user(self)
+        perms = user.get("permissions", [])
+        if "config" not in perms and "update" not in perms:
+            if not user.get("role"):
+                self._respond_denied()
+            else:
+                self._respond({"ok": False, "message": "未授权:需要 config 或 update 权限"}, status=403)
+            return
+        try:
+            from version_manager.package import backup_dir
+            backup_path = backup_dir(ROOT)
+            fname = os.path.basename(backup_path)
+            _audit(self, "config", f"手动创建了系统备份: {fname}")
+            size = os.path.getsize(backup_path) if os.path.isfile(backup_path) else 0
+            self._respond({
+                "ok": True,
+                "message": "备份创建成功",
+                "path": backup_path,
+                "filename": fname,
+                "size": size,
+            })
+        except Exception as e:
+            self._respond({"ok": False, "message": f"备份创建失败: {e}"})
+
+    def _api_backup_delete(self) -> None:
+        """删除指定备份文件（需要 config 或 update 权限）"""
+        user = _auth_user(self)
+        perms = user.get("permissions", [])
+        if "config" not in perms and "update" not in perms:
+            if not user.get("role"):
+                self._respond_denied()
+            else:
+                self._respond({"ok": False, "message": "未授权:需要 config 或 update 权限"}, status=403)
+            return
+        body = self._read_body()
+        backup_path = body.get("path", "").strip()
+        if not backup_path:
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            backup_path = (query.get("path") or [""])[0].strip()
+        if not backup_path:
+            self._respond({"ok": False, "message": "请指定备份文件路径"})
+            return
+
+        from version_manager.package import BACKUP_PREFIX
+        fname = os.path.basename(backup_path)
+        if not fname.startswith(BACKUP_PREFIX) or not fname.endswith(".zip"):
+            self._respond({"ok": False, "message": "非法备份文件名"})
+            return
+
+        norm_path = os.path.abspath(backup_path)
+        allowed_dirs = [os.path.abspath(os.path.dirname(ROOT)), os.path.abspath(os.path.join(ROOT, "backups"))]
+        is_safe = any(norm_path.startswith(d + os.sep) or norm_path == os.path.join(d, fname) for d in allowed_dirs)
+        if not is_safe:
+            self._respond({"ok": False, "message": "不允许删除该目录下的文件"})
+            return
+
+        if not os.path.isfile(norm_path):
+            self._respond({"ok": False, "message": "备份文件不存在"}, status=404)
+            return
+
+        try:
+            os.remove(norm_path)
+            _audit(self, "config", f"删除了备份包: {fname}")
+            self._respond({"ok": True, "message": "备份包已删除"})
+        except Exception as e:
+            self._respond({"ok": False, "message": f"删除失败: {e}"})
+
+    def _api_backup_download(self) -> None:
+        """下载指定备份包（需要 config 或 update 权限）"""
+        user = _auth_user(self)
+        perms = user.get("permissions", [])
+        if "config" not in perms and "update" not in perms:
+            if not user.get("role"):
+                self._respond_denied()
+            else:
+                self._respond({"ok": False, "message": "未授权:需要 config 或 update 权限"}, status=403)
+            return
+        query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        backup_path = (query.get("path") or query.get("file") or [""])[0].strip()
+        if not backup_path:
+            self._respond({"ok": False, "message": "缺少备份文件路径"})
+            return
+
+        from version_manager.package import BACKUP_PREFIX
+        fname = os.path.basename(backup_path)
+        if not fname.startswith(BACKUP_PREFIX) or not fname.endswith(".zip"):
+            self._respond({"ok": False, "message": "非法备份文件名"})
+            return
+
+        norm_path = os.path.abspath(backup_path)
+        allowed_dirs = [os.path.abspath(os.path.dirname(ROOT)), os.path.abspath(os.path.join(ROOT, "backups"))]
+        is_safe = any(norm_path.startswith(d + os.sep) or norm_path == os.path.join(d, fname) for d in allowed_dirs)
+        if not is_safe or not os.path.isfile(norm_path):
+            self._respond({"ok": False, "message": "文件不存在或无权访问"}, status=404)
+            return
+
+        try:
+            with open(norm_path, "rb") as f:
+                content = f.read()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/zip")
+            self.send_header("Content-Length", str(len(content)))
+            self.send_header("Content-Disposition", f'attachment; filename="{fname}"')
+            self.end_headers()
+            self.wfile.write(content)
+        except Exception as e:
+            self._respond({"ok": False, "message": f"下载读取失败: {e}"})
+
     def _api_update_rollback(self) -> None:
-        """回滚到指定备份（需要 update 权限），完成后触发重启"""
-        if not _require_permission("update")(self):
+        """回滚到指定备份（需要 update 或 config 权限），完成后触发重启"""
+        user = _auth_user(self)
+        perms = user.get("permissions", [])
+        if "update" not in perms and "config" not in perms:
+            if not user.get("role"):
+                self._respond_denied()
+            else:
+                self._respond({"ok": False, "message": "未授权:需要 update 或 config 权限"}, status=403)
             return
         body = self._read_body()
         backup_path = body.get("path", "").strip()

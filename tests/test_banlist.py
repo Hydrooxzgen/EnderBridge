@@ -119,3 +119,37 @@ class TestBatchOperations:
         assert not banlist.is_banned("172.16.0.3")
         assert banlist.is_banned("172.16.0.4")
 
+
+class TestBannedHtmlResponse:
+    def test_check_ban_chinese(self):
+        import io
+        from webui.server import WebUIHandler
+        banlist.ban("10.0.0.99", reason="测试封禁", duration=0)
+        handler = WebUIHandler.__new__(WebUIHandler)
+        handler.client_address = ("10.0.0.99", 12345)
+        handler.headers = {"Accept-Language": "zh-CN,zh;q=0.9"}
+        handler.wfile = io.BytesIO()
+        handler.send_response = lambda code: None
+        handler.send_header = lambda k, v: None
+        handler.end_headers = lambda: None
+        assert handler._check_ban() is True
+        body = handler.wfile.getvalue().decode("utf-8")
+        assert "永久" in body
+        assert 'data-i18n="banned.permanent"' in body
+
+    def test_check_ban_english(self):
+        import io
+        from webui.server import WebUIHandler
+        banlist.ban("10.0.0.98", reason="Test ban", duration=0)
+        handler = WebUIHandler.__new__(WebUIHandler)
+        handler.client_address = ("10.0.0.98", 12345)
+        handler.headers = {"Accept-Language": "en-US,en;q=0.9"}
+        handler.wfile = io.BytesIO()
+        handler.send_response = lambda code: None
+        handler.send_header = lambda k, v: None
+        handler.end_headers = lambda: None
+        assert handler._check_ban() is True
+        body = handler.wfile.getvalue().decode("utf-8")
+        assert "Permanent" in body
+        assert 'data-i18n="banned.permanent"' in body
+

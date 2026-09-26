@@ -32,6 +32,9 @@
       <div class="cfg-sidebar-item" data-cfg-cat="system">
         <span class="icon">⚡</span><span class="label-text" data-i18n="cfg.catSystem">系统管理</span>
       </div>
+      <div class="cfg-sidebar-item" data-cfg-cat="backup">
+        <span class="icon">⏪</span><span class="label-text" data-i18n="cfg.catBackup">备份与恢复</span>
+      </div>
       <div class="cfg-sidebar-item" data-cfg-cat="resources">
         <span class="icon">📂</span><span class="label-text" data-i18n="cfg.catResources">资源路径</span>
       </div>
@@ -465,6 +468,40 @@
         </div>
       </div>
 
+      <!-- ===== 备份与恢复 ===== -->
+      <div class="cfg-category" data-cfg-cat="backup">
+        <!-- 立即备份卡片 -->
+        <div class="cfg-section">
+          <div class="row" style="justify-content:space-between;align-items:center;">
+            <h3 data-i18n="cfg.backupNowTitle" style="margin:0;">📦 立即备份</h3>
+            <button type="button" class="btn btn-primary btn-sm" id="cfgCreateBackupBtn" data-i18n="cfg.backupNowBtn">🚀 立即创建备份</button>
+          </div>
+          <p class="hint" data-i18n="cfg.backupNowHint" style="margin-top:8px;">立即对当前 EnderBridge 项目代码、配置与资源完整打包备份，生成全量还原快照。自动遵循备份轮转策略（最多保留 3 份历史备份）。</p>
+        </div>
+
+        <!-- 历史备份与恢复卡片 -->
+        <div class="cfg-section">
+          <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <h3 data-i18n="cfg.backupListTitle" style="margin:0;">⏪ 历史备份与恢复</h3>
+            <button type="button" class="btn btn-sm" id="cfgRefreshBackupsBtn" data-i18n="cfg.backupRefresh">🔄 刷新列表</button>
+          </div>
+          <p class="hint" data-i18n="cfg.backupListHint" style="margin-bottom:12px;">选择历史备份可一键将服务器恢复到该快照版本。恢复前系统会自动为当前状态生成兜底快照，并自动重启上线。</p>
+          <div id="cfgBackupsContainer">
+            <div class="td-dim" data-i18n="common.loading">加载中...</div>
+          </div>
+        </div>
+
+        <!-- 自动备份设置卡片 -->
+        <div class="cfg-section">
+          <h3 data-i18n="cfg.backupPolicyTitle">⚙️ 备份策略设置</h3>
+          <div class="cfg-switch">
+            <label class="switch"><input type="checkbox" id="cfg-backup-autobackup" checked><span class="track"></span></label>
+            <span class="switch-label" data-i18n="cfg.updAutoBackup">更新前自动备份 (updateConfig.autoBackup)</span>
+          </div>
+          <p class="hint" data-i18n="cfg.updAutoBackupHint">在升级更新或覆盖操作前自动备份当前版本，出现任何异常可随时一键回滚。</p>
+        </div>
+      </div>
+
       <!-- ===== 资源路径 ===== -->
       <div class="cfg-category" data-cfg-cat="resources">
         <div class="cfg-section">
@@ -584,6 +621,19 @@
     </div><!-- /cfg-content -->
   </div><!-- /cfg-layout -->
 </div>
+
+<!-- 回滚进度模态框 -->
+<div id="cfgRollbackModal" class="modal-overlay" style="display:none;">
+  <div class="modal-card" style="width:420px;max-width:92vw;">
+    <h3 style="margin:0 0 12px 0;" data-i18n="cfg.rollbackModalTitle">⏪ 系统回滚与重启</h3>
+    <div style="font-size:13px;color:var(--text);margin-bottom:12px;" id="cfgRollbackStatusText" data-i18n="cfg.rollbackProcessing">正在执行系统回滚并准备重启...</div>
+    <div class="progress-bar-wrap" style="height:6px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden;margin-bottom:12px;">
+      <div id="cfgRollbackProgressBar" style="width:60%;height:100%;background:linear-gradient(90deg,#3b82f6,#8b5cf6);transition:width 0.3s ease;"></div>
+    </div>
+    <div style="font-size:12px;color:var(--text-faint);" id="cfgRollbackNotice" data-i18n="cfg.rollbackWait">请稍候，服务器正在重启上线...</div>
+  </div>
+</div>
+
 <div id="toast"></div>
 <script src="/static/js/app.js"></script>
 <script src="/static/js/i18n.js"></script>

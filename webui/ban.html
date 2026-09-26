@@ -37,7 +37,7 @@
     <div><b data-i18n="banned.ip">封禁 IP: </b>$ip</div>
     <div><b data-i18n="banned.reason">封禁原因：</b>$reason</div>
     <div><b data-i18n="banned.time">封禁时间：</b>$ban_time</div>
-    <div><b data-i18n="banned.expires">解禁时间：</b>$expires_str</div>
+    <div><b data-i18n="banned.expires">解禁时间：</b><span id="banExpires" $expires_attr>$expires_str</span></div>
   </div>
   <p class="footer" data-i18n="banned.footer">如需解除封禁，请联系服务器管理员。</p>
 </div>
@@ -46,15 +46,21 @@
   var dict = {
     zh: { "banned.title": "你已被封禁", "banned.msg": "你已被服务器封禁, 无法使用EnderBridge。",
       "banned.ip": "封禁 IP: ", "banned.reason": "封禁原因：", "banned.time": "封禁时间：",
-      "banned.expires": "解禁时间：", "banned.footer": "如需解除封禁，请联系服务器管理员。",
+      "banned.expires": "解禁时间：", "banned.permanent": "永久", "banned.footer": "如需解除封禁，请联系服务器管理员。",
       "banned.btn": "🌐 EN", "banned.htmlLang": "zh-CN", "banned.docTitle": "EnderBridge - 你已被封禁!" },
     en: { "banned.title": "You Are Banned", "banned.msg": "You have been banned and cannot use EnderBridge.",
       "banned.ip": "Banned IP: ", "banned.reason": "Reason: ", "banned.time": "Banned At: ",
-      "banned.expires": "Expires: ", "banned.footer": "Contact the server admin to appeal.",
+      "banned.expires": "Expires: ", "banned.permanent": "Permanent", "banned.footer": "Contact the server admin to appeal.",
       "banned.btn": "🌐 中文", "banned.htmlLang": "en", "banned.docTitle": "EnderBridge - Banned!" }
   };
   function getLang() {
-    try { return localStorage.getItem("enderbridge_lang") === "en" ? "en" : "zh"; }
+    try {
+      var saved = localStorage.getItem("enderbridge_lang");
+      if (saved) return saved === "en" ? "en" : "zh";
+      var nav = (navigator.language || navigator.userLanguage || "").toLowerCase();
+      if (nav.indexOf("en") === 0) return "en";
+      return "zh";
+    }
     catch (e) { return "zh"; }
   }
   function apply(lang) {
@@ -63,6 +69,10 @@
       var k = el.getAttribute("data-i18n");
       if (d[k] !== undefined) el.textContent = d[k];
     });
+    var expEl = document.getElementById("banExpires");
+    if (expEl && (expEl.getAttribute("data-i18n") === "banned.permanent" || expEl.textContent === "永久" || expEl.textContent === "Permanent")) {
+      expEl.textContent = d["banned.permanent"];
+    }
     document.documentElement.setAttribute("lang", d["banned.htmlLang"]);
     document.title = d["banned.docTitle"];
     document.getElementById("langBtn").textContent = d["banned.btn"];

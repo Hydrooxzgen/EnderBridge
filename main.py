@@ -40,6 +40,8 @@ devfeat2: .noneeds文件可以在每次更新完后检测并删除不需要的�
 feat8: 现在--reset指令也可实现--reset-all参数的功能
 fix1: 修复导出投影独立html文件提示需要认证bug
 feat9: 自动化定时任务
+feat10: 新增gui备份界面
+fix2: 修复英文版下被ban时“永久”不显示为Permanent的问题
 """
 MINIMIUM_ALLOWED_VERSION = "b0.4.0" # 因为b0.4.0版本大量重写了账户登录逻辑, 所以, 设置了拒绝降级到b0.4.0-的版本
                                     # 但是如果你需要降级低于b0.4.0的版本，请更改这里的值为b0.0.0以删除限制

@@ -254,9 +254,7 @@ def apply_archive(archive, root, keep=UPDATE_KEEP, allow=CONFIG_TEMPLATE_ALLOW,
         if validate is not None:
             validate(tmp)
         copied = overlay_dir(tmp, root, keep, allow)
-        deleted = clean_noneeds(root)
-        if deleted:
-            print(f"  [清理] 已根据 .noneeds 删除 {len(deleted)} 项冗余文件/目录: {', '.join(deleted)}")
+        clean_noneeds(root)
         return copied
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
