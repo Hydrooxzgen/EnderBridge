@@ -395,10 +395,33 @@ class TestStudioBlueprint:
         assert top == "oak_planks.png"
         assert side == "bookshelf.png"
 
-    def test_ensure_minecraft_textures(self):
-        from lib.studio import ensure_minecraft_textures
-        count = ensure_minecraft_textures(force=True)
-        assert count > 50
+    def test_ensure_minecraft_textures(self, tmp_path, monkeypatch):
+        import zipfile
+        from lib.studio import ensure_minecraft_textures, extract_local_minecraft_textures
+
+        # 1. 验证在无本地客户端时的平稳返回 (返回非负整数)
+        count = ensure_minecraft_textures(force=False)
+        assert isinstance(count, int) and count >= 0
+
+        # 2. 模拟本地 Minecraft 客户端 jar 资源包，验证自动化提取流程 (跨平台与 CI 稳定)
+        mock_mc = tmp_path / "mock_mc"
+        fake_versions = mock_mc / ".minecraft" / "versions" / "1.20.4"
+        fake_versions.mkdir(parents=True)
+        fake_jar = fake_versions / "1.20.4.jar"
+        with zipfile.ZipFile(str(fake_jar), "w") as zf:
+            for i in range(60):
+                zf.writestr(f"assets/minecraft/textures/block/block_{i}.png", b"fake_png_data")
+
+        fake_tex_dir = tmp_path / "textures"
+        fake_tex_dir.mkdir()
+        monkeypatch.setattr("lib.studio.BLOCK_TEXTURES_DIR", str(fake_tex_dir))
+        monkeypatch.setenv("APPDATA", str(mock_mc))
+        monkeypatch.setattr("os.path.expanduser", lambda p: str(mock_mc) if p == "~" else p)
+
+        res = extract_local_minecraft_textures(force=True)
+        assert res["ok"] is True
+        assert res["count"] >= 50
+        assert ensure_minecraft_textures(force=False) >= 50
 
     def test_blueprint_palette_has_textures(self):
         res = parse_blueprint_voxels("ezmatic", "樱花塔.litematic")

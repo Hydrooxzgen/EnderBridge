@@ -12,6 +12,7 @@ logs/
 resources/midi/*
 resources/mcfunc/*
 resources/ezmatic/*
+!resources/ezmatic/樱花塔.litematic
 resources/pictures/*
 structures/*
 !.gitkeep
