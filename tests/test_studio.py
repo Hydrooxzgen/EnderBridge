@@ -430,7 +430,13 @@ class TestStudioBlueprint:
         assert "top" in first_pal["textures"]
         assert "side" in first_pal["textures"]
 
-    def test_standalone_html_with_embedded_textures(self):
+    def test_standalone_html_with_embedded_textures(self, tmp_path, monkeypatch):
+        # 模拟纹理目录中存在方块贴图，测试 Base64 离线内联嵌入
+        fake_tex_dir = tmp_path / "blocks"
+        fake_tex_dir.mkdir()
+        (fake_tex_dir / "cherry_planks.png").write_bytes(b"\x89PNG\r\n\x1a\nfake_texture_bytes")
+        monkeypatch.setattr("lib.studio.BLOCK_TEXTURES_DIR", str(fake_tex_dir))
+
         real_file = os.path.abspath("resources/ezmatic/樱花塔.litematic")
         data = parse_blueprint_voxels(file_path=real_file)
         html = generate_standalone_blueprint_html(data)
