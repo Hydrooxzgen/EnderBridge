@@ -155,6 +155,7 @@ function requireAuth(callback) {
       }
     }
     else { clearAuth(); location.href = "/login"; }
+
   });
 }
 

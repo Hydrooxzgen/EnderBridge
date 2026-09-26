@@ -32,6 +32,8 @@ from version_manager.package import (
     PackageError,
     BACKUP_PREFIX,
     BACKUP_KEEP_COUNT,
+    get_backup_description,
+    save_backup_meta,
 )
 
 
@@ -282,6 +284,24 @@ class TestBackup:
             time.sleep(1.1)
         found = list_backups(str(backup_dest))
         assert len(found) == BACKUP_KEEP_COUNT
+
+    def test_backup_with_description(self, tmp_path):
+        project = tmp_path / "project"
+        make_project(str(project))
+        backup_dest = tmp_path / "backups"
+        path = backup_dir(str(project), dest_dir=str(backup_dest), description="测试备注说明")
+        assert os.path.isfile(path)
+        desc = get_backup_description(path)
+        assert desc == "测试备注说明"
+
+    def test_backup_edit_description(self, tmp_path):
+        project = tmp_path / "project"
+        make_project(str(project))
+        backup_dest = tmp_path / "backups"
+        path = backup_dir(str(project), dest_dir=str(backup_dest), description="初始描述")
+        fname = os.path.basename(path)
+        save_backup_meta(str(backup_dest), fname, "修改后的描述")
+        assert get_backup_description(path) == "修改后的描述"
 
 
 # ──────────────────────────────────────────────

@@ -25,11 +25,12 @@ USERS_JSON = os.path.join(CONFIG_DIR, "users.json")
 UPDATE_MARKER = os.path.join(ROOT, ".update_pending")
 
 # --- 版本常量 ---
-VERSION = "b0.4.3.1 dev"
+VERSION = "b0.4.3.1"
 # ↓仅当不为None时从Github拉取更新日志, 反之则直接显示该变量内容。
 DESCRIPTION = None
 """
-fix1: 修复无法使用webui备份功能
+fix1: 修复无法使用webui备份功能.
+feat1: 新增webui备份描述功能
 """
 MINIMIUM_ALLOWED_VERSION = "b0.4.0" # 因为b0.4.0版本大量重写了账户登录逻辑, 所以, 设置了拒绝降级到b0.4.0-的版本
                                     # 但是如果你需要降级低于b0.4.0的版本，请更改这里的值为b0.0.0以删除限制
