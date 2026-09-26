@@ -6,7 +6,7 @@ var _auditTotal = 0;
 var _autoRefresh = false;
 var _autoTimer = null;
 
-function typeLabel(key) {
+function getTypeLabel(key) {
   var map = {
     chat: "audit.typeChat",
     command: "audit.typeCommand",
@@ -86,7 +86,8 @@ function fetchLogs() {
     if (!d.ok) { toast(d.message || t("audit.loadFail"), "err"); return; }
     _auditTotal = d.total || 0;
     renderLogs(d.records || []);
-  }).catch(function () {
+  }).catch(function (err) {
+    console.error("fetchLogs error:", err);
     if (statusEl) statusEl.textContent = t("audit.reqFail");
   });
 }
@@ -106,7 +107,7 @@ function renderLogs(records) {
   if (empty) empty.style.display = "none";
 
   var html = records.map(function (r) {
-    var typeLabel = typeLabel(r.type);
+    var typeLbl = getTypeLabel(r.type);
     var ts = r.ts ? r.ts.replace("T", " ").replace(/\+.+$/, "") : "";
     var msg = escapeHtml(r.message || "");
     if (r.type === "command") {
@@ -115,7 +116,7 @@ function renderLogs(records) {
     }
     return '<tr style="border-bottom:1px solid #1e293b;">'
       + '<td style="padding:6px 12px;white-space:nowrap;color:#94a3b8;font-size:12px;">' + ts + '</td>'
-      + '<td style="padding:6px 12px;white-space:nowrap;">' + typeLabel + '</td>'
+      + '<td style="padding:6px 12px;white-space:nowrap;">' + typeLbl + '</td>'
       + '<td style="padding:6px 12px;white-space:nowrap;color:#e2e8f0;">' + escapeHtml(r.sender || "") + '</td>'
       + '<td style="padding:6px 12px;color:#cbd5e1;word-break:break-all;">' + msg + '</td>'
       + '</tr>';

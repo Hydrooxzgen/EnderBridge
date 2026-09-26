@@ -1,0 +1,47 @@
+[
+  {
+    "id": "task_preset_save_all",
+    "name": "定时全服自动保存",
+    "enabled": false,
+    "trigger_type": "interval",
+    "interval_value": 30,
+    "interval_unit": "m",
+    "cron_expr": "",
+    "action_type": "command",
+    "action_payload": "/save-all\n/say [系统] 全服数据自动保存完成",
+    "skip_if_no_client": true,
+    "broadcast_type": "chat",
+    "description": "每 30 分钟触发一次游戏世界保存指令并广播提示",
+    "next_run": null
+  },
+  {
+    "id": "task_preset_clear_items",
+    "name": "每日地面掉落物清理",
+    "enabled": false,
+    "trigger_type": "cron",
+    "interval_value": 1,
+    "interval_unit": "d",
+    "cron_expr": "0 4 * * *",
+    "action_type": "command",
+    "action_payload": "/say [警告] 地面掉落物将在 10 秒后自动清理！\n/kill @e[type=item]",
+    "skip_if_no_client": true,
+    "broadcast_type": "chat",
+    "description": "每天凌晨 04:00 清理无用地面实体掉落物以优化服务器性能",
+    "next_run": null
+  },
+  {
+    "id": "task_preset_announcement",
+    "name": "服规与温馨提示轮播",
+    "enabled": false,
+    "trigger_type": "interval",
+    "interval_value": 15,
+    "interval_unit": "m",
+    "cron_expr": "",
+    "action_type": "broadcast",
+    "action_payload": "§b[EnderBridge] §f欢迎来到服务器！请遵守服规，文明游戏。遇到问题可联系管理员。",
+    "skip_if_no_client": true,
+    "broadcast_type": "chat",
+    "description": "每 15 分钟向全服玩家发送一条温馨提示广播",
+    "next_run": null
+  }
+]

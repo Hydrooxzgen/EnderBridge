@@ -407,6 +407,7 @@ def load_config() -> dict:
         "githubToken": config.get("githubToken", ""),
         "commandAliases": command_aliases,
         "playerListPolling": config.get("playerListPolling", {"enabled": False, "intervalSeconds": 30}),
+        "updateConfig": config.get("updateConfig", {"autoBackup": True}),
     }
 
 
@@ -559,6 +560,12 @@ def save_config(new: dict) -> None:
     config["playerListPolling"] = {
         "enabled": bool(plp.get("enabled", False)),
         "intervalSeconds": int(plp.get("intervalSeconds", 30)),
+    }
+
+    # 更新与备份设置
+    upd = new.get("updateConfig") or {}
+    config["updateConfig"] = {
+        "autoBackup": bool(upd.get("autoBackup", True)),
     }
 
     # 版本信息
@@ -773,16 +780,27 @@ class WebUIHandler(BaseHTTPRequestHandler):
             reason = ban_info.get("reason", "管理员封禁")
             ban_time = ban_info.get("time", "未知")
             expires_ts = ban_info.get("expires")
+            cookie_header = self.headers.get("Cookie", "") if hasattr(self, "headers") and self.headers else ""
+            accept_lang = (self.headers.get("Accept-Language", "") if hasattr(self, "headers") and self.headers else "").lower()
+            is_en = "enderbridge_lang=en" in cookie_header or (accept_lang.startswith("en") and "zh" not in accept_lang)
             if expires_ts:
                 from datetime import datetime
                 expires_str = datetime.fromtimestamp(expires_ts).strftime("%Y-%m-%d %H:%M:%S")
+                expires_attr = ""
             else:
-                expires_str = "永久"
+                expires_str = "Permanent" if is_en else "永久"
+                expires_attr = 'data-i18n="banned.permanent"'
             # 从 ban.html 模板读取并填充动态数据
             from string import Template
             _ban_tpl = os.path.join(os.path.dirname(__file__), "ban.html")
             with open(_ban_tpl, "r", encoding="utf-8") as _bf:
-                html = Template(_bf.read()).safe_substitute(ip=ip, reason=reason, ban_time=ban_time, expires_str=expires_str)
+                html = Template(_bf.read()).safe_substitute(
+                    ip=ip,
+                    reason=reason,
+                    ban_time=ban_time,
+                    expires_str=expires_str,
+                    expires_attr=expires_attr
+                )
             try:
                 data = html.encode("utf-8")
                 self.send_response(403)
@@ -817,6 +835,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if path == "/mods":
             self._serve_page("mods.html")
             return
+        if path == "/studio":
+            self._serve_page("studio.html")
+            return
         if path == "/update":
             self._serve_page("update.html")
             return
@@ -829,6 +850,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if path == "/api/status":
             self._api_status()
             return
+        if path == "/api/performance":
+            self._api_performance()
+            return
         if path == "/api/release-notes":
             self._api_release_notes()
             return
@@ -838,8 +862,11 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if path == "/api/update/releases":
             self._api_update_releases()
             return
-        if path == "/api/update/backups":
+        if path in ("/api/update/backups", "/api/backups", "/api/backups/list"):
             self._api_update_backups()
+            return
+        if path in ("/api/backups/download", "/api/update/backup/download"):
+            self._api_backup_download()
             return
         if path == "/api/security/audit":
             self._api_security_audit()
@@ -853,6 +880,28 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if path == "/api/mods":
             self._api_get_mods()
             return
+        if path == "/api/mods/config":
+            self._api_get_mod_config()
+            return
+        if path == "/api/studio/assets":
+            self._api_studio_get_assets()
+            return
+        if path == "/api/studio/asset-file":
+            self._api_studio_get_asset_file()
+            return
+        if path == "/api/studio/palette":
+            self._api_studio_get_palette()
+            return
+        if path == "/api/studio/blueprint-voxels":
+            self._api_studio_get_blueprint_voxels()
+            return
+        if path == "/api/studio/blueprint-html":
+            self._api_studio_get_blueprint_html()
+            return
+        if path == "/api/studio/textures/status":
+            self._api_studio_textures_status()
+            return
+
         if path == "/api/bot/xbox-accounts":
             self._api_bot_xbox_accounts()
             return
@@ -861,6 +910,15 @@ class WebUIHandler(BaseHTTPRequestHandler):
             return
         if path == "/audit":
             self._serve_page("audit.html")
+            return
+        if path == "/scheduler":
+            self._serve_page("scheduler.html")
+            return
+        if path == "/api/scheduler/tasks":
+            self._api_scheduler_get_tasks()
+            return
+        if path == "/api/scheduler/logs":
+            self._api_scheduler_get_logs()
             return
         if path == "/banlist":
             self._serve_page("banlist.html")
@@ -921,11 +979,17 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/roles":
             self._api_roles_update()
             return
+        if parsed.path == "/api/scheduler/tasks":
+            self._api_scheduler_update_task()
+            return
         self._respond({"ok": False, "message": "Not Found"}, status=404)
 
     def do_DELETE(self):
         if self._check_ban(): return
         parsed = urllib.parse.urlparse(self.path)
+        if parsed.path == "/api/scheduler/tasks":
+            self._api_scheduler_delete_task()
+            return
         if parsed.path == "/api/users":
             self._api_users_delete()
             return
@@ -934,6 +998,12 @@ class WebUIHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/banlist":
             self._api_banlist_remove()
+            return
+        if parsed.path in ("/api/backups", "/api/backups/delete", "/api/update/backup"):
+            self._api_backup_delete()
+            return
+        if parsed.path == "/api/studio/asset":
+            self._api_studio_delete_asset()
             return
         self._respond({"ok": False, "message": "Not Found"}, status=404)
 
@@ -958,6 +1028,30 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/mods/reload":
             self._api_reload_mod()
             return
+        if parsed.path == "/api/mods/config":
+            self._api_save_mod_config()
+            return
+        if parsed.path == "/api/studio/upload":
+            self._api_studio_upload()
+            return
+        if parsed.path == "/api/studio/save-text":
+            self._api_studio_save_text()
+            return
+        if parsed.path == "/api/studio/action":
+            self._api_studio_action()
+            return
+        if parsed.path == "/api/studio/blueprint-voxels":
+            self._api_studio_post_blueprint_voxels()
+            return
+        if parsed.path == "/api/studio/blueprint-html":
+            self._api_studio_post_blueprint_html()
+            return
+        if parsed.path == "/api/studio/textures/download":
+            self._api_studio_textures_download()
+            return
+        if parsed.path == "/api/studio/textures/uninstall":
+            self._api_studio_textures_uninstall()
+            return
         if parsed.path == "/api/restart":
             self._api_restart()
             return
@@ -967,7 +1061,10 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/update/upload":
             self._api_update_upload()
             return
-        if parsed.path == "/api/update/rollback":
+        if parsed.path in ("/api/backups/create", "/api/update/backup-now"):
+            self._api_backup_create()
+            return
+        if parsed.path in ("/api/update/rollback", "/api/backups/rollback"):
             self._api_update_rollback()
             return
         if parsed.path == "/api/console":
@@ -1002,6 +1099,15 @@ class WebUIHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/bot/xbox-account/remove":
             self._api_bot_xbox_account_remove()
+            return
+        if parsed.path == "/api/scheduler/tasks":
+            self._api_scheduler_add_task()
+            return
+        if parsed.path == "/api/scheduler/tasks/toggle":
+            self._api_scheduler_toggle_task()
+            return
+        if parsed.path == "/api/scheduler/tasks/run":
+            self._api_scheduler_run_task()
             return
         self._respond({"ok": False, "message": "Not Found"}, status=404)
 
@@ -1505,6 +1611,12 @@ class WebUIHandler(BaseHTTPRequestHandler):
                 extra = _status_provider() or {}
             except Exception:
                 extra = {}
+        metrics = {}
+        try:
+            from lib.sys_metrics import metrics_collector
+            metrics = metrics_collector.get_snapshot().get("current", {})
+        except Exception:
+            metrics = {}
         self._respond({
             "ok": True,
             "name": cfg.get("name", "EnderBridge"),
@@ -1515,7 +1627,16 @@ class WebUIHandler(BaseHTTPRequestHandler):
             "players": extra.get("players", []),
             "version": _app_version or "EnderBridge",
             "systemMode": _system_mode,
+            "metrics": metrics,
         })
+
+    def _api_performance(self) -> None:
+        """获取系统资源与 WebSocket 性能指标(实时当前值与 60s 时序历史)"""
+        try:
+            from lib.sys_metrics import metrics_collector
+            self._respond(metrics_collector.get_snapshot())
+        except Exception as e:
+            self._respond({"ok": False, "message": str(e)})
 
     def _api_release_notes(self) -> None:
         """获取 Release Notes:优先使用 main.py 注入的 DESCRIPTION,否则从 GitHub API 拉取"""
@@ -1804,13 +1925,22 @@ class WebUIHandler(BaseHTTPRequestHandler):
             self._respond({"ok": False, "message": f"上传处理失败: {e}"})
 
     def _api_update_backups(self) -> None:
-        """列出可用备份包（无需鉴权，仅展示元数据）"""
+        """列出可用备份包（展示元数据）"""
         try:
             from version_manager.package import list_backups, BACKUP_PREFIX
-            backup_dir = os.path.dirname(ROOT)
-            found = list_backups(backup_dir)
+            backup_dirs = [os.path.dirname(ROOT), os.path.join(ROOT, "backups")]
+            found = []
+            seen_files = set()
+            for bdir in backup_dirs:
+                if os.path.isdir(bdir):
+                    for p in list_backups(bdir):
+                        fname = os.path.basename(p)
+                        if fname not in seen_files:
+                            seen_files.add(fname)
+                            found.append(p)
+            found.sort(key=lambda p: (os.path.getmtime(p) if os.path.isfile(p) else 0, os.path.basename(p)), reverse=True)
             items = []
-            for path in reversed(found):  # 最新的排最前
+            for path in found:
                 fname = os.path.basename(path)
                 try:
                     size = os.path.getsize(path)
@@ -1818,7 +1948,6 @@ class WebUIHandler(BaseHTTPRequestHandler):
                 except OSError:
                     size = 0
                     mtime = 0
-                # 从文件名解析时间戳：EnderBridge_backup_YYYYMMDD_HHMMSS.zip
                 stamp = fname[len(BACKUP_PREFIX):].replace(".zip", "")
                 items.append({
                     "filename": fname,
@@ -1831,9 +1960,125 @@ class WebUIHandler(BaseHTTPRequestHandler):
         except Exception as e:
             self._respond({"ok": False, "message": f"获取备份列表失败: {e}"})
 
+    def _api_backup_create(self) -> None:
+        """立即创建项目备份包（需要 config 或 update 权限）"""
+        user = _auth_user(self)
+        perms = user.get("permissions", [])
+        if "config" not in perms and "update" not in perms:
+            if not user.get("role"):
+                self._respond_denied()
+            else:
+                self._respond({"ok": False, "message": "未授权:需要 config 或 update 权限"}, status=403)
+            return
+        try:
+            from version_manager.package import backup_dir
+            backup_path = backup_dir(ROOT)
+            fname = os.path.basename(backup_path)
+            _audit(self, "config", f"手动创建了系统备份: {fname}")
+            size = os.path.getsize(backup_path) if os.path.isfile(backup_path) else 0
+            self._respond({
+                "ok": True,
+                "message": "备份创建成功",
+                "path": backup_path,
+                "filename": fname,
+                "size": size,
+            })
+        except Exception as e:
+            self._respond({"ok": False, "message": f"备份创建失败: {e}"})
+
+    def _api_backup_delete(self) -> None:
+        """删除指定备份文件（需要 config 或 update 权限）"""
+        user = _auth_user(self)
+        perms = user.get("permissions", [])
+        if "config" not in perms and "update" not in perms:
+            if not user.get("role"):
+                self._respond_denied()
+            else:
+                self._respond({"ok": False, "message": "未授权:需要 config 或 update 权限"}, status=403)
+            return
+        body = self._read_body()
+        backup_path = body.get("path", "").strip()
+        if not backup_path:
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            backup_path = (query.get("path") or [""])[0].strip()
+        if not backup_path:
+            self._respond({"ok": False, "message": "请指定备份文件路径"})
+            return
+
+        from version_manager.package import BACKUP_PREFIX
+        fname = os.path.basename(backup_path)
+        if not fname.startswith(BACKUP_PREFIX) or not fname.endswith(".zip"):
+            self._respond({"ok": False, "message": "非法备份文件名"})
+            return
+
+        norm_path = os.path.abspath(backup_path)
+        allowed_dirs = [os.path.abspath(os.path.dirname(ROOT)), os.path.abspath(os.path.join(ROOT, "backups"))]
+        is_safe = any(norm_path.startswith(d + os.sep) or norm_path == os.path.join(d, fname) for d in allowed_dirs)
+        if not is_safe:
+            self._respond({"ok": False, "message": "不允许删除该目录下的文件"})
+            return
+
+        if not os.path.isfile(norm_path):
+            self._respond({"ok": False, "message": "备份文件不存在"}, status=404)
+            return
+
+        try:
+            os.remove(norm_path)
+            _audit(self, "config", f"删除了备份包: {fname}")
+            self._respond({"ok": True, "message": "备份包已删除"})
+        except Exception as e:
+            self._respond({"ok": False, "message": f"删除失败: {e}"})
+
+    def _api_backup_download(self) -> None:
+        """下载指定备份包（需要 config 或 update 权限）"""
+        user = _auth_user(self)
+        perms = user.get("permissions", [])
+        if "config" not in perms and "update" not in perms:
+            if not user.get("role"):
+                self._respond_denied()
+            else:
+                self._respond({"ok": False, "message": "未授权:需要 config 或 update 权限"}, status=403)
+            return
+        query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        backup_path = (query.get("path") or query.get("file") or [""])[0].strip()
+        if not backup_path:
+            self._respond({"ok": False, "message": "缺少备份文件路径"})
+            return
+
+        from version_manager.package import BACKUP_PREFIX
+        fname = os.path.basename(backup_path)
+        if not fname.startswith(BACKUP_PREFIX) or not fname.endswith(".zip"):
+            self._respond({"ok": False, "message": "非法备份文件名"})
+            return
+
+        norm_path = os.path.abspath(backup_path)
+        allowed_dirs = [os.path.abspath(os.path.dirname(ROOT)), os.path.abspath(os.path.join(ROOT, "backups"))]
+        is_safe = any(norm_path.startswith(d + os.sep) or norm_path == os.path.join(d, fname) for d in allowed_dirs)
+        if not is_safe or not os.path.isfile(norm_path):
+            self._respond({"ok": False, "message": "文件不存在或无权访问"}, status=404)
+            return
+
+        try:
+            with open(norm_path, "rb") as f:
+                content = f.read()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/zip")
+            self.send_header("Content-Length", str(len(content)))
+            self.send_header("Content-Disposition", f'attachment; filename="{fname}"')
+            self.end_headers()
+            self.wfile.write(content)
+        except Exception as e:
+            self._respond({"ok": False, "message": f"下载读取失败: {e}"})
+
     def _api_update_rollback(self) -> None:
-        """回滚到指定备份（需要 update 权限），完成后触发重启"""
-        if not _require_permission("update")(self):
+        """回滚到指定备份（需要 update 或 config 权限），完成后触发重启"""
+        user = _auth_user(self)
+        perms = user.get("permissions", [])
+        if "update" not in perms and "config" not in perms:
+            if not user.get("role"):
+                self._respond_denied()
+            else:
+                self._respond({"ok": False, "message": "未授权:需要 update 或 config 权限"}, status=403)
             return
         body = self._read_body()
         backup_path = body.get("path", "").strip()
@@ -2005,6 +2250,567 @@ class WebUIHandler(BaseHTTPRequestHandler):
             self._respond({"ok": ok, "message": result.get("message", "重载完成")})
         except Exception as e:
             self._respond({"ok": False, "message": f"重载失败: {e}"})
+
+    def _resolve_mod_config(self, name: str, side: str) -> dict:
+        """解析 Mod 配置的目标文件或 config.json 节"""
+        mod_section_map = {
+            "ai": "AIConfig",
+            "bot": "botConfig",
+            "message": "messageConfig",
+            "spam": "spam",
+            "chat": "spam",
+            "tool": "utilsConfig",
+        }
+        # 1. 检查专属独立配置文件 (config/mods/<name>.json)
+        candidate_files = [
+            os.path.join(ROOT, "config", "mods", f"{name}.json"),
+            os.path.join(ROOT, "config", "mods", f"{name.lower()}.json"),
+        ]
+        for cf in candidate_files:
+            if os.path.exists(cf):
+                rel = os.path.relpath(cf, ROOT).replace("\\", "/")
+                return {"configType": "file", "target": rel, "filePath": cf, "section": None}
+
+        # 2. 检查 config.json 对应配置节
+        key_lower = name.strip().lower()
+        if key_lower in mod_section_map:
+            sec = mod_section_map[key_lower]
+            return {"configType": "section", "target": f"config/config.json -> {sec}", "filePath": CONFIG_JSON, "section": sec}
+
+        # 3. 默认独立配置文件 (位于 config/mods/<name>.json)
+        default_file = os.path.join(ROOT, "config", "mods", f"{name}.json")
+        rel = os.path.relpath(default_file, ROOT).replace("\\", "/")
+        return {"configType": "file", "target": rel, "filePath": default_file, "section": None}
+
+    def _api_get_mod_config(self) -> None:
+        """获取指定 Mod 的配置文件或配置节 (需要 mods 权限)"""
+        if not _require_permission("mods")(self):
+            return
+        parsed = urllib.parse.urlparse(self.path)
+        qs = urllib.parse.parse_qs(parsed.query)
+        name = (qs.get("name", [""])[0] or "").strip()
+        side = (qs.get("side", ["client"])[0] or "").strip()
+        if not name:
+            self._respond({"ok": False, "message": "缺少 name 参数"})
+            return
+        if side not in ("client", "server"):
+            side = "client"
+
+        resolved = self._resolve_mod_config(name, side)
+        try:
+            if resolved["configType"] == "file":
+                filepath = resolved["filePath"]
+                if os.path.exists(filepath):
+                    with open(filepath, "r", encoding="utf-8") as f:
+                        content = f.read()
+                else:
+                    default_obj = {
+                        "enabled": True,
+                        "name": name,
+                    }
+                    content = json.dumps(default_obj, ensure_ascii=False, indent=2) + "\n"
+            else:
+                full_cfg = {}
+                if os.path.exists(CONFIG_JSON):
+                    with open(CONFIG_JSON, "r", encoding="utf-8") as f:
+                        full_cfg = json.load(f)
+                elif os.path.exists(CONFIG_PY):
+                    ns = _load_config_module()
+                    full_cfg = {k: getattr(ns, k) for k in dir(ns) if not k.startswith("_") and not callable(getattr(ns, k))}
+                elif os.path.exists(os.path.join(CONFIG_DIR, "config.example.json")):
+                    with open(os.path.join(CONFIG_DIR, "config.example.json"), "r", encoding="utf-8") as f:
+                        full_cfg = json.load(f)
+                sec_val = full_cfg.get(resolved["section"], {})
+                content = json.dumps(sec_val, ensure_ascii=False, indent=2) + "\n"
+
+            self._respond({
+                "ok": True,
+                "name": name,
+                "side": side,
+                "configType": resolved["configType"],
+                "target": resolved["target"],
+                "content": content,
+            })
+        except Exception as e:
+            self._respond({"ok": False, "message": f"读取 Mod 配置失败: {e}"})
+
+    def _api_save_mod_config(self) -> None:
+        """保存指定 Mod 的配置并执行热重载 (需要 mods 权限)"""
+        if not _require_permission("mods")(self):
+            return
+        body = self._read_body()
+        name = (body.get("name") or "").strip()
+        side = (body.get("side") or "client").strip()
+        content = body.get("content")
+        do_reload = bool(body.get("reload", True))
+
+        if not name:
+            self._respond({"ok": False, "message": "缺少 name 参数"})
+            return
+        if content is None or not isinstance(content, str):
+            self._respond({"ok": False, "message": "缺少 content 参数"})
+            return
+
+        # 实时语法校验
+        try:
+            parsed_data = json.loads(content)
+        except json.JSONDecodeError as e:
+            self._respond({
+                "ok": False,
+                "message": f"JSON 语法错误 (第 {e.lineno} 行, 第 {e.colno} 列): {e.msg}",
+                "error": {
+                    "line": e.lineno,
+                    "column": e.colno,
+                    "msg": e.msg,
+                }
+            })
+            return
+
+        resolved = self._resolve_mod_config(name, side)
+        try:
+            if resolved["configType"] == "file":
+                filepath = resolved["filePath"]
+                os.makedirs(os.path.dirname(filepath), exist_ok=True)
+                if os.path.exists(filepath):
+                    try:
+                        import shutil
+                        shutil.copy2(filepath, filepath + ".bak")
+                    except Exception:
+                        pass
+                with open(filepath, "w", encoding="utf-8") as f:
+                    json.dump(parsed_data, f, ensure_ascii=False, indent=2)
+                    f.write("\n")
+            else:
+                full_cfg = {}
+                if os.path.exists(CONFIG_JSON):
+                    with open(CONFIG_JSON, "r", encoding="utf-8") as f:
+                        full_cfg = json.load(f)
+                    try:
+                        import shutil
+                        shutil.copy2(CONFIG_JSON, CONFIG_JSON + ".bak")
+                    except Exception:
+                        pass
+                elif os.path.exists(CONFIG_PY):
+                    ns = _load_config_module()
+                    full_cfg = {k: getattr(ns, k) for k in dir(ns) if not k.startswith("_") and not callable(getattr(ns, k))}
+                elif os.path.exists(os.path.join(CONFIG_DIR, "config.example.json")):
+                    with open(os.path.join(CONFIG_DIR, "config.example.json"), "r", encoding="utf-8") as f:
+                        full_cfg = json.load(f)
+
+                full_cfg[resolved["section"]] = parsed_data
+                with open(CONFIG_JSON, "w", encoding="utf-8") as f:
+                    json.dump(full_cfg, f, ensure_ascii=False, indent=2)
+                    f.write("\n")
+
+                # 刷新配置缓存与命令别名
+                try:
+                    from lib.config_loader import reload_config
+                    from lib.command import reload_all_aliases
+                    reload_config()
+                    reload_all_aliases()
+                except Exception:
+                    pass
+
+            # 执行热重载
+            reload_res = {"success": True, "message": "配置已保存"}
+            if do_reload:
+                import asyncio
+                if side == "server":
+                    from lib.mods import ServerModManager
+                    r = asyncio.run(ServerModManager.reload(name))
+                    reload_res = {"success": r.get("success", False), "message": r.get("message", "重载完成")}
+                else:
+                    from lib.current import Current
+                    from lib.mods import ClientModManager
+                    success_all = []
+                    failed_all = []
+                    for client, manager in list(Current.client_mods.items()):
+                        if not manager or not hasattr(manager, "reload"):
+                            continue
+                        r = asyncio.run(manager.reload(name))
+                        cid = getattr(client, "id", None) or "?"
+                        if r.get("success"):
+                            success_all.append(f"{cid}:{name}")
+                        else:
+                            failed_all.append(f"{cid}:{name}")
+                    if not Current.client_mods:
+                        reload_res = {"success": True, "message": "配置已保存并同步（当前无活跃客户端连接，重载将在客户端连接时生效）"}
+                    elif success_all:
+                        reload_res = {"success": True, "message": f"Client Mod {name} 已热重载 ({len(success_all)} 个客户端)"}
+                    else:
+                        reload_res = {"success": False, "message": failed_all[0] if failed_all else f"Client Mod {name} 重载失败"}
+
+            self._respond({
+                "ok": True,
+                "reloadOk": reload_res.get("success", False),
+                "message": f"配置已保存。{reload_res.get('message', '')}".rstrip("。") if reload_res.get("message") != "配置已保存" else "配置已保存",
+                "target": resolved["target"],
+                "configType": resolved["configType"],
+            })
+        except Exception as e:
+            self._respond({"ok": False, "message": f"保存 Mod 配置失败: {e}"})
+
+    # ===== Studio 创意资产工坊 API =====
+
+    def _api_studio_get_assets(self) -> None:
+        """获取指定分类或全部资产列表 (需要 mods 权限)"""
+        if not _require_permission("mods")(self):
+            return
+        parsed = urllib.parse.urlparse(self.path)
+        qs = urllib.parse.parse_qs(parsed.query)
+        cat = (qs.get("category", [""])[0] or "").strip()
+        from lib.studio import list_assets, CATEGORIES
+        try:
+            if cat:
+                assets = list_assets(cat)
+                self._respond({"ok": True, "category": cat, "assets": assets})
+            else:
+                all_assets = {}
+                for c in CATEGORIES:
+                    all_assets[c] = list_assets(c)
+                self._respond({"ok": True, "assets": all_assets})
+        except Exception as e:
+            self._respond({"ok": False, "message": f"获取资产失败: {e}"})
+
+    def _api_studio_get_asset_file(self) -> None:
+        """读取/下载指定资产文件 (需要 mods 权限)"""
+        if not _require_permission("mods")(self):
+            return
+        parsed = urllib.parse.urlparse(self.path)
+        qs = urllib.parse.parse_qs(parsed.query)
+        cat = (qs.get("category", [""])[0] or "").strip()
+        fn = (qs.get("file", [""])[0] or "").strip()
+        as_text = qs.get("text", ["0"])[0] in ("1", "true")
+        if not cat or not fn:
+            self._respond({"ok": False, "message": "缺少 category 或 file 参数"})
+            return
+        try:
+            import mimetypes
+            from lib.studio import get_asset_file_path, CATEGORIES
+            filepath = get_asset_file_path(cat, fn)
+            if as_text:
+                with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+                    content = f.read()
+                self._respond({"ok": True, "filename": fn, "category": cat, "content": content})
+                return
+
+            mime = CATEGORIES.get(cat, {}).get("mime") or mimetypes.guess_type(fn)[0] or "application/octet-stream"
+            with open(filepath, "rb") as f:
+                content = f.read()
+            self.send_response(200)
+            self.send_header("Content-Type", mime)
+            self.send_header("Content-Length", str(len(content)))
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(content)
+        except FileNotFoundError:
+            self._respond({"ok": False, "message": "文件不存在"}, status=404)
+        except Exception as e:
+            self._respond({"ok": False, "message": f"读取失败: {e}"})
+
+    def _api_studio_get_palette(self) -> None:
+        """获取方块调色板 (需要 mods 权限)"""
+        if not _require_permission("mods")(self):
+            return
+        from lib.studio import get_block_palette
+        try:
+            blocks = get_block_palette()
+            self._respond({"ok": True, "blocks": blocks})
+        except Exception as e:
+            self._respond({"ok": False, "message": f"读取调色板失败: {e}"})
+
+    def _api_studio_get_blueprint_voxels(self) -> None:
+        """获取蓝图离线 3D 体素渲染数据 (需要 mods 权限)"""
+        if not _require_permission("mods")(self):
+            return
+        from lib.studio import parse_blueprint_voxels
+        query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        filename = (query.get("file") or [""])[0]
+        category = (query.get("category") or ["ezmatic"])[0]
+        max_blocks_str = (query.get("max_blocks") or ["50000"])[0]
+        try:
+            max_blocks = max(100, min(200000, int(max_blocks_str)))
+        except ValueError:
+            max_blocks = 50000
+
+        if not filename:
+            self._respond({"ok": False, "message": "未指定蓝图文件名 (file 参数)"}, status=400)
+            return
+
+        try:
+            data = parse_blueprint_voxels(category=category, filename=filename, max_blocks=max_blocks)
+            self._respond({"ok": True, **data})
+        except FileNotFoundError:
+            self._respond({"ok": False, "message": f"蓝图文件未找到: {filename}"}, status=404)
+        except Exception as e:
+            self._respond({"ok": False, "message": f"蓝图解析失败: {e}"}, status=400)
+
+    def _api_studio_post_blueprint_voxels(self) -> None:
+        """从客户端直接接收本地蓝图文件并实时返回 3D 体素 (无需连接 MC 客户端)"""
+        if not _require_permission("mods")(self):
+            return
+        import base64
+        import tempfile
+        from lib.studio import parse_blueprint_voxels
+        body = self._read_body()
+        filename = (body.get("filename") or "local.litematic").strip()
+        data_b64 = body.get("dataBase64") or ""
+        max_blocks = int(body.get("max_blocks") or 50000)
+
+        if not data_b64:
+            self._respond({"ok": False, "message": "未提供蓝图数据 (dataBase64)"}, status=400)
+            return
+
+        try:
+            raw_bytes = base64.b64decode(data_b64)
+            with tempfile.NamedTemporaryFile(suffix=".litematic", delete=False) as tf:
+                tf.write(raw_bytes)
+                tf_path = tf.name
+            try:
+                data = parse_blueprint_voxels(file_path=tf_path, max_blocks=max_blocks)
+                data["name"] = filename
+                self._respond({"ok": True, **data})
+            finally:
+                try:
+                    os.unlink(tf_path)
+                except Exception:
+                    pass
+        except Exception as e:
+            self._respond({"ok": False, "message": f"本地蓝图解析失败: {e}"}, status=400)
+
+    def _api_studio_get_blueprint_html(self) -> None:
+        """导出独立离线单文件 3D 蓝图预览 HTML"""
+        if not _require_permission("mods")(self):
+            return
+        from lib.studio import parse_blueprint_voxels, generate_standalone_blueprint_html
+        query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        filename = (query.get("file") or [""])[0]
+        category = (query.get("category") or ["ezmatic"])[0]
+        if not filename:
+            self._respond({"ok": False, "message": "未指定蓝图文件名"}, status=400)
+            return
+        try:
+            data = parse_blueprint_voxels(category=category, filename=filename)
+            html_str = generate_standalone_blueprint_html(data)
+            content = html_str.encode("utf-8")
+            stem = os.path.splitext(filename)[0]
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(content)))
+            self.send_header("Content-Disposition", f'attachment; filename="{urllib.parse.quote(stem)}_3d_preview.html"')
+            self.end_headers()
+            self.wfile.write(content)
+        except FileNotFoundError:
+            self._respond({"ok": False, "message": "文件不存在"}, status=404)
+        except Exception as e:
+            self._respond({"ok": False, "message": f"生成 HTML 失败: {e}"}, status=400)
+
+    def _api_studio_post_blueprint_html(self) -> None:
+        """从客户端传入的体素数据直接生成并导出独立离线单文件 3D 网页"""
+        if not _require_permission("mods")(self):
+            return
+        from lib.studio import generate_standalone_blueprint_html
+        body = self._read_body()
+        data = body.get("data") or {}
+        filename = (body.get("filename") or data.get("name") or "blueprint.litematic").strip()
+        if not data or not data.get("voxels"):
+            self._respond({"ok": False, "message": "缺少蓝图体素数据"}, status=400)
+            return
+        try:
+            html_str = generate_standalone_blueprint_html(data)
+            content = html_str.encode("utf-8")
+            stem = os.path.splitext(filename)[0]
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(content)))
+            self.send_header("Content-Disposition", f'attachment; filename="{urllib.parse.quote(stem)}_3d_preview.html"')
+            self.end_headers()
+            self.wfile.write(content)
+        except Exception as e:
+            self._respond({"ok": False, "message": f"生成 HTML 失败: {e}"}, status=400)
+
+    def _api_studio_textures_status(self) -> None:
+        """获取方块纹理包当前状态与统计 (需要 config 或 mods 权限)"""
+        user = _auth_user(self)
+        perms = user.get("permissions", [])
+        if "config" not in perms and "mods" not in perms and "*" not in perms and "admin" not in perms:
+            if not user.get("role"):
+                self._respond_denied()
+            else:
+                self._respond({"ok": False, "message": "无权限:需要 config 或 mods 权限"}, status=403)
+            return
+        from lib.studio import get_textures_status
+        try:
+            stat = get_textures_status()
+            self._respond({"ok": True, "data": stat})
+        except Exception as e:
+            self._respond({"ok": False, "message": f"获取材质包状态失败: {e}"}, status=500)
+
+    def _api_studio_textures_download(self) -> None:
+        """下载/更新方块材质包，或从本机客户端提取 (需要 config 或 mods 权限)"""
+        user = _auth_user(self)
+        perms = user.get("permissions", [])
+        if "config" not in perms and "mods" not in perms and "*" not in perms and "admin" not in perms:
+            if not user.get("role"):
+                self._respond_denied()
+            else:
+                self._respond({"ok": False, "message": "无权限:需要 config 或 mods 权限"}, status=403)
+            return
+        body = self._read_body()
+        source = str(body.get("source") or "online").strip().lower()
+        url = str(body.get("url") or "").strip()
+        from lib.studio import download_online_textures, extract_local_minecraft_textures
+        try:
+            if source == "local":
+                res = extract_local_minecraft_textures(force=True)
+            else:
+                res = download_online_textures(source_url=url, fallback_local=True)
+            self._respond(res)
+        except Exception as e:
+            self._respond({"ok": False, "message": f"材质包操作失败: {e}"}, status=500)
+
+    def _api_studio_textures_uninstall(self) -> None:
+        """卸载方块材质包并释放空间 (需要 config 或 mods 权限)"""
+        user = _auth_user(self)
+        perms = user.get("permissions", [])
+        if "config" not in perms and "mods" not in perms and "*" not in perms and "admin" not in perms:
+            if not user.get("role"):
+                self._respond_denied()
+            else:
+                self._respond({"ok": False, "message": "无权限:需要 config 或 mods 权限"}, status=403)
+            return
+        from lib.studio import uninstall_textures
+        try:
+            res = uninstall_textures()
+            self._respond(res)
+        except Exception as e:
+            self._respond({"ok": False, "message": f"卸载失败: {e}"}, status=500)
+
+    def _api_studio_upload(self) -> None:
+        """上传资产文件 (支持 Base64 JSON 与 multipart/form-data)"""
+        if not _require_permission("mods")(self):
+            return
+        import base64
+        from lib.studio import save_asset_file
+        content_type = self.headers.get("Content-Type", "")
+
+        # 1. 支持 JSON Base64 上传
+        if "application/json" in content_type:
+            body = self._read_body()
+            cat = (body.get("category") or "").strip()
+            fn = (body.get("filename") or "").strip()
+            b64_data = body.get("dataBase64") or ""
+            raw_text = body.get("text")
+            if not cat or not fn:
+                self._respond({"ok": False, "message": "缺少 category 或 filename 参数"})
+                return
+            try:
+                if b64_data:
+                    data = base64.b64decode(b64_data)
+                elif raw_text is not None:
+                    data = raw_text.encode("utf-8")
+                else:
+                    self._respond({"ok": False, "message": "缺少文件数据"})
+                    return
+                res = save_asset_file(cat, fn, data)
+                self._respond(res)
+            except Exception as e:
+                self._respond({"ok": False, "message": f"保存文件失败: {e}"})
+            return
+
+        # 2. 支持 multipart/form-data 上传
+        if "multipart/form-data" in content_type:
+            boundary = content_type.split("boundary=")[-1].strip()
+            if not boundary:
+                self._respond({"ok": False, "message": "无效上传格式"})
+                return
+            length = int(self.headers.get("Content-Length", 0))
+            raw = self.rfile.read(length)
+            boundary_bytes = ("--" + boundary).encode()
+            parts = raw.split(boundary_bytes)
+
+            category = ""
+            filename = ""
+            file_data = b""
+
+            for part in parts:
+                if b'name="category"' in part:
+                    header_end = part.find(b"\r\n\r\n")
+                    if header_end >= 0:
+                        category = part[header_end + 4:].rstrip(b"\r\n").decode("utf-8", errors="ignore").strip()
+                if b'filename="' in part:
+                    fn_match = re.search(rb'filename="([^"]+)"', part)
+                    if fn_match:
+                        filename = fn_match.group(1).decode("utf-8", errors="replace")
+                    header_end = part.find(b"\r\n\r\n")
+                    if header_end >= 0:
+                        file_data = part[header_end + 4:].rstrip(b"\r\n")
+
+            if not category or not filename or not file_data:
+                self._respond({"ok": False, "message": "解析上传数据失败 (缺少 category、filename 或 file)"})
+                return
+            try:
+                res = save_asset_file(category, filename, file_data)
+                self._respond(res)
+            except Exception as e:
+                self._respond({"ok": False, "message": f"保存文件失败: {e}"})
+            return
+
+        self._respond({"ok": False, "message": "不支持的上传 Content-Type"})
+
+    def _api_studio_save_text(self) -> None:
+        """保存文本资产 (如 .mcfunc 脚本文件)"""
+        if not _require_permission("mods")(self):
+            return
+        body = self._read_body()
+        cat = (body.get("category") or "").strip()
+        fn = (body.get("filename") or "").strip()
+        content = body.get("content")
+        if not cat or not fn or content is None:
+            self._respond({"ok": False, "message": "缺少 category、filename 或 content 参数"})
+            return
+        from lib.studio import save_asset_file
+        try:
+            res = save_asset_file(cat, fn, content.encode("utf-8"))
+            self._respond(res)
+        except Exception as e:
+            self._respond({"ok": False, "message": f"保存失败: {e}"})
+
+    def _api_studio_delete_asset(self) -> None:
+        """删除指定资产文件 (需要 mods 权限)"""
+        if not _require_permission("mods")(self):
+            return
+        body = self._read_body()
+        cat = (body.get("category") or "").strip()
+        fn = (body.get("filename") or "").strip()
+        if not cat or not fn:
+            self._respond({"ok": False, "message": "缺少 category 或 filename 参数"})
+            return
+        from lib.studio import delete_asset_file
+        try:
+            res = delete_asset_file(cat, fn)
+            self._respond(res)
+        except Exception as e:
+            self._respond({"ok": False, "message": f"删除失败: {e}"})
+
+    def _api_studio_action(self) -> None:
+        """在游戏内执行 Studio 动作 (需要 mods 权限)"""
+        if not _require_permission("mods")(self):
+            return
+        body = self._read_body()
+        action = (body.get("action") or "").strip()
+        cat = (body.get("category") or "").strip()
+        fn = (body.get("filename") or "").strip()
+        params = body.get("params") or {}
+        if not action:
+            self._respond({"ok": False, "message": "缺少 action 参数"})
+            return
+        from lib.studio import execute_studio_action
+        try:
+            res = execute_studio_action(action, cat, fn, params)
+            self._respond(res)
+        except Exception as e:
+            self._respond({"ok": False, "message": f"执行失败: {e}"})
 
     def _api_firewall_add_rule(self) -> None:
         """添加 Windows 防火墙入站规则,允许 WebUI 端口(需要 config 权限)"""
@@ -2591,6 +3397,136 @@ class WebUIHandler(BaseHTTPRequestHandler):
         except (ConnectionAbortedError, BrokenPipeError, ConnectionResetError, OSError):
             pass
 
+    # ---- 任务计划 (Scheduler) ----
+
+    def _api_scheduler_get_tasks(self) -> None:
+        """获取所有定时任务列表 (需要 scheduler 权限)"""
+        if not _require_permission("scheduler")(self):
+            return
+        try:
+            from lib.scheduler import task_scheduler
+            tasks = task_scheduler.get_tasks()
+            self._respond({"ok": True, "tasks": tasks})
+        except Exception as e:
+            self._respond({"ok": False, "message": f"获取任务失败: {e}"})
+
+    def _api_scheduler_get_logs(self) -> None:
+        """获取最近执行历史流水 (需要 scheduler 权限)"""
+        if not _require_permission("scheduler")(self):
+            return
+        try:
+            from lib.scheduler import task_scheduler
+            logs = task_scheduler.get_logs()
+            self._respond({"ok": True, "logs": logs})
+        except Exception as e:
+            self._respond({"ok": False, "message": f"获取日志失败: {e}"})
+
+    def _api_scheduler_add_task(self) -> None:
+        """新建定时任务 (需要 scheduler 权限)"""
+        if not _require_permission("scheduler")(self):
+            return
+        body = self._read_body()
+        try:
+            from lib.scheduler import task_scheduler
+            task = task_scheduler.add_task(body)
+            _audit(self, "scheduler", f"创建定时任务: {task.get('name')}")
+            self._respond({"ok": True, "task": task})
+        except Exception as e:
+            self._respond({"ok": False, "message": f"创建任务失败: {e}"})
+
+    def _api_scheduler_update_task(self) -> None:
+        """修改定时任务 (需要 scheduler 权限)"""
+        if not _require_permission("scheduler")(self):
+            return
+        body = self._read_body()
+        task_id = body.get("id")
+        if not task_id:
+            self._respond({"ok": False, "message": "缺少任务 ID"})
+            return
+        try:
+            from lib.scheduler import task_scheduler
+            task = task_scheduler.update_task(task_id, body)
+            if not task:
+                self._respond({"ok": False, "message": "任务不存在"}, status=404)
+                return
+            _audit(self, "scheduler", f"更新定时任务: {task.get('name')}")
+            self._respond({"ok": True, "task": task})
+        except Exception as e:
+            self._respond({"ok": False, "message": f"更新任务失败: {e}"})
+
+    def _api_scheduler_delete_task(self) -> None:
+        """删除定时任务 (需要 scheduler 权限)"""
+        if not _require_permission("scheduler")(self):
+            return
+        body = self._read_body()
+        task_id = body.get("id")
+        if not task_id:
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            task_id = (query.get("id") or [""])[0]
+        if not task_id:
+            self._respond({"ok": False, "message": "缺少任务 ID"})
+            return
+        try:
+            from lib.scheduler import task_scheduler
+            ok = task_scheduler.delete_task(task_id)
+            if ok:
+                _audit(self, "scheduler", f"删除定时任务 ID: {task_id}")
+                self._respond({"ok": True})
+            else:
+                self._respond({"ok": False, "message": "任务不存在"}, status=404)
+        except Exception as e:
+            self._respond({"ok": False, "message": f"删除任务失败: {e}"})
+
+    def _api_scheduler_toggle_task(self) -> None:
+        """切换任务启用/禁用状态 (需要 scheduler 权限)"""
+        if not _require_permission("scheduler")(self):
+            return
+        body = self._read_body()
+        task_id = body.get("id")
+        if not task_id:
+            self._respond({"ok": False, "message": "缺少任务 ID"})
+            return
+        try:
+            from lib.scheduler import task_scheduler
+            enabled = task_scheduler.toggle_task(task_id)
+            if enabled is None:
+                self._respond({"ok": False, "message": "任务不存在"}, status=404)
+                return
+            _audit(self, "scheduler", f"切换任务状态: ID {task_id} -> {enabled}")
+            self._respond({"ok": True, "enabled": enabled})
+        except Exception as e:
+            self._respond({"ok": False, "message": f"切换状态失败: {e}"})
+
+    def _api_scheduler_run_task(self) -> None:
+        """手动立即执行一次任务 (需要 scheduler 权限)"""
+        if not _require_permission("scheduler")(self):
+            return
+        body = self._read_body()
+        task_id = body.get("id")
+        if not task_id:
+            self._respond({"ok": False, "message": "缺少任务 ID"})
+            return
+        from lib.scheduler import task_scheduler
+        task = task_scheduler.get_task(task_id)
+        if not task:
+            self._respond({"ok": False, "message": "任务不存在"}, status=404)
+            return
+
+        if _event_loop is None or _event_loop.is_closed():
+            self._respond({"ok": False, "message": "事件循环未就绪，请稍后重试"})
+            return
+
+        try:
+            import asyncio
+            fut = asyncio.run_coroutine_threadsafe(
+                task_scheduler.execute_task(task, trigger_source="manual"), _event_loop
+            )
+            res = fut.result(timeout=30)
+            _audit(self, "scheduler", f"手动触发定时任务: {task.get('name')}")
+            self._respond({"ok": True, "result": res})
+        except Exception as e:
+            self._respond({"ok": False, "message": f"执行失败: {e}"})
+
 
 def _check_importable(mod_path: str) -> bool:
     """检测 mod 模块能否导入(轻量检查,不真正实例化)"""
@@ -2704,12 +3640,22 @@ def start_webui() -> WebUIServer:
     from lib import shared
     bind_desc = "仅本机" if local_only else "所有接口"
     shared.logger.info(f"Web 管理界面已启动: http://127.0.0.1:{_instance.port} ({bind_desc})")
+    try:
+        from lib.sys_metrics import metrics_collector
+        metrics_collector.start()
+    except Exception:
+        pass
     return _instance
 
 
 def stop_webui() -> None:
     """停止 Web 管理服务器(置空实例,支持热重启后再次启动) """
     global _instance
+    try:
+        from lib.sys_metrics import metrics_collector
+        metrics_collector.stop()
+    except Exception:
+        pass
     if _instance:
         _instance.stop()
         _instance = None

@@ -65,12 +65,14 @@ DEFAULT_ROLES = {
         "permissions": [
             "dashboard", "config", "mods", "console",
             "permissions", "banlist", "audit", "update", "restart",
+            "scheduler",
         ],
     },
     "operator": {
         "label": "操作员",
         "permissions": [
             "dashboard", "mods", "console", "banlist", "audit",
+            "scheduler",
         ],
     },
     "viewer": {
@@ -85,6 +87,7 @@ DEFAULT_ROLES = {
 ALL_PERMISSIONS = [
     "dashboard", "config", "mods", "console",
     "permissions", "banlist", "audit", "update", "restart",
+    "scheduler",
 ]
 
 

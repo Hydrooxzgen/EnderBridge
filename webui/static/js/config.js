@@ -21,6 +21,7 @@ requireAuth(function (role) {
   initLang();
   loadConfig();
   initCategoryNav();
+  initTexturePackManager();
 });
 
 // ===== 分类导航 =====
@@ -38,6 +39,10 @@ function initCategoryNav() {
       document.querySelectorAll(".cfg-category[data-cfg-cat]").forEach(function (sec) {
         sec.classList.toggle("active", sec.getAttribute("data-cfg-cat") === cat);
       });
+      // 切换到资源管理时刷新材质包状态
+      if (cat === "resources") {
+        loadTexturePackStatus();
+      }
       // 切换到 Raw JSON 时自动从表单同步最新数据
       if (cat === "raw") {
         var editor = $("cfgRawJsonEditor");
@@ -143,6 +148,11 @@ function loadConfig() {
     $("cfg-webport").value = webui.port || 18888;
     $("cfg-weblockal").checked = webui.localOnly === true || webui.localOnly === "true";
     toggleSub("webuiFields", $("cfg-webui").checked);
+
+    var upd = data.config.updateConfig || {};
+    if ($("cfg-autobackup")) {
+      $("cfg-autobackup").checked = upd.autoBackup !== false;
+    }
 
     $("cfg-github-token").value = data.config.githubToken || "";
 
@@ -626,6 +636,9 @@ function collectFormConfig() {
     messageConfig: { announcements: announce },
     commandAliases: cfgData.commandAliases || {},
     playerListPolling: plp,
+    updateConfig: {
+      autoBackup: $("cfg-autobackup") ? $("cfg-autobackup").checked : true,
+    },
   };
 }
 
@@ -923,3 +936,131 @@ if (fwBtn) fwBtn.addEventListener("click", function () {
       fwBtn.textContent = t("cfg.webFirewall");
     });
 });
+
+// ===== 在线资源与方块材质包管理 =====
+function initTexturePackManager() {
+  var btnDl = $("btnTexDownload");
+  var btnLocal = $("btnTexLocalExtract");
+  var btnUn = $("btnTexUninstall");
+
+  if (btnDl) {
+    btnDl.addEventListener("click", function () {
+      var url = ($("cfg-tex-url") ? $("cfg-tex-url").value.trim() : "");
+      doTexturePackAction("online", url);
+    });
+  }
+
+  if (btnLocal) {
+    btnLocal.addEventListener("click", function () {
+      doTexturePackAction("local", "");
+    });
+  }
+
+  if (btnUn) {
+    btnUn.addEventListener("click", function () {
+      var confirmed = confirm(t("cfg.texUninstallConfirm") || "确定要卸载本地所有方块材质包吗？卸载后 3D 蓝图预览将自动切换为基于调色板的平滑色彩模式，可随时重新下载。");
+      if (!confirmed) return;
+      doTexturePackUninstall();
+    });
+  }
+}
+
+function updateTexturePackUI(stat) {
+  if (!stat) return;
+  var badge = $("texPackBadge");
+  var countEl = $("texPackCount");
+  var sizeEl = $("texPackSize");
+  var dirEl = $("texPackDir");
+
+  if (badge) {
+    if (stat.installed) {
+      badge.textContent = t("cfg.texInstalled") || "已安装";
+      badge.style.background = "rgba(34, 197, 94, 0.2)";
+      badge.style.color = "#4ade80";
+    } else {
+      badge.textContent = t("cfg.texNotInstalled") || "未安装 (调色板降级)";
+      badge.style.background = "rgba(255, 255, 255, 0.08)";
+      badge.style.color = "var(--text-muted)";
+    }
+  }
+
+  if (countEl) countEl.textContent = (stat.count || 0).toLocaleString() + " " + (t("cfg.texUnit") || "个方块纹理");
+  if (sizeEl) sizeEl.textContent = stat.size_formatted || "0 B";
+  if (dirEl && stat.directory) dirEl.textContent = stat.directory;
+}
+
+function loadTexturePackStatus() {
+  api("/studio/textures/status")
+    .then(function (res) {
+      if (res && res.ok && res.data) {
+        updateTexturePackUI(res.data);
+      }
+    })
+    .catch(function (err) {
+      console.warn("Failed to load texture pack status:", err);
+    });
+}
+
+function doTexturePackAction(source, url) {
+  var btnDl = $("btnTexDownload");
+  var btnLocal = $("btnTexLocalExtract");
+  var spinner = $("texDlSpinner");
+  var txt = $("btnTexDownloadText");
+
+  if (btnDl) btnDl.disabled = true;
+  if (btnLocal) btnLocal.disabled = true;
+  if (spinner) spinner.style.display = "inline-block";
+  if (txt) txt.textContent = source === "local" ? (t("cfg.texExtracting") || "⏳ 正在提取...") : (t("cfg.texDownloading") || "⏳ 正在下载...");
+
+  api("/studio/textures/download", {
+    method: "POST",
+    body: JSON.stringify({ source: source, url: url || "" })
+  })
+    .then(function (res) {
+      if (res && res.ok) {
+        toast(res.message || (t("cfg.texDownloadSuccess") || "材质包操作成功"), "ok");
+        if (res.status) {
+          updateTexturePackUI(res.status);
+        } else {
+          loadTexturePackStatus();
+        }
+      } else {
+        toast((res && res.message) ? res.message : (t("cfg.texDownloadFailed") || "材质包操作失败"), "err");
+      }
+    })
+    .catch(function (err) {
+      toast((err && err.message) ? err.message : (t("cfg.texDownloadFailed") || "材质包操作异常"), "err");
+    })
+    .finally(function () {
+      if (btnDl) btnDl.disabled = false;
+      if (btnLocal) btnLocal.disabled = false;
+      if (spinner) spinner.style.display = "none";
+      if (txt) txt.textContent = t("cfg.btnTexDownload") || "⬇️ 在线下载 / 更新材质包";
+    });
+}
+
+function doTexturePackUninstall() {
+  var btnUn = $("btnTexUninstall");
+  if (btnUn) btnUn.disabled = true;
+
+  api("/studio/textures/uninstall", { method: "POST" })
+    .then(function (res) {
+      if (res && res.ok) {
+        toast(res.message || (t("cfg.texUninstallSuccess") || "已成功卸载材质包"), "ok");
+        if (res.status) {
+          updateTexturePackUI(res.status);
+        } else {
+          loadTexturePackStatus();
+        }
+      } else {
+        toast((res && res.message) ? res.message : (t("cfg.texUninstallFailed") || "卸载失败"), "err");
+      }
+    })
+    .catch(function (err) {
+      toast((err && err.message) ? err.message : (t("cfg.texUninstallFailed") || "卸载异常"), "err");
+    })
+    .finally(function () {
+      if (btnUn) btnUn.disabled = false;
+    });
+}
+

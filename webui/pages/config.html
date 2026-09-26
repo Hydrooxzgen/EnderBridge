@@ -32,6 +32,9 @@
       <div class="cfg-sidebar-item" data-cfg-cat="system">
         <span class="icon">⚡</span><span class="label-text" data-i18n="cfg.catSystem">系统管理</span>
       </div>
+      <div class="cfg-sidebar-item" data-cfg-cat="backup">
+        <span class="icon">⏪</span><span class="label-text" data-i18n="cfg.catBackup">备份与恢复</span>
+      </div>
       <div class="cfg-sidebar-item" data-cfg-cat="resources">
         <span class="icon">📂</span><span class="label-text" data-i18n="cfg.catResources">资源路径</span>
       </div>
@@ -442,6 +445,15 @@
           </div>
         </div>
 
+        <div class="cfg-section" id="cfgCardUpdate">
+          <h3 data-i18n="cfg.updTitle">🔄 更新与自动备份</h3>
+          <div class="cfg-switch">
+            <label class="switch"><input type="checkbox" id="cfg-autobackup" checked><span class="track"></span></label>
+            <span class="switch-label" data-i18n="cfg.updAutoBackup">更新前自动备份 (updateConfig.autoBackup)</span>
+          </div>
+          <p class="hint" data-i18n="cfg.updAutoBackupHint">在 WebUI 或命令行更新升级前自动备份当前版本（保留最近 3 个历史备份），便于出现异常时一键回滚。关闭后将跳过备份直接覆盖。</p>
+        </div>
+
         <div class="cfg-section">
           <h3 data-i18n="cfg.ghTitle">🔗 GitHub API Token</h3>
           <div class="cfg-grid">
@@ -453,6 +465,40 @@
               <span class="hint" style="color:#fda4af" data-i18n="cfg.ghHint2">⚠️ 请勿泄露此 Token，不要提交到公开仓库！export 导出时不会包含此 Token。</span>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- ===== 备份与恢复 ===== -->
+      <div class="cfg-category" data-cfg-cat="backup">
+        <!-- 立即备份卡片 -->
+        <div class="cfg-section">
+          <div class="row" style="justify-content:space-between;align-items:center;">
+            <h3 data-i18n="cfg.backupNowTitle" style="margin:0;">📦 立即备份</h3>
+            <button type="button" class="btn btn-primary btn-sm" id="cfgCreateBackupBtn" data-i18n="cfg.backupNowBtn">🚀 立即创建备份</button>
+          </div>
+          <p class="hint" data-i18n="cfg.backupNowHint" style="margin-top:8px;">立即对当前 EnderBridge 项目代码、配置与资源完整打包备份，生成全量还原快照。自动遵循备份轮转策略（最多保留 3 份历史备份）。</p>
+        </div>
+
+        <!-- 历史备份与恢复卡片 -->
+        <div class="cfg-section">
+          <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <h3 data-i18n="cfg.backupListTitle" style="margin:0;">⏪ 历史备份与恢复</h3>
+            <button type="button" class="btn btn-sm" id="cfgRefreshBackupsBtn" data-i18n="cfg.backupRefresh">🔄 刷新列表</button>
+          </div>
+          <p class="hint" data-i18n="cfg.backupListHint" style="margin-bottom:12px;">选择历史备份可一键将服务器恢复到该快照版本。恢复前系统会自动为当前状态生成兜底快照，并自动重启上线。</p>
+          <div id="cfgBackupsContainer">
+            <div class="td-dim" data-i18n="common.loading">加载中...</div>
+          </div>
+        </div>
+
+        <!-- 自动备份设置卡片 -->
+        <div class="cfg-section">
+          <h3 data-i18n="cfg.backupPolicyTitle">⚙️ 备份策略设置</h3>
+          <div class="cfg-switch">
+            <label class="switch"><input type="checkbox" id="cfg-backup-autobackup" checked><span class="track"></span></label>
+            <span class="switch-label" data-i18n="cfg.updAutoBackup">更新前自动备份 (updateConfig.autoBackup)</span>
+          </div>
+          <p class="hint" data-i18n="cfg.updAutoBackupHint">在升级更新或覆盖操作前自动备份当前版本，出现任何异常可随时一键回滚。</p>
         </div>
       </div>
 
@@ -477,6 +523,55 @@
               <label data-i18n="cfg.resImage">🖼️ image 路径</label>
               <input id="cfg-path-image" class="cfg-input" data-i18n-ph="cfg.resImagePh" placeholder="留空则使用默认 resources/pictures" />
             </div>
+          </div>
+        </div>
+
+        <!-- 在线资源与方块材质包管理 -->
+        <div class="cfg-section" id="cfgCardTexturePack" style="margin-top:20px;">
+          <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
+            <h3 data-i18n="cfg.texPackTitle" style="margin:0;">🎨 在线资源与材质包管理</h3>
+            <span id="texPackBadge" class="badge" style="font-size:12px;padding:4px 10px;background:rgba(255,255,255,0.1);color:var(--text-dim);border-radius:12px;">检测中...</span>
+          </div>
+          <p class="hint" data-i18n="cfg.texPackHint" style="margin-bottom:14px;">
+            提供 3D 蓝图与投影预览所需的 16x16 真实方块材质包。支持在线一键下载/更新、从本机客户端快速提取以及安全卸载。若未安装，3D 预览引擎将自动降级为平滑调色板色彩渲染。
+          </p>
+
+          <!-- 状态展示条 -->
+          <div class="cfg-grid" style="grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:12px;margin-bottom:16px;background:rgba(255,255,255,0.03);padding:12px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);">
+            <div>
+              <div style="font-size:11px;color:var(--text-muted);" data-i18n="cfg.texPackCountLabel">已安装方块材质</div>
+              <div id="texPackCount" style="font-size:18px;font-weight:700;margin-top:2px;color:var(--text-main);">--</div>
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--text-muted);" data-i18n="cfg.texPackSizeLabel">磁盘占用容量</div>
+              <div id="texPackSize" style="font-size:18px;font-weight:700;margin-top:2px;color:var(--text-main);">--</div>
+            </div>
+            <div>
+              <div style="font-size:11px;color:var(--text-muted);" data-i18n="cfg.texPackDirLabel">存储目录</div>
+              <div id="texPackDir" style="font-size:12px;font-family:monospace;margin-top:4px;word-break:break-all;color:var(--text-dim);">webui/static/textures/blocks</div>
+            </div>
+          </div>
+
+          <!-- 操作表单 -->
+          <div class="cfg-grid">
+            <div class="cfg-field cfg-grid-full">
+              <label data-i18n="cfg.texSourceUrl">材质包下载源 (ZIP 压缩包 URL / 镜像地址)</label>
+              <input id="cfg-tex-url" class="cfg-input" placeholder="https://github.com/InventivetalentDev/minecraft-assets/archive/refs/heads/1.20.4.zip" />
+              <span class="hint" data-i18n="cfg.texSourceHint">留空则使用默认官方开源 Assets 仓库，也可填入自定义包含 textures/block/*.png 的 ZIP 下载链接。</span>
+            </div>
+          </div>
+
+          <div class="row gap-10" style="margin-top:16px;flex-wrap:wrap;">
+            <button type="button" class="btn btn-primary" id="btnTexDownload">
+              <span id="texDlSpinner" class="spinner-inline" style="display:none;margin-right:6px;"></span>
+              <span id="btnTexDownloadText" data-i18n="cfg.btnTexDownload">⬇️ 在线下载 / 更新材质包</span>
+            </button>
+            <button type="button" class="btn btn-secondary" id="btnTexLocalExtract" data-i18n="cfg.btnTexLocalExtract">
+              💻 从本机客户端提取
+            </button>
+            <button type="button" class="btn btn-danger" id="btnTexUninstall" data-i18n="cfg.btnTexUninstall">
+              🗑️ 卸载材质包 (释放空间)
+            </button>
           </div>
         </div>
       </div>
@@ -526,6 +621,19 @@
     </div><!-- /cfg-content -->
   </div><!-- /cfg-layout -->
 </div>
+
+<!-- 回滚进度模态框 -->
+<div id="cfgRollbackModal" class="modal-overlay" style="display:none;">
+  <div class="modal-card" style="width:420px;max-width:92vw;">
+    <h3 style="margin:0 0 12px 0;" data-i18n="cfg.rollbackModalTitle">⏪ 系统回滚与重启</h3>
+    <div style="font-size:13px;color:var(--text);margin-bottom:12px;" id="cfgRollbackStatusText" data-i18n="cfg.rollbackProcessing">正在执行系统回滚并准备重启...</div>
+    <div class="progress-bar-wrap" style="height:6px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden;margin-bottom:12px;">
+      <div id="cfgRollbackProgressBar" style="width:60%;height:100%;background:linear-gradient(90deg,#3b82f6,#8b5cf6);transition:width 0.3s ease;"></div>
+    </div>
+    <div style="font-size:12px;color:var(--text-faint);" id="cfgRollbackNotice" data-i18n="cfg.rollbackWait">请稍候，服务器正在重启上线...</div>
+  </div>
+</div>
+
 <div id="toast"></div>
 <script src="/static/js/app.js"></script>
 <script src="/static/js/i18n.js"></script>

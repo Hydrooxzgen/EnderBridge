@@ -25,6 +25,10 @@ from version_manager.package import (
     rollback,
     create_export_zip,
     collect_export_files,
+    ExportIgnore,
+    EXPORT_IGNORE_FILE,
+    clean_noneeds,
+    NONEEDS_FILE,
     PackageError,
     BACKUP_PREFIX,
     BACKUP_KEEP_COUNT,
@@ -387,4 +391,183 @@ class TestExport:
         out = str(tmp_path / "export.zip")
         with pytest.raises(PackageError, match="未找到可导出的文件"):
             create_export_zip(str(project), out)
+
+    def test_export_always_excludes_exportignore_file(self, tmp_path):
+        # 验证 .exportignore 文件本身无论如何都不会被打入导出的 zip 包
+        project = tmp_path / "project"
+        make_project(str(project), {
+            ".exportignore": "# empty\n",
+            "app.py": "print('hello')\n",
+        })
+        out = str(tmp_path / "export.zip")
+        create_export_zip(str(project), out)
+        with zipfile.ZipFile(out) as z:
+            names = z.namelist()
+        assert "app.py" in names
+        assert ".exportignore" not in names
+        assert "project/.exportignore" not in names
+
+    def test_export_respects_custom_exportignore_rules(self, tmp_path):
+        # 验证 glob 匹配、目录匹配 (/)、根目录锚定 (/) 与取反规则 (!)
+        project = tmp_path / "project"
+        make_project(str(project), {
+            ".exportignore": (
+                "*.log\n"
+                "temp/\n"
+                "/root_only.txt\n"
+                "docs/**/draft.md\n"
+                "!important.log\n"
+            ),
+            "app.py": "print(1)\n",
+            "normal.log": "log text\n",
+            "important.log": "vital log text\n",
+            "temp/cache.dat": "temp data\n",
+            "sub/temp/other.dat": "sub temp data\n",
+            "root_only.txt": "secret\n",
+            "nested/root_only.txt": "allowed nested\n",
+            "docs/v1/sub/draft.md": "draft content\n",
+            "docs/v1/sub/published.md": "published content\n",
+        })
+        out = str(tmp_path / "export.zip")
+        create_export_zip(str(project), out)
+        with zipfile.ZipFile(out) as z:
+            names = z.namelist()
+
+        # 包含的文件
+        assert "app.py" in names
+        assert "important.log" in names  # 取反被保留
+        assert "nested/root_only.txt" in names  # /root_only.txt 仅锚定根目录
+        assert "docs/v1/sub/published.md" in names
+
+        # 排除的文件
+        assert ".exportignore" not in names  # 自身永远排除
+        assert "normal.log" not in names
+        assert "temp/cache.dat" not in names
+        assert "sub/temp/other.dat" not in names
+        assert "root_only.txt" not in names
+        assert "docs/v1/sub/draft.md" not in names
+
+
+class TestExportIgnoreUnit:
+    def test_parse_comments_and_empty_lines(self):
+        ign = ExportIgnore.parse([
+            "\n",
+            "   \n",
+            "# this is a comment\n",
+            "*.tmp\n",
+            "!keep.tmp\n",
+        ])
+        assert len(ign.rules) == 2
+        assert ign.is_ignored(".exportignore") is True
+        assert ign.is_ignored("junk.tmp") is True
+        assert ign.is_ignored("keep.tmp") is False
+        assert ign.is_ignored("clean.py") is False
+
+    def test_dir_only_distinction(self):
+        ign = ExportIgnore.parse(["cache/\n"])
+        # cache 为纯文件时由于规则要求以 / 结尾，故普通文件 cache 不匹配
+        assert ign.is_ignored("cache", is_dir=False) is False
+        # cache 为目录时匹配
+        assert ign.is_ignored("cache", is_dir=True) is True
+        assert ign.is_ignored("cache/item.bin", is_dir=False) is True
+        assert ign.is_ignored("sub/cache/item.bin", is_dir=False) is True
+
+
+class TestNoneeds:
+    def test_clean_noneeds_deletes_files_and_directories(self, tmp_path):
+        # 模拟包含 .noneeds 规则的项目
+        project = tmp_path / "project"
+        project.mkdir()
+        (project / "wiki").mkdir()
+        (project / "wiki" / "readme.md").write_text("wiki content")
+        (project / "tests").mkdir()
+        (project / "tests" / "test_a.py").write_text("test")
+        (project / ".github").mkdir()
+        (project / ".github" / "ci.yml").write_text("ci")
+        (project / "CODE_OF_CONDUCT.md").write_text("coc")
+        (project / "CONTRIBUTING.md").write_text("contributing")
+        (project / "LICENSE").write_text("mit")
+        (project / "main.py").write_text("# main")
+        (project / "keep.py").write_text("# keep")
+
+        # 写入 .noneeds 文件 (与用户配置一致)
+        (project / NONEEDS_FILE).write_text(
+            "wiki/\n"
+            "tests/\n"
+            ".github/\n"
+            "CODE_OF_CONDUCT.md\n"
+            "CONTRIBUTING.md\n"
+            "LICENSE\n"
+            "nonexistent_file.txt\n"
+        )
+
+        deleted = clean_noneeds(str(project))
+        assert "wiki/" in deleted
+        assert "tests/" in deleted
+        assert ".github/" in deleted
+        assert "CODE_OF_CONDUCT.md" in deleted
+        assert "CONTRIBUTING.md" in deleted
+        assert "LICENSE" in deleted
+
+        # 验证指定的文件和目录已被彻底删除
+        assert not (project / "wiki").exists()
+        assert not (project / "tests").exists()
+        assert not (project / ".github").exists()
+        assert not (project / "CODE_OF_CONDUCT.md").exists()
+        assert not (project / "CONTRIBUTING.md").exists()
+        assert not (project / "LICENSE").exists()
+
+        # 验证保留的文件不受影响，.noneeds 自身保留
+        assert (project / "main.py").exists()
+        assert (project / "keep.py").exists()
+        assert (project / NONEEDS_FILE).exists()
+
+    def test_clean_noneeds_supports_wildcards_and_comments(self, tmp_path):
+        project = tmp_path / "project"
+        project.mkdir()
+        (project / "temp").mkdir()
+        (project / "temp" / "cache.bin").write_text("bin")
+        (project / "test_old.log").write_text("log")
+        (project / "test_new.log").write_text("log")
+        (project / "important.txt").write_text("important")
+
+        (project / NONEEDS_FILE).write_text(
+            "# 这是注释\n"
+            "\n"
+            "*.log\n"
+            "temp/\n"
+        )
+
+        deleted = clean_noneeds(str(project))
+        assert not (project / "temp").exists()
+        assert not (project / "test_old.log").exists()
+        assert not (project / "test_new.log").exists()
+        assert (project / "important.txt").exists()
+
+    def test_apply_archive_automatically_cleans_noneeds(self, tmp_path):
+        # 验证通过 apply_archive 执行更新包覆盖后，自动触发 .noneeds 清理
+        project = tmp_path / "project"
+        make_project(str(project), {
+            "legacy_docs/faq.txt": "faq",
+            "redundant.txt": "old",
+            "essential.py": "keep",
+        })
+
+        # 准备更新压缩包，包内包含新版本代码和 .noneeds 清理清单
+        update_zip = str(tmp_path / "update.zip")
+        make_zip(update_zip, {
+            "main.py": "# updated main\n",
+            "lib/core.py": "# lib\n",
+            NONEEDS_FILE: "legacy_docs/\nredundant.txt\n",
+        })
+
+        copied = apply_archive(update_zip, str(project))
+        assert copied > 0
+        # 确认冗余目录和文件已被自动清理
+        assert not (project / "legacy_docs").exists()
+        assert not (project / "redundant.txt").exists()
+        assert (project / "essential.py").exists()
+        assert (project / "main.py").exists()
+
+
 

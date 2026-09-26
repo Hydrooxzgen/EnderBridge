@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EnderBridge - 自动化任务计划</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<script>document.documentElement.setAttribute('data-theme',localStorage.getItem('enderbridge_theme')||(window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark'));</script>
+<style>
+  .sched-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .sched-stat-box {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .sched-stat-val {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .sched-stat-lbl {
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .sched-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+  }
+  .sched-table th, .sched-table td {
+    padding: 10px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--card-border);
+  }
+  .sched-table th {
+    color: var(--text-dim);
+    font-weight: 600;
+  }
+  .sched-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .badge-success { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
+  .badge-failed { background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
+  .badge-skipped { background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); }
+  .badge-idle { background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.3); }
+
+  /* 开关滑动钮 Toggle switch */
+  .switch {
+    position: relative;
+    display: inline-block;
+    width: 38px;
+    height: 20px;
+    vertical-align: middle;
+  }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: #475569;
+    transition: .2s;
+    border-radius: 20px;
+  }
+  .slider:before {
+    position: absolute;
+    content: "";
+    height: 14px;
+    width: 14px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: .2s;
+    border-radius: 50%;
+  }
+  input:checked + .slider { background-color: #3b82f6; }
+  input:checked + .slider:before { transform: translateX(18px); }
+
+  .preset-tag {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 6px;
+    background: var(--input-bg);
+    border: 1px solid var(--card-border);
+    font-size: 11.5px;
+    cursor: pointer;
+    color: var(--text-dim);
+    transition: all 0.15s ease;
+  }
+  .preset-tag:hover {
+    color: var(--text);
+    border-color: var(--primary, #3b82f6);
+    background: rgba(59, 130, 246, 0.1);
+  }
+</style>
+</head>
+<body>
+<aside class="sidebar" data-auto-sidebar></aside>
+<div class="main">
+  <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:16px;">
+    <div>
+      <h2 data-i18n="scheduler.title" style="margin:0 0 4px 0;">⏰ 自动化任务计划</h2>
+      <div class="hint" data-i18n="scheduler.desc" style="font-size:13px;margin:0;">可视化管理 Minecraft 定时任务，支持周期性间隔与 Cron 表达式，自动全服保存、公告轮播、宏执行与数据备份。</div>
+    </div>
+    <div class="row gap-10">
+      <button class="btn btn-sm" id="schedRefreshBtn" data-i18n="scheduler.refresh">🔄 刷新</button>
+      <button class="btn btn-primary btn-sm" id="schedNewTaskBtn" data-i18n="scheduler.newTask">➕ 新建任务</button>
+    </div>
+  </div>
+
+  <!-- 概览指标栏 -->
+  <div class="sched-stat-grid" id="schedStatGrid">
+    <div class="sched-stat-box">
+      <span class="sched-stat-lbl" data-i18n="scheduler.engineStatus">引擎状态</span>
+      <div class="sched-stat-val" style="display:flex;align-items:center;gap:6px;font-size:16px;color:#10b981;">
+        <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#10b981;box-shadow:0 0 8px #10b981;"></span>
+        <span data-i18n="scheduler.running">正常运行中</span>
+      </div>
+    </div>
+    <div class="sched-stat-box">
+      <span class="sched-stat-lbl" data-i18n="scheduler.totalTasks">总任务数</span>
+      <div class="sched-stat-val" id="statTotalTasks">0</div>
+    </div>
+    <div class="sched-stat-box">
+      <span class="sched-stat-lbl" data-i18n="scheduler.activeTasks">已启用</span>
+      <div class="sched-stat-val" style="color:#38bdf8;" id="statActiveTasks">0</div>
+    </div>
+    <div class="sched-stat-box">
+      <span class="sched-stat-lbl" data-i18n="scheduler.runCount">累计执行</span>
+      <div class="sched-stat-val" style="color:#a855f7;" id="statRunCount">0</div>
+    </div>
+    <div class="sched-stat-box">
+      <span class="sched-stat-lbl" data-i18n="scheduler.nextRunSoon">下次最近触发</span>
+      <div class="sched-stat-val" style="font-size:14px;word-break:break-all;color:#f59e0b;" id="statNextRun">--</div>
+    </div>
+  </div>
+
+  <!-- 任务列表卡片 -->
+  <div class="card card-gap" style="padding:16px;">
+    <div style="overflow-x:auto;">
+      <table class="sched-table" id="schedTasksTable">
+        <thead>
+          <tr>
+            <th data-i18n="scheduler.thName">任务名称</th>
+            <th data-i18n="scheduler.thTrigger">触发策略</th>
+            <th data-i18n="scheduler.thAction">执行动作</th>
+            <th data-i18n="scheduler.thNext">下次触发</th>
+            <th data-i18n="scheduler.thLast">上次执行</th>
+            <th data-i18n="scheduler.thStatus">状态</th>
+            <th data-i18n="scheduler.thOps" style="text-align:right;">操作</th>
+          </tr>
+        </thead>
+        <tbody id="schedTasksBody">
+          <tr><td colspan="7" class="td-faint" style="text-align:center;padding:24px;" data-i18n="common.loading">加载中...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 执行历史流水卡片 -->
+  <div class="card card-gap" style="margin-top:16px;padding:16px;">
+    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <h3 style="margin:0;font-size:15px;" data-i18n="scheduler.logsTitle">📋 任务执行历史流水 (最近 50 条)</h3>
+      <button class="btn btn-sm" id="schedLogsRefreshBtn" data-i18n="scheduler.refresh">🔄 刷新</button>
+    </div>
+    <div style="overflow-x:auto;max-height:480px;overflow-y:auto;background:var(--input-bg);border:1px solid var(--card-border);border-radius:8px;">
+      <table class="sched-table" id="schedLogsTable">
+        <thead>
+          <tr>
+            <th data-i18n="scheduler.thLogTime">执行时间</th>
+            <th data-i18n="scheduler.thLogTask">任务名称</th>
+            <th data-i18n="scheduler.thLogType">来源</th>
+            <th data-i18n="scheduler.thLogAction">动作类型</th>
+            <th data-i18n="scheduler.thLogCost">耗时</th>
+            <th data-i18n="scheduler.thLogStatus">执行结果</th>
+            <th data-i18n="scheduler.thLogDetail">回执详情</th>
+          </tr>
+        </thead>
+        <tbody id="schedLogsBody">
+          <tr><td colspan="7" class="td-faint" style="text-align:center;padding:24px;" data-i18n="scheduler.noLogs">暂无执行流水记录</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 新建 / 编辑任务 Modal ===== -->
+<div class="modal-overlay" id="taskModal" style="display:none;">
+  <div class="modal-card" style="width:640px;max-width:94vw;box-sizing:border-box;">
+    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <h3 id="taskModalTitle" style="margin:0;" data-i18n="scheduler.modalTitleNew">➕ 新建定时任务</h3>
+      <button type="button" class="btn btn-sm" id="taskModalCloseBtn" style="border:none;background:transparent;font-size:16px;cursor:pointer;color:var(--text-dim);">✖</button>
+    </div>
+
+    <form id="taskForm">
+      <input type="hidden" id="taskId" />
+
+      <!-- 任务名称 -->
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;" data-i18n="scheduler.taskName">任务名称</label>
+        <input type="text" id="taskName" class="cfg-input" style="width:100%;box-sizing:border-box;" placeholder="例如：全服定时保存、每小时清理地面掉落物" data-i18n-ph="scheduler.taskNamePh" required autocomplete="off" />
+      </div>
+
+      <!-- 任务说明 -->
+      <div style="margin-bottom:14px;">
+        <label style="display:block;font-size:13px;color:var(--text-dim);margin-bottom:6px;" data-i18n="scheduler.taskDesc">任务说明 (可选)</label>
+        <input type="text" id="taskDesc" class="cfg-input" style="width:100%;box-sizing:border-box;" placeholder="描述此任务的用途或说明" data-i18n-ph="scheduler.taskDescPh" autocomplete="off" />
+      </div>
+
+      <!-- 触发方式 -->
+      <div style="margin-bottom:14px;background:var(--input-bg);padding:12px;border:1px solid var(--card-border);border-radius:8px;">
+        <label style="display:block;font-size:13px;font-weight:600;margin-bottom:8px;" data-i18n="scheduler.triggerType">触发方式</label>
+        <div class="row gap-10" style="margin-bottom:10px;">
+          <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="radio" name="triggerType" value="interval" checked />
+            <span data-i18n="scheduler.typeInterval">⏱️ 固定时间间隔</span>
+          </label>
+          <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="radio" name="triggerType" value="cron" />
+            <span data-i18n="scheduler.typeCron">📅 Cron 表达式</span>
+          </label>
+        </div>
+
+        <!-- 间隔设置 -->
+        <div id="panelInterval" class="row gap-10" style="align-items:center;">
+          <span style="font-size:13px;" data-i18n="scheduler.intervalVal">间隔时长</span>
+          <input type="number" id="intervalValue" min="1" value="30" style="width:80px;padding:6px 10px;background:var(--card);border:1px solid var(--card-border);border-radius:6px;color:var(--text);" />
+          <select id="intervalUnit" style="padding:6px 10px;background:var(--card);border:1px solid var(--card-border);border-radius:6px;color:var(--text);">
+            <option value="s" data-i18n="scheduler.unitSec">秒</option>
+            <option value="m" selected data-i18n="scheduler.unitMin">分钟</option>
+            <option value="h" data-i18n="scheduler.unitHour">小时</option>
+            <option value="d" data-i18n="scheduler.unitDay">天</option>
+          </select>
+        </div>
+
+        <!-- Cron 表达式设置 -->
+        <div id="panelCron" style="display:none;">
+          <input type="text" id="cronExpr" class="cfg-input" style="width:100%;font-family:monospace;box-sizing:border-box;margin-bottom:6px;" placeholder="0 4 * * *" />
+          <div style="font-size:11.5px;color:var(--text-faint);margin-bottom:8px;" data-i18n="scheduler.cronHelper">支持 */5 (步长), 1-5 (范围), 1,3,5 (枚举)。例如 0 4 * * * 代表每天凌晨 4 点</div>
+          <div class="row gap-10" style="align-items:center;flex-wrap:wrap;">
+            <span style="font-size:11.5px;color:var(--text-dim);" data-i18n="scheduler.cronPresets">快捷预设：</span>
+            <span class="preset-tag" data-cron="*/10 * * * *" data-i18n="scheduler.preset10m">每 10 分钟</span>
+            <span class="preset-tag" data-cron="0 * * * *" data-i18n="scheduler.presetHour">每小时整点</span>
+            <span class="preset-tag" data-cron="0 4 * * *" data-i18n="scheduler.presetDay4am">每天凌晨 04:00</span>
+            <span class="preset-tag" data-cron="0 0 * * 0" data-i18n="scheduler.presetSunday">每周日午夜</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 执行动作类型 -->
+      <div style="margin-bottom:14px;background:var(--input-bg);padding:12px;border:1px solid var(--card-border);border-radius:8px;">
+        <label style="display:block;font-size:13px;font-weight:600;margin-bottom:8px;" data-i18n="scheduler.actionType">执行动作类型</label>
+        <select id="actionType" style="width:100%;padding:8px 12px;background:var(--card);border:1px solid var(--card-border);border-radius:6px;color:var(--text);margin-bottom:10px;">
+          <option value="command" data-i18n="scheduler.actCommand">🎮 游戏指令序列 (Command)</option>
+          <option value="broadcast" data-i18n="scheduler.actBroadcast">📢 全服消息广播 (Broadcast)</option>
+          <option value="mcfunc" data-i18n="scheduler.actMcfunc">📜 MCFunc 脚本宏 (Studio Asset)</option>
+          <option value="backup" data-i18n="scheduler.actBackup">📦 自动备份快照 (Backup)</option>
+        </select>
+
+        <!-- 命令序列容器 -->
+        <div id="panelActCommand">
+          <label style="display:block;font-size:12px;color:var(--text-dim);margin-bottom:4px;" data-i18n="scheduler.cmdPayload">待执行指令 (每行一条，以 / 开头为游戏原生命令，以 $ 开头为 Mod 命令)</label>
+          <textarea id="cmdPayload" style="width:100%;height:85px;padding:8px;background:var(--card);border:1px solid var(--card-border);border-radius:6px;color:var(--text);font-family:monospace;font-size:13px;resize:vertical;box-sizing:border-box;" placeholder="/save-all&#10;/say [系统] 世界已成功自动存档" data-i18n-ph="scheduler.cmdPayloadPh"></textarea>
+        </div>
+
+        <!-- 广播容器 -->
+        <div id="panelActBroadcast" style="display:none;">
+          <div class="row gap-10" style="margin-bottom:8px;align-items:center;">
+            <span style="font-size:12px;color:var(--text-dim);" data-i18n="scheduler.bcastType">广播呈现形式:</span>
+            <select id="broadcastType" style="padding:4px 8px;background:var(--card);border:1px solid var(--card-border);border-radius:6px;color:var(--text);font-size:12px;">
+              <option value="chat" data-i18n="scheduler.bcastChat">💬 聊天框普通消息 (/say)</option>
+              <option value="actionbar" data-i18n="scheduler.bcastActionbar">📌 底部快捷动作栏 (Actionbar)</option>
+              <option value="title" data-i18n="scheduler.bcastTitle">🏆 屏幕居中大标题 (Title)</option>
+            </select>
+          </div>
+          <textarea id="broadcastPayload" style="width:100%;height:65px;padding:8px;background:var(--card);border:1px solid var(--card-border);border-radius:6px;color:var(--text);font-size:13px;resize:vertical;box-sizing:border-box;" placeholder="§a[EnderBridge] §f欢迎来到服务器！" data-i18n-ph="scheduler.bcastTextPh"></textarea>
+        </div>
+
+        <!-- MCFunc 容器 -->
+        <div id="panelActMcfunc" style="display:none;">
+          <label style="display:block;font-size:12px;color:var(--text-dim);margin-bottom:4px;" data-i18n="scheduler.mcfuncSelect">选择 MCFunc 脚本文件</label>
+          <input type="text" id="mcfuncPayload" class="cfg-input" style="width:100%;box-sizing:border-box;" placeholder="例如: welcome.mcfunc" />
+        </div>
+
+        <!-- 备份提示容器 -->
+        <div id="panelActBackup" style="display:none;font-size:12px;color:var(--text-dim);padding:6px 0;">
+          自动调用项目完整备份归档逻辑，生成独立压缩快照并保存至 <code>backups/</code> 目录。
+        </div>
+      </div>
+
+      <!-- 高级开关 -->
+      <div class="row gap-10" style="margin-bottom:16px;flex-wrap:wrap;">
+        <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
+          <input type="checkbox" id="skipIfOffline" checked />
+          <span data-i18n="scheduler.skipIfOffline">无 Minecraft 客户端连接时安全跳过 (推荐勾选)</span>
+        </label>
+        <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;margin-left:auto;">
+          <input type="checkbox" id="taskEnabled" checked />
+          <span data-i18n="scheduler.enabledNow">立即启用该任务</span>
+        </label>
+      </div>
+
+      <div class="row gap-10" style="justify-content:flex-end;">
+        <button type="button" class="btn btn-sm" id="taskCancelBtn" data-i18n="scheduler.cancel">取消</button>
+        <button type="submit" class="btn btn-primary btn-sm" id="taskSaveBtn" data-i18n="scheduler.save">💾 保存任务</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="toast"></div>
+<script src="/static/js/app.js"></script>
+<script src="/static/js/i18n.js"></script>
+<script src="/static/js/scheduler.js"></script>
+</body>
+</html>
+

@@ -55,6 +55,56 @@
       <tbody id="modBodyServer"><tr><td colspan="4" class="td-faint" data-i18n="mods.loading">加载中...</td></tr></tbody>
     </table>
   </div>
+
+  <!-- ===== Mod 专属配置文件在线编辑与热重载 Modal ===== -->
+  <div class="modal-overlay" id="modConfigModal" style="display:none;">
+    <div class="modal-card" style="width:820px;max-width:95vw;box-sizing:border-box;">
+      <div class="row" style="justify-content:space-between;align-items:flex-start;margin-bottom:12px;">
+        <div>
+          <h3 style="margin:0 0 4px 0;display:flex;align-items:center;gap:8px;">
+            <span>⚙️</span>
+            <span data-i18n="mods.cfgTitle">编辑 Mod 配置</span>
+            <span class="badge-sec-safe" id="modCfgModalName" style="font-size:12px;font-weight:bold;">Mod</span>
+          </h3>
+          <div style="font-size:12px;color:var(--text-dim);">
+            <span data-i18n="mods.cfgSource">配置来源</span>：<code id="modCfgModalTarget" style="font-size:12px;">config/config.json</code>
+          </div>
+        </div>
+        <button type="button" class="btn btn-sm" id="modCfgCloseTopBtn" style="padding:2px 8px;font-size:16px;border:none;background:transparent;cursor:pointer;color:var(--text-dim);" title="关闭">✖</button>
+      </div>
+
+      <!-- 语法错误提示横幅 (出错时动态展开) -->
+      <div id="modCfgErrorBanner" style="display:none;margin-bottom:12px;padding:12px 14px;border-radius:8px;background:rgba(244,63,94,0.12);border-left:4px solid var(--danger);">
+        <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <span style="font-weight:700;color:var(--danger);" id="modCfgErrorTitle">❌ JSON 语法错误</span>
+          <button type="button" class="btn btn-sm btn-danger" id="modCfgGotoErrorBtn" style="padding:2px 8px;font-size:12px;" data-i18n="mods.cfgGotoError">📍 定位到错误行</button>
+        </div>
+        <div style="font-size:12px;color:var(--text);margin-bottom:6px;" id="modCfgErrorMsg"></div>
+        <pre id="modCfgErrorSnippet" style="margin:0;padding:8px 10px;background:rgba(0,0,0,0.3);border-radius:4px;font-size:12px;font-family:'Cascadia Code',Consolas,monospace;color:#fca5a5;overflow-x:auto;white-space:pre-wrap;"></pre>
+      </div>
+
+      <!-- 代码编辑框 -->
+      <div style="position:relative;margin-bottom:12px;">
+        <textarea id="modCfgEditor" style="width:100%;height:380px;box-sizing:border-box;font-family:'Cascadia Code',Consolas,monospace;font-size:13px;line-height:1.5;padding:12px;border:1px solid var(--card-border);border-radius:8px;background:var(--input-bg);color:var(--text);resize:vertical;white-space:pre;tab-size:2;" spellcheck="false" autocomplete="off"></textarea>
+      </div>
+
+      <!-- 底部状态指示与操作栏 -->
+      <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <div class="row gap-10" style="align-items:center;font-size:12px;color:var(--text-dim);">
+          <span id="modCfgValidationBadge" class="badge-sec-safe">✔ 语法有效</span>
+          <span id="modCfgLineColInfo">第 1 行, 第 1 列</span>
+          <span>|</span>
+          <span id="modCfgTotalLines">共 0 行</span>
+        </div>
+        <div class="row gap-10" style="flex-wrap:wrap;">
+          <button type="button" class="btn btn-sm" id="modCfgFormatBtn" data-i18n="mods.cfgFormat">✨ 格式化</button>
+          <button type="button" class="btn btn-sm" id="modCfgResetBtn" data-i18n="mods.cfgReset">🔄 还原</button>
+          <button type="button" class="btn btn-sm" id="modCfgCancelBtn" data-i18n="mods.cfgClose">关闭</button>
+          <button type="button" class="btn btn-primary btn-sm" id="modCfgSaveBtn" data-i18n="mods.cfgSaveReload">💾 保存并热重载</button>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 <div id="toast"></div>
 <script src="/static/js/app.js"></script>

@@ -202,10 +202,18 @@ def get_config() -> dict:
 
 
 def reload_config() -> dict:
-    """重新加载配置（清除缓存）"""
+    """重新加载配置（清除缓存并同步模块属性）"""
     global _config_cache
     _config_cache = None
-    return get_config()
+    new_cfg = get_config()
+    for mod_name in ("config", "lib.config_loader"):
+        if mod_name in sys.modules:
+            m = sys.modules[mod_name]
+            for key, value in new_cfg.items():
+                if not key.startswith("_"):
+                    setattr(m, key, value)
+    return new_cfg
+
 
 
 # 兼容旧代码：提供 config 模块接口

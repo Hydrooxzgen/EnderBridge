@@ -217,9 +217,9 @@ class _AuditLog:
         items.reverse()
         if sender:
             s = sender.lower()
-            items = [r for r in items if s in r["sender"].lower()]
+            items = [r for r in items if s in str(r.get("sender") or "").lower()]
         if type_:
-            items = [r for r in items if r["type"] == type_]
+            items = [r for r in items if r.get("type") == type_]
         total = len(items)
         return {"records": items[offset:offset + limit], "total": total}
 

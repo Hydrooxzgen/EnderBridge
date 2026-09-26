@@ -25,25 +25,24 @@ USERS_JSON = os.path.join(CONFIG_DIR, "users.json")
 UPDATE_MARKER = os.path.join(ROOT, ".update_pending")
 
 # --- 版本常量 ---
-VERSION = "b0.4.2"
+VERSION = "b0.4.3"
 # ↓仅当不为None时从Github拉取更新日志, 反之则直接显示该变量内容。
 DESCRIPTION = None
 """
-safefix1: 修复了14个漏洞
-codechange1: 把update/export等逻辑放入version_manager中
-feat1: rollback功能,可回滚到指定备份包
-fix1: 日志轮转防撑爆磁盘
-feat2: 多语言支持
-feat1-1: webui rollback入口
-fix2: 完整的中英双语显示
-feat3: console界面支持↑/↓键的历史命令切换
-feat4: 更新安装与上传进度反馈
-feat5: Banlist 批量操作
-feat6: 审计日志一键导出
-safe_feat: 依赖安全态势检测与已知cve漏洞告警
-feat7: webui控制台改为websocket连接
-feat8: mod界面搜索功能
-feat9: 配置文件保存前json语法校验与行号定位
+feat1: WebUI 实时性能监控仪表盘
+feat2: 现在可以设置更新时是否自动备份
+feat3: Mod 在线专属配置文件编辑与热重载
+feature4: webui 多维游戏资产&蓝图工坊
+feat5: 创意工坊现在无需连接MC客户端就可预览投影文件
+feat6: block textures改为在线下载
+feat7: 创意工坊4个标签改成按钮式
+devfeat1: .exportignore文件可以设置export时忽略哪些文件
+devfeat2: .noneeds文件可以在每次更新完后检测并删除不需要的文件/文件夹
+feat8: 现在--reset指令也可实现--reset-all参数的功能
+fix1: 修复导出投影独立html文件提示需要认证bug
+feat9: 自动化定时任务
+feat10: 新增gui备份界面
+fix2: 修复英文版下被ban时“永久”不显示为Permanent的问题
 """
 MINIMIUM_ALLOWED_VERSION = "b0.4.0" # 因为b0.4.0版本大量重写了账户登录逻辑, 所以, 设置了拒绝降级到b0.4.0-的版本
                                     # 但是如果你需要降级低于b0.4.0的版本，请更改这里的值为b0.0.0以删除限制
@@ -56,7 +55,7 @@ MINIMIUM_ALLOWED_VERSION = "b0.4.0" # 因为b0.4.0版本大量重写了账户登
 GITHUB_REPO = "Hydrooxzgen/EnderBridge"  # You can edit this to your own repository if you fork it :)
 
 # --- 命令行开关常量 ---
-WANT_RESET = "--reset-all" in sys.argv
+WANT_RESET = ("--reset-all" in sys.argv) or ("--reset" in sys.argv)
 WANT_EXPORT = "export" in sys.argv
 WANT_EXPORT_CLEAR = WANT_EXPORT and "-clear" in sys.argv
 WANT_LOAD_WITHOUT_CONFIG = "--load-without-config" in sys.argv
@@ -67,10 +66,11 @@ WANT_VIEW_DESCRIPTION = "--description" in sys.argv
 WANT_GOTO_OOBE = "--goto-oobe" in sys.argv
 WANT_UPDATE = "update" in sys.argv
 WANT_ROLLBACK = "--rollback" in sys.argv
+WANT_PREVIEW = "preview" in sys.argv
 ARGV_NOT_EXIST = not WANT_RESET\
 and not WANT_VIEW_VERSION and not WANT_EXPORT \
 and not WANT_VIEW_DESCRIPTION and not WANT_HELP \
-and not WANT_ROLLBACK
+and not WANT_ROLLBACK and not WANT_PREVIEW
 
 # --- 终端提示符常量 ---
 CONSOLE_PROMPT = "EnderBridge> "
@@ -232,7 +232,8 @@ if WANT_HELP:
     print()
     print("命令:")
     print("  (无参数)              正常启动服务器")
-    print("  update <压缩包>       一键升级(保留配置,自动备份)")
+    print("  preview [蓝图文件]    离线本地 3D 预览蓝图(无需启动MC或客户端)")
+    print("  update <压缩包>       一键升级(保留配置,默认自动备份)")
     print("  export [输出路径]     一键导出为zip")
     print("  --rollback [备份包]   回滚到指定备份(默认最新)")
     print()
@@ -243,14 +244,18 @@ if WANT_HELP:
     print("  --load-without-config 跳过配置直接启动(调试用)")
     print("  --system              启用系统保留账户模式")
     print("  --goto-oobe           重新进入配置向导(保留当前配置)")
+    print("  --bypass-backup       配合 update 命令使用,跳过更新前自动备份")
     print()
     print("示例:")
-    print("  python main.py                           启动服务器")
-    print("  python main.py update update.zip         从压缩包升级")
-    print("  python main.py export                    导出为zip")
-    print("  python main.py export D:/backup/eb.zip   导出到指定路径")
-    print("  python main.py --reset-all               重置所有配置")
-    print("  python main.py --version                 查看版本")
+    print("  python main.py                                      启动服务器")
+    print("  python main.py preview 樱花塔.litematic             在本地浏览器 3D 预览蓝图")
+    print("  python main.py preview 樱花塔 --export out.html     导出独立离线 HTML 预览网页")
+    print("  python main.py update update.zip                    从压缩包升级")
+    print("  python main.py update update.zip --bypass-backup    跳过备份直接升级")
+    print("  python main.py export                               导出为zip")
+    print("  python main.py export D:/backup/eb.zip              导出到指定路径")
+    print("  python main.py --reset-all                          重置所有配置")
+    print("  python main.py --version                            查看版本")
     sys.exit(0)
 
 # ===== 回滚:python main.py --rollback [备份包] =====
@@ -332,7 +337,7 @@ if WANT_UPDATE:
         except PackageError as e:
             _update_err(str(e))
 
-    def _do_update(archive, new_version=None):
+    def _do_update(archive, new_version=None, auto_backup=True):
         if not os.path.isfile(archive):
             _update_err(f"找不到压缩包: {archive}")
 
@@ -370,11 +375,14 @@ if WANT_UPDATE:
                 pass
 
         # 1.6 更新前自动备份(失败则中止,不动现有文件)
-        try:
-            backup_path = backup_dir(ROOT)
-        except PackageError as e:
-            _update_err(str(e))
-        print(f"  已备份当前版本: {backup_path}")
+        if auto_backup:
+            try:
+                backup_path = backup_dir(ROOT)
+            except PackageError as e:
+                _update_err(str(e))
+            print(f"  已备份当前版本: {backup_path}")
+        else:
+            print("  [提示] 已跳过更新前自动备份")
 
         # 2-4. 解压到临时目录(跳过数据区,模板放行) → 校验 → 覆盖到项目根目录
         try:
@@ -611,23 +619,39 @@ if WANT_UPDATE:
             _update_err(f"下载失败: {e}")
 
     # update 命令解析
+    bypass_backup = "--bypass-backup" in sys.argv
+    cfg_auto_backup = True
+    try:
+        if os.path.exists(CONFIG_JSON):
+            with open(CONFIG_JSON, "r", encoding="utf-8") as f:
+                _c = json.load(f)
+                cfg_auto_backup = bool((_c.get("updateConfig") or {}).get("autoBackup", True))
+    except Exception:
+        pass
+
+    should_backup = (not bypass_backup) and cfg_auto_backup
+
+    upd_pos = sys.argv.index("update")
+    pos_args = [a for a in sys.argv[upd_pos + 1:] if not a.startswith("--")]
+
     if "--local" in sys.argv:
-        # 本地更新:py main.py update --local <压缩包>
+        # 本地更新:py main.py update --local <压缩包> [--bypass-backup]
         idx = sys.argv.index("--local")
-        if len(sys.argv) > idx + 1:
-            _do_update(sys.argv[idx + 1])
+        local_args = [a for a in sys.argv[idx + 1:] if not a.startswith("--")]
+        if local_args:
+            _do_update(local_args[0], auto_backup=should_backup)
         else:
-            _update_err("用法: python main.py update --local <新版本压缩包路径>")
+            _update_err("用法: python main.py update --local <新版本压缩包路径> [--bypass-backup]")
     elif "--online" in sys.argv:
         idx = sys.argv.index("--online")
-        rest = sys.argv[idx + 1:]
+        rest = [a for a in sys.argv[idx + 1:] if not a.startswith("--")]
 
         if rest and rest[0].lower() == "commit":
-            # commit 模式:py main.py update --online commit [HEAD|commitID]
+            # commit 模式:py main.py update --online commit [HEAD|commitID] [--bypass-backup]
             ref = rest[1] if len(rest) > 1 else None
             dl_path, new_ver = _download_commit(ref)  # type: ignore[misc]
             try:
-                _do_update(dl_path, new_version=new_ver)
+                _do_update(dl_path, new_version=new_ver, auto_backup=should_backup)
             finally:
                 try:
                     if dl_path:
@@ -635,7 +659,7 @@ if WANT_UPDATE:
                 except Exception:
                     pass
         else:
-            # release 模式:py main.py update --online [release] [版本号]
+            # release 模式:py main.py update --online [release] [版本号] [--bypass-backup]
             tag = None
             if rest:
                 if rest[0].lower() == "release":
@@ -645,27 +669,65 @@ if WANT_UPDATE:
                     tag = rest[0]
             dl_path = _download_release(tag)
             try:
-                _do_update(dl_path, new_version=tag)
+                _do_update(dl_path, new_version=tag, auto_backup=should_backup)
             finally:
                 try:
                     if dl_path:
                         os.unlink(dl_path)
                 except Exception:
                     pass
-    elif len(sys.argv) > sys.argv.index("update") + 1:
-        # 无标志但有参数:py main.py update <压缩包> → 当作 --local
-        _do_update(sys.argv[sys.argv.index("update") + 1])
+    elif pos_args:
+        # 无标志但有参数:py main.py update <压缩包> [--bypass-backup] → 当作 --local
+        _do_update(pos_args[0], auto_backup=should_backup)
     else:
         # 无参数:默认从 GitHub 下载最新 release
         dl_path = _download_release()
         try:
-            _do_update(dl_path)
+            _do_update(dl_path, auto_backup=should_backup)
         finally:
             try:
                 if dl_path:
                     os.unlink(dl_path)
             except Exception:
                 pass
+
+# ===== 离线本地蓝图 3D 预览: python main.py preview <蓝图文件/路径> =====
+# 无需启动 Minecraft 服务器或连接客户端，秒级在本地浏览器呈现三维体素投影
+if WANT_PREVIEW:
+    import argparse
+    from lib.studio import preview_blueprint_locally
+
+    idx = sys.argv.index("preview")
+    sub_args = sys.argv[idx + 1:]
+
+    parser = argparse.ArgumentParser(prog="python main.py preview", description="EnderBridge 离线 3D 蓝图本地预览")
+    parser.add_argument("file", nargs="?", default="", help="蓝图文件名 (如 樱花塔.litematic) 或完整物理路径")
+    parser.add_argument("--export", "-o", default=None, help="导出独立的单文件离线 HTML 路径 (不指定则默认保存在 logs/ 并自动唤起浏览器)")
+    parser.add_argument("--no-browser", action="store_true", help="仅生成本地 HTML 预览文件，不自动唤起默认浏览器")
+
+    parsed = parser.parse_args(sub_args)
+    target_file = parsed.file.strip()
+
+    try:
+        out_path = preview_blueprint_locally(
+            target=target_file,
+            export_path=parsed.export,
+            open_browser=not parsed.no_browser
+        )
+        print("========================================")
+        print("  EnderBridge 蓝图离线 3D 本地预览")
+        print("========================================")
+        print(f"  已成功生成本地 3D 预览文件:")
+        print(f"  {out_path}")
+        if not parsed.no_browser:
+            print("  已在默认浏览器打开 3D 视轨交互界面")
+        print("========================================")
+        sys.exit(0)
+    except Exception as e:
+        print("========================================")
+        print(f"  本地预览失败: {e}")
+        print("========================================")
+        sys.exit(1)
 
 # ===== WebUI 触发的更新:检测 .update_pending 标记文件(路径常量见顶部) =====
 if os.path.isfile(UPDATE_MARKER) and not WANT_UPDATE:
@@ -690,8 +752,22 @@ if os.path.isfile(UPDATE_MARKER) and not WANT_UPDATE:
 
         try:
             try:
-                backup_path = backup_dir(ROOT)
-                print(f"  已备份当前版本: {backup_path}")
+                # 检查配置判断是否自动备份
+                do_backup = True
+                try:
+                    if os.path.exists(CONFIG_JSON):
+                        with open(CONFIG_JSON, "r", encoding="utf-8") as f:
+                            _cfg = json.load(f)
+                            do_backup = bool((_cfg.get("updateConfig") or {}).get("autoBackup", True))
+                except Exception:
+                    pass
+
+                if do_backup:
+                    backup_path = backup_dir(ROOT)
+                    print(f"  已备份当前版本: {backup_path}")
+                else:
+                    print("  [提示] 根据配置已跳过更新前自动备份 (updateConfig.autoBackup = false)")
+
                 copied = apply_archive(pending_path, ROOT)
             except PackageError as e:
                 print(f"  更新失败: {e}")
@@ -781,19 +857,28 @@ if WANT_EXPORT:
     if out == ROOT or out.startswith(ROOT + os.sep):
         _export_err("输出路径不能位于项目目录内,请放到上级目录或指定其他位置")
 
+    export_ignore_path = os.path.join(ROOT, ".exportignore")
+    ignore_spec = None
+    if os.path.isfile(export_ignore_path):
+        from version_manager.package import ExportIgnore
+        ignore_spec = ExportIgnore.from_file(export_ignore_path)
+
     try:
-        files = collect_export_files(ROOT)
+        files = collect_export_files(ROOT, export_ignore=ignore_spec)
     except PackageError as e:
         _export_err(str(e))
 
     print("======================================")
     print(f"  正在导出 EnderBridge ...")
+    if ignore_spec and ignore_spec.rules:
+        # print(f"  已加载忽略规则: .exportignore ({len(ignore_spec.rules)} 条规则)")
+        pass
     print(f"  文件数量: {len(files)}")
     print(f"  输出路径: {out}")
     print("======================================")
 
     try:
-        create_export_zip(ROOT, out)
+        create_export_zip(ROOT, out, export_ignore=ignore_spec)
     except PackageError as e:
         _export_err(str(e))
 
@@ -984,6 +1069,11 @@ async def connection_handler(ws):
     async def message_loop():
         nonlocal client_mod, initialized
         async for message in ws:
+            try:
+                from lib.sys_metrics import metrics_collector
+                metrics_collector.record_message()
+            except Exception:
+                pass
             if not initialized or conn.utils is None:
                 continue
             # 仅 JSON 解析需捕获,非 JSON 消息直接忽略
@@ -1550,6 +1640,18 @@ async def _dispatch_console_command(text):
             loop.call_soon_threadsafe(fut.cancel)  # type: ignore[union-attr]
         return
 
+    # preview [蓝图名称/路径]: 本地离线 3D 预览(无需连接客户端)
+    if text.startswith("preview") or text.startswith("$preview"):
+        parts = text.split(maxsplit=1)
+        target = parts[1].strip() if len(parts) > 1 else ""
+        from lib.studio import preview_blueprint_locally
+        try:
+            out_file = preview_blueprint_locally(target=target, open_browser=True)
+            console_out(f"已在默认浏览器打开 3D 离线蓝图预览: {out_file}")
+        except Exception as e:
+            console_out(f"蓝图预览失败: {e}")
+        return
+
     # 以 / 开头:转发为游戏命令
     if text.startswith("/"):
         client = Current.client
@@ -1638,6 +1740,13 @@ async def main():
 
     # 启动玩家列表轮询任务(如果配置启用)
     asyncio.create_task(_player_list_polling_task())
+
+    # 启动自动化定时任务计划调度器 (Task Scheduler)
+    try:
+        from lib.scheduler import task_scheduler
+        asyncio.create_task(task_scheduler.run_loop())
+    except Exception as e:
+        shared.logger.warning(f"定时任务调度器启动异常: {e}")
 
     # 注入状态引用供游戏内命令(如 $help/$status/$list)使用
     shared.start_time = _start_time

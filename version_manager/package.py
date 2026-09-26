@@ -9,6 +9,7 @@ main.py 中的三处重复逻辑统一收敛到这里:
 """
 
 import os
+import re
 import shutil
 import tarfile
 import tempfile
@@ -37,6 +38,8 @@ EXPORT_EXCLUDE = UPDATE_KEEP | {
 EXPORT_FORCE_INCLUDE = set(CONFIG_TEMPLATE_ALLOW)
 EXPORT_SKIP_DIRS = {"__pycache__"}
 EXPORT_SKIP_EXTS = {".pyc", ".pyo"}
+EXPORT_IGNORE_FILE = ".exportignore"
+NONEEDS_FILE = ".noneeds"
 
 _ZIP_SUFFIX = (".zip",)
 _TAR_SUFFIXES = (".tar.gz", ".tgz", ".tar.bz2", ".tar.xz", ".tar")
@@ -168,46 +171,264 @@ def overlay_dir(src_dir, root, keep=UPDATE_KEEP, allow=CONFIG_TEMPLATE_ALLOW) ->
     return copied
 
 
+def clean_noneeds(root: str) -> list:
+    """更新后检测并删除 .noneeds 中指定的冗余文件与文件夹
+
+    返回被成功删除的相对路径列表。
+    """
+    noneeds_path = os.path.join(root, NONEEDS_FILE)
+    if not os.path.isfile(noneeds_path):
+        return []
+
+    try:
+        with open(noneeds_path, "r", encoding="utf-8", errors="replace") as f:
+            lines = f.readlines()
+    except Exception:
+        return []
+
+    deleted = []
+    # 核心保护名单: 严禁删除的项目关键文件与配置
+    PROTECTED = {"", ".", "main.py", NONEEDS_FILE, "config", "config/config.json"}
+
+    for raw in lines:
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+
+        clean_line = line.replace("\\", "/").strip("/")
+        if not clean_line or clean_line in PROTECTED:
+            continue
+
+        # 防止路径穿越与绝对路径逃逸
+        if ".." in clean_line.split("/"):
+            continue
+        if os.path.isabs(clean_line) or clean_line.startswith(("/", "\\")):
+            continue
+
+        # 支持通配符匹配 (如 *.tmp, docs/*.draft 等)
+        if any(char in line for char in ("*", "?", "[")):
+            import glob
+            full_pattern = os.path.join(root, line.replace("/", os.sep))
+            matches = glob.glob(full_pattern, recursive=True)
+            for m in matches:
+                rel = os.path.relpath(m, root).replace(os.sep, "/")
+                if rel in PROTECTED or rel.startswith("../"):
+                    continue
+                try:
+                    if os.path.isdir(m):
+                        shutil.rmtree(m, ignore_errors=True)
+                        deleted.append(rel + "/")
+                    elif os.path.isfile(m) or os.path.islink(m):
+                        os.remove(m)
+                        deleted.append(rel)
+                except Exception:
+                    pass
+        else:
+            # 精确匹配文件或目录
+            target_path = os.path.join(root, *clean_line.split("/"))
+            if not os.path.exists(target_path):
+                continue
+            try:
+                if os.path.isdir(target_path):
+                    shutil.rmtree(target_path, ignore_errors=True)
+                    deleted.append(clean_line + "/")
+                elif os.path.isfile(target_path) or os.path.islink(target_path):
+                    os.remove(target_path)
+                    deleted.append(clean_line)
+            except Exception:
+                pass
+
+    return deleted
+
+
 def apply_archive(archive, root, keep=UPDATE_KEEP, allow=CONFIG_TEMPLATE_ALLOW,
                   validate=validate_project) -> int:
     """解压压缩包并覆盖到项目目录(经 validate 校验),返回覆盖文件数
 
     临时目录由本函数创建并清理,失败抛 PackageError。
+    更新完成后自动检测并执行 .noneeds 清理。
     """
     tmp = tempfile.mkdtemp(prefix="enderbridge_update_")
     try:
         extract_archive(archive, tmp, keep, allow)
         if validate is not None:
             validate(tmp)
-        return overlay_dir(tmp, root, keep, allow)
+        copied = overlay_dir(tmp, root, keep, allow)
+        clean_noneeds(root)
+        return copied
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-def iter_export_files(root):
+def _gitignore_pattern_to_regex(pattern: str) -> re.Pattern:
+    """将类似 .gitignore 的 glob 模式转为正则表达式"""
+    anchored = False
+    if pattern.startswith("/"):
+        anchored = True
+        pattern = pattern[1:]
+    elif "/" in pattern.rstrip("/"):
+        anchored = True
+
+    dir_only = pattern.endswith("/")
+    if dir_only:
+        pattern = pattern.rstrip("/")
+
+    i = 0
+    n = len(pattern)
+    res = []
+    while i < n:
+        c = pattern[i]
+        if c == "*":
+            if i + 1 < n and pattern[i + 1] == "*":
+                i += 2
+                if i < n and pattern[i] == "/":
+                    i += 1
+                    res.append("(?:.+/)?")
+                else:
+                    res.append(".*")
+            else:
+                i += 1
+                res.append("[^/]*")
+        elif c == "?":
+            i += 1
+            res.append("[^/]")
+        elif c in r"\.+^$()[]{}|":
+            res.append(re.escape(c))
+            i += 1
+        elif c == "/":
+            res.append("/")
+            i += 1
+        else:
+            res.append(c)
+            i += 1
+
+    pattern_re = "".join(res)
+    if dir_only:
+        if anchored:
+            regex_str = f"^(?:{pattern_re})/(?:.*)?$"
+        else:
+            regex_str = f"(?:^|/)(?:{pattern_re})/(?:.*)?$"
+    else:
+        if anchored:
+            regex_str = f"^(?:{pattern_re})(?:/.*)?$"
+        else:
+            regex_str = f"(?:^|/)(?:{pattern_re})(?:/.*)?$"
+
+    return re.compile(regex_str, re.IGNORECASE)
+
+
+class ExportIgnore:
+    """解析并匹配 .exportignore 规则 (语法与功能类似 .gitignore)"""
+
+    def __init__(self, rules: list = None, raw_rules: list = None):
+        self.rules = rules or []  # list of (is_negated: bool, regex: re.Pattern)
+        self.raw_rules = raw_rules or []  # list of (is_negated: bool, clean_pattern: str)
+
+    @classmethod
+    def from_file(cls, filepath: str) -> "ExportIgnore":
+        """从 .exportignore 文件解析规则"""
+        if not filepath or not os.path.isfile(filepath):
+            return cls([])
+        try:
+            with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+                return cls.parse(f.readlines())
+        except Exception:
+            return cls([])
+
+    @classmethod
+    def parse(cls, lines) -> "ExportIgnore":
+        """解析多行 ignore 规则"""
+        rules = []
+        raw_rules = []
+        for raw in lines:
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            is_negated = False
+            if line.startswith("!"):
+                is_negated = True
+                line = line[1:].strip()
+                if not line:
+                    continue
+            rx = _gitignore_pattern_to_regex(line)
+            rules.append((is_negated, rx))
+            raw_rules.append((is_negated, line))
+        return cls(rules=rules, raw_rules=raw_rules)
+
+    def has_negations_under(self, dir_rel: str) -> bool:
+        """检查是否有取反规则指向该子目录下，若有则不能直接裁剪整个目录"""
+        prefix = dir_rel.replace("\\", "/").strip("/") + "/"
+        for is_negated, pat in self.raw_rules:
+            clean = pat.lstrip("/")
+            if is_negated:
+                if clean.startswith(prefix) or ("/" not in clean.rstrip("/")):
+                    return True
+        return False
+
+    def is_ignored(self, rel_path: str, is_dir: bool = False) -> bool:
+        """检查相对路径是否匹配忽略规则 (注: .exportignore 自身永远忽略)"""
+        norm = rel_path.replace("\\", "/").strip("/")
+        if not norm or norm == EXPORT_IGNORE_FILE or norm.endswith(f"/{EXPORT_IGNORE_FILE}") or os.path.basename(norm) == EXPORT_IGNORE_FILE:
+            return True
+
+        target = norm + "/" if is_dir and not norm.endswith("/") else norm
+        ignored = False
+        for is_negated, rx in self.rules:
+            if rx.search(target):
+                ignored = not is_negated
+        return ignored
+
+
+def iter_export_files(root, export_ignore=None):
     """遍历项目内需打包的文件,产出 (压缩包相对路径, 绝对路径)"""
+    if export_ignore is None:
+        export_ignore = ExportIgnore.from_file(os.path.join(root, EXPORT_IGNORE_FILE))
+
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [
-            d for d in dirnames
-            if d not in EXPORT_EXCLUDE and d not in EXPORT_SKIP_DIRS
-        ]
         rel_dir = os.path.relpath(dirpath, root)
-        rel_dir = "" if rel_dir == "." else rel_dir
+        rel_dir = "" if rel_dir == "." else rel_dir.replace(os.sep, "/")
+
+        # 1. 目录修剪: 排除默认排除目录与 .exportignore 指定忽略的目录
+        pruned_dirs = []
+        for d in dirnames:
+            child_rel = f"{rel_dir}/{d}" if rel_dir else d
+            # 基础规则过滤
+            if d in EXPORT_EXCLUDE or d in EXPORT_SKIP_DIRS:
+                continue
+            if child_rel.split("/", 1)[0] in EXPORT_EXCLUDE:
+                continue
+            # .exportignore 目录过滤
+            if export_ignore.is_ignored(child_rel, is_dir=True):
+                # 若该目录下有取反规则，不直接剪枝，留待子文件逐个判定
+                if not export_ignore.has_negations_under(child_rel):
+                    continue
+            pruned_dirs.append(d)
+        dirnames[:] = pruned_dirs
+
+        # 2. 文件收集
         for fname in filenames:
+            if fname == EXPORT_IGNORE_FILE:
+                continue
             if os.path.splitext(fname)[1].lower() in EXPORT_SKIP_EXTS:
                 continue
-            rel = os.path.join(rel_dir, fname) if rel_dir else fname
-            rel = rel.replace(os.sep, "/")
+            rel = f"{rel_dir}/{fname}" if rel_dir else fname
             if rel.split("/", 1)[0] in EXPORT_EXCLUDE:
+                continue
+            # .exportignore 规则过滤
+            if export_ignore.is_ignored(rel, is_dir=False):
                 continue
             yield rel, os.path.join(dirpath, fname)
 
 
-def collect_export_files(root) -> list:
-    """收集导出文件列表(含强制包含的模板文件)"""
-    files = list(iter_export_files(root))
+def collect_export_files(root, export_ignore=None) -> list:
+    """收集导出文件列表(含强制包含的模板文件, 支持 .exportignore)"""
+    if export_ignore is None:
+        export_ignore = ExportIgnore.from_file(os.path.join(root, EXPORT_IGNORE_FILE))
+    files = list(iter_export_files(root, export_ignore=export_ignore))
     seen = {rel for rel, _ in files}
     for force_rel in EXPORT_FORCE_INCLUDE:
+        if export_ignore.is_ignored(force_rel, is_dir=False):
+            continue
         force_abs = os.path.join(root, force_rel)
         if os.path.isfile(force_abs) and force_rel not in seen:
             files.append((force_rel, force_abs))
@@ -215,9 +436,9 @@ def collect_export_files(root) -> list:
     return files
 
 
-def create_export_zip(root, out_path) -> str:
+def create_export_zip(root, out_path, export_ignore=None) -> str:
     """打包项目为 zip,返回输出路径,失败抛 PackageError"""
-    files = collect_export_files(root)
+    files = collect_export_files(root, export_ignore=export_ignore)
     if not files:
         raise PackageError("未找到可导出的文件")
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)

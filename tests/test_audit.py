@@ -51,6 +51,25 @@ class TestAuditLog:
         for r in steve_logs["records"]:
             assert "steve" in r["sender"].lower()
 
+    def test_query_filter_with_edge_cases_and_pagination(self, audit):
+        # 边界情况: sender 为 None 或特殊类型
+        with audit._lock:
+            audit._buffer.append({"ts": "2026-09-22T00:00:00", "type": None, "sender": None, "message": "raw"})
+            audit._buffer.append({"ts": "2026-09-22T00:00:01", "type": "chat", "sender": "Player1", "message": "msg1"})
+            audit._buffer.append({"ts": "2026-09-22T00:00:02", "type": "chat", "sender": "Player2", "message": "msg2"})
+            audit._buffer.append({"ts": "2026-09-22T00:00:03", "type": "chat", "sender": "Player3", "message": "msg3"})
+
+        # 测试过滤时不会因 None 抛异常
+        res = audit.query(sender="player", limit=2, offset=1)
+        assert res["total"] == 3
+        assert len(res["records"]) == 2
+        assert res["records"][0]["sender"] == "Player2"
+
+        # 查询不存在的类型
+        none_res = audit.query(type_="non_existent")
+        assert none_res["total"] == 0
+        assert len(none_res["records"]) == 0
+
 
 class TestAuditExportFormatting:
     def test_csv_export_format(self, audit):
