@@ -133,6 +133,15 @@ def set_system_mode(enabled: bool) -> None:
     _system_mode = enabled
 
 
+_is_safe_mode = False  # --safe-mode 启动时跳过第三方 Mod 加载并进入安全排障模式
+
+
+def set_safe_mode(enabled: bool) -> None:
+    """设置是否处于出厂安全模式(--safe-mode 启动参数)"""
+    global _is_safe_mode
+    _is_safe_mode = bool(enabled)
+
+
 def _github_headers() -> dict:
     """返回 GitHub API request head,若配置了 token 则附带认证以提升速率限制"""
     headers = {
@@ -849,6 +858,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/status":
             self._api_status()
+            return
+        if path == "/api/health":
+            self._api_health()
             return
         if path == "/api/performance":
             self._api_performance()
@@ -1607,6 +1619,22 @@ class WebUIHandler(BaseHTTPRequestHandler):
             user_manager.logout(token)
         self._respond({"ok": True, "message": "已注销"})
 
+    def _api_health(self) -> None:
+        """公开健康探针接口 (用于外部监控/Docker/K8s/Uptime Kuma), 无需鉴权"""
+        try:
+            from lib.watchdog import watchdog
+            status_data = watchdog.get_health_status()
+        except Exception as e:
+            status_data = {
+                "ok": False,
+                "status": "error",
+                "error": str(e),
+            }
+        status_data["safeMode"] = _is_safe_mode
+        is_ok = bool(status_data.get("ok", True)) and status_data.get("status") != "hanging"
+        http_code = 200 if is_ok else 503
+        self._respond(status_data, status=http_code)
+
     def _api_status(self) -> None:
         ns = _load_config_module()
         cfg = ns.get("wsConfig", {})
@@ -1623,6 +1651,12 @@ class WebUIHandler(BaseHTTPRequestHandler):
             metrics = metrics_collector.get_snapshot().get("current", {})
         except Exception:
             metrics = {}
+        health_info = {}
+        try:
+            from lib.watchdog import watchdog
+            health_info = watchdog.get_health_status()
+        except Exception:
+            health_info = {}
         self._respond({
             "ok": True,
             "name": cfg.get("name", "EnderBridge"),
@@ -1633,6 +1667,8 @@ class WebUIHandler(BaseHTTPRequestHandler):
             "players": extra.get("players", []),
             "version": _app_version or "EnderBridge",
             "systemMode": _system_mode,
+            "safeMode": _is_safe_mode,
+            "health": health_info,
             "metrics": metrics,
         })
 

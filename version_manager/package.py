@@ -526,7 +526,7 @@ def backup_dir(root, dest_dir=None, keep=BACKUP_KEEP_COUNT, description: str = N
                 }
                 z.writestr(".backup_meta.json", json.dumps(meta_content, ensure_ascii=False, indent=2))
             for dirpath, dirnames, filenames in os.walk(root):
-                dirnames[:] = [d for d in dirnames if d != "__pycache__"]
+                dirnames[:] = [d for d in dirnames if d not in ("__pycache__", ".git", "backups")]
                 for fname_item in filenames:
                     if os.path.splitext(fname_item)[1].lower() in EXPORT_SKIP_EXTS:
                         continue

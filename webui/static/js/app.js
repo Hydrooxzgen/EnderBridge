@@ -164,6 +164,12 @@ function initSidebar(activePage, role) {
   // 动态侧边栏:先生成再高亮(页面只需留 <aside class="sidebar" data-auto-sidebar>)
   if (typeof renderSidebar === "function") renderSidebar(activePage);
   if (typeof initLang === "function") initLang();
+  api("/status").then(function (d) {
+    if (d && d.ok) {
+      if (d.name) { var srv = $("srvName"); if (srv) srv.textContent = d.name; }
+      if (d.safeMode) { var sm = $("safeModeBadge"); if (sm) sm.style.display = "block"; }
+    }
+  }).catch(function(){});
   var nav = document.querySelector('.nav-item[data-page="' + activePage + '"]');
   if (nav) nav.classList.add("active");
   document.querySelectorAll(".nav-item[data-page]").forEach(function (el) {

@@ -2,7 +2,7 @@ mod/__pycache__/
 lib/__pycache__/
 __pycache__/
 .pytest_cache/
-.venv./
+.venv/
 .idea/
 logs/
 !config/config.example.json

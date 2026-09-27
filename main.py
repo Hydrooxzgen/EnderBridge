@@ -25,12 +25,12 @@ USERS_JSON = os.path.join(CONFIG_DIR, "users.json")
 UPDATE_MARKER = os.path.join(ROOT, ".update_pending")
 
 # --- 版本常量 ---
-VERSION = "b0.4.3.1"
+VERSION = "v1.0.0 dev"
 # ↓仅当不为None时从Github拉取更新日志, 反之则直接显示该变量内容。
-DESCRIPTION = None
-"""
-fix1: 修复无法使用webui备份功能.
-feat1: 新增webui备份描述功能
+DESCRIPTION = """
+fix1: 修复更新(降级)后无法在终端输入或者通过ctrl+c停止服务器的问题
+feat1: 挂起检测看门狗与自愈探针
+feat2: 定时自动备份引擎与元数据联动
 """
 MINIMIUM_ALLOWED_VERSION = "b0.4.0" # 因为b0.4.0版本大量重写了账户登录逻辑, 所以, 设置了拒绝降级到b0.4.0-的版本
                                     # 但是如果你需要降级低于b0.4.0的版本，请更改这里的值为b0.0.0以删除限制
@@ -49,6 +49,7 @@ WANT_EXPORT_CLEAR = WANT_EXPORT and "-clear" in sys.argv
 WANT_LOAD_WITHOUT_CONFIG = "--load-without-config" in sys.argv
 WANT_VIEW_VERSION = "--version" in sys.argv or "-v" in sys.argv
 WANT_SYSTEM_MODE = "--system" in sys.argv
+WANT_SAFE_MODE = "--safe-mode" in sys.argv
 WANT_HELP = "--help" in sys.argv or "-h" in sys.argv
 WANT_VIEW_DESCRIPTION = "--description" in sys.argv
 WANT_GOTO_OOBE = "--goto-oobe" in sys.argv
@@ -62,6 +63,24 @@ and not WANT_ROLLBACK and not WANT_PREVIEW
 
 # --- 终端提示符常量 ---
 CONSOLE_PROMPT = "EnderBridge> "
+RESTART_EXIT_CODE = 42
+ENV_SUPERVISED = "_EB_SUPERVISED"
+
+
+def _is_oneshot_command() -> bool:
+    """判断当前命令行是否为单次执行即退出的工具指令(无需启动主控 Supervisor 守护)"""
+    return bool(
+        WANT_RESET
+        or WANT_VIEW_VERSION
+        or WANT_EXPORT
+        or WANT_VIEW_DESCRIPTION
+        or WANT_HELP
+        or WANT_UPDATE
+        or WANT_ROLLBACK
+        or WANT_PREVIEW
+        or ("--no-supervisor" in sys.argv)
+        or (os.environ.get("EB_NO_SUPERVISOR") == "1")
+    )
 
 # ===== 自动迁移:将根目录下的旧配置文件移动到 config/ 目录 =====
 os.makedirs(CONFIG_DIR, exist_ok=True)
@@ -228,6 +247,7 @@ if WANT_HELP:
     print("选项:")
     print("  --help, -h            显示此帮助信息")
     print("  --version, -v         显示当前版本")
+    print("  --safe-mode           安全模式启动: 跳过第三方 Mod 加载，仅保留核心通信与 WebUI")
     print("  --reset-all           一键重置所有配置")
     print("  --load-without-config 跳过配置直接启动(调试用)")
     print("  --system              启用系统保留账户模式")
@@ -768,14 +788,15 @@ if os.path.isfile(UPDATE_MARKER) and not WANT_UPDATE:
             # 等待端口释放:旧进程的 destroy() 已关闭服务器,但 Windows 上
             # TCP 端口可能仍在 TIME_WAIT 状态,需等待 OS 回收后新进程才能绑端口
             print("  等待端口释放...")
-            time.sleep(3)
-            try:
-                import subprocess
-                subprocess.Popen([sys.executable] + sys.argv, cwd=ROOT)
-            except Exception as e:
-                print(f"  重启失败: {e},请手动重启服务器")
-            # os._exit 跳过 atexit/finalizer,避免终端残留状态导致新进程无法输入
-            os._exit(0)
+            if os.environ.get(ENV_SUPERVISED) == "1":
+                os._exit(RESTART_EXIT_CODE)
+            else:
+                try:
+                    import subprocess
+                    subprocess.Popen([sys.executable] + sys.argv, cwd=ROOT)
+                except Exception as e:
+                    print(f"  重启失败: {e},请手动重启服务器")
+                os._exit(0)
         except Exception as e:
             print(f"  更新失败: {e}")
 else:
@@ -806,13 +827,15 @@ if os.path.isfile(ROLLBACK_MARKER) and not WANT_ROLLBACK:
             print(f"  已回滚到: {used}")
             print("  正在重启以加载回滚后的版本...")
             print("  等待端口释放...")
-            time.sleep(3)
-            try:
-                import subprocess
-                subprocess.Popen([sys.executable] + sys.argv, cwd=ROOT)
-            except Exception as e:
-                print(f"  重启失败: {e},请手动重启服务器")
-            os._exit(0)
+            if os.environ.get(ENV_SUPERVISED) == "1":
+                os._exit(RESTART_EXIT_CODE)
+            else:
+                try:
+                    import subprocess
+                    subprocess.Popen([sys.executable] + sys.argv, cwd=ROOT)
+                except Exception as e:
+                    print(f"  重启失败: {e},请手动重启服务器")
+                os._exit(0)
         except PackageError as e:
             print(f"  回滚失败: {e}")
 
@@ -1274,6 +1297,11 @@ def _start_webui() -> None:
     """启动 Web 管理界面(每次启动都监听配置的 Web 端口)"""
     try:
         from webui.server import set_app_info, set_event_loop, set_restart_handler, set_status_provider, set_system_mode, start_webui
+        try:
+            from webui.server import set_safe_mode
+            set_safe_mode(WANT_SAFE_MODE)
+        except ImportError:
+            pass
         # 加载用户系统(首次运行/升级时自动创建 admin + guest)
         from lib.users import user_manager
         user_manager.load()
@@ -1304,40 +1332,96 @@ def _start_webui() -> None:
 
 
 def _request_restart() -> None:
-    """由 Web 管理界面触发:后台线程执行进程内热重启
+    """由 Web 管理界面触发:后台线程执行重启
 
-    顺序:经事件循环执行 destroy()(停 Web 界面 / 关 Mod / 断开客户端 /
-    关闭 WS 服务端,确保端口释放),再重新启动全部组件。
-    不退出进程、不启动新进程——Windows 控制台下旧进程退出后,
-    py.exe/PowerShell 只等待直接子进程,新进程会变成孤儿继续抢占 stdin,
-    导致终端无法输入、Ctrl+C 无法结束进程,因此这里采用热重启。
-
-    特殊分支:存在 .update_pending 标记(WebUI 一键更新)时,热重启无法
-    重新加载 main.py 自身的新代码,必须关闭全部组件释放端口后启动新进程,
-    由新进程读取 .update_pending 执行文件覆盖,再二次启动加载新代码。
+    1. 普通重启:由事件循环执行 _hot_restart(), 快速复位组件, 不退出进程。
+    2. 更新/降级(.update_pending 或 .rollback_pending):
+       先调用 _shutdown_for_update() 安全关闭全部服务释放端口,
+       在本进程内执行文件覆盖(更新或回滚),
+       然后退出当前工作进程通知外层 Supervisor 守护重新拉起新代码进程。
+       Supervisor 保持控制台前台所有权, 彻底解决更新后终端 stdin 无法输入和 Ctrl+C 无法终止的问题。
     """
     loop = _main_loop
 
     def _do_restart():
-        global _restarting
+        global _restarting, _prompt_visible
+        _restarting = True  # 立即抑制提示符输出、阻止输入分发
+        _prompt_visible = False
+        # 清除当前行提示符, 避免在日志或更新提示前残留
+        sys.stdout.write("\r\x1b[K")
+        sys.stdout.flush()
+
         update_marker = os.path.join(ROOT, ".update_pending")
-        if os.path.isfile(update_marker):
-            # ===== WebUI 更新模式 =====
+        rollback_marker = os.path.join(ROOT, ".rollback_pending")
+        if os.path.isfile(update_marker) or os.path.isfile(rollback_marker):
+            # ===== WebUI 更新 / 回滚模式 =====
             if loop is not None and not loop.is_closed():
                 try:
                     fut = asyncio.run_coroutine_threadsafe(_shutdown_for_update(), loop)
                     fut.result(timeout=30)
                 except Exception as error:
-                    shared.logger.warning(f"更新前关闭组件异常: {error}")
-            try:
-                subprocess.Popen([sys.executable] + sys.argv, cwd=ROOT)
-            except Exception as error:
-                shared.logger.warning(f"更新进程启动失败: {error},请手动重启服务器")
-            os._exit(0)
-        _restarting = True  # 抑制提示符输出、阻止输入分发
-        # 清除当前行提示符,避免残留
-        sys.stdout.write("\r\x1b[K")
-        sys.stdout.flush()
+                    shared.logger.warning(f"更新/回滚前关闭组件异常: {error}")
+
+            # 1. 处理更新覆盖
+            if os.path.isfile(update_marker):
+                try:
+                    with open(update_marker, "r", encoding="utf-8") as f:
+                        pending_path = f.read().strip()
+                except Exception:
+                    pending_path = ""
+                finally:
+                    try:
+                        os.remove(update_marker)
+                    except Exception:
+                        pass
+                if pending_path and os.path.isfile(pending_path):
+                    from version_manager.package import apply_archive, backup_dir, PackageError
+                    try:
+                        do_backup = True
+                        try:
+                            if os.path.exists(CONFIG_JSON):
+                                with open(CONFIG_JSON, "r", encoding="utf-8") as f:
+                                    _cfg = json.load(f)
+                                    do_backup = bool((_cfg.get("updateConfig") or {}).get("autoBackup", True))
+                        except Exception:
+                            pass
+                        if do_backup:
+                            bp = backup_dir(ROOT)
+                            print(f"  [更新] 已备份当前版本: {bp}")
+                        copied = apply_archive(pending_path, ROOT)
+                        print(f"  [更新] 已覆盖 {copied} 个文件，正在重启以加载新版本...")
+                    except PackageError as e:
+                        print(f"  [更新] 更新失败: {e}")
+
+            # 2. 处理回滚覆盖
+            if os.path.isfile(rollback_marker):
+                try:
+                    with open(rollback_marker, "r", encoding="utf-8") as f:
+                        rollback_path = f.read().strip()
+                except Exception:
+                    rollback_path = ""
+                finally:
+                    try:
+                        os.remove(rollback_marker)
+                    except Exception:
+                        pass
+                if rollback_path and os.path.isfile(rollback_path):
+                    from version_manager.package import rollback as do_rollback, PackageError
+                    try:
+                        used = do_rollback(ROOT, rollback_path)
+                        print(f"  [回滚] 已回滚到: {used}，正在重启以加载回滚版本...")
+                    except PackageError as e:
+                        print(f"  [回滚] 回滚失败: {e}")
+
+            # 3. 退出并由 Supervisor 重启
+            if os.environ.get(ENV_SUPERVISED) == "1":
+                os._exit(RESTART_EXIT_CODE)
+            else:
+                try:
+                    subprocess.Popen([sys.executable, os.path.join(ROOT, "main.py")] + sys.argv[1:], cwd=ROOT)
+                except Exception as error:
+                    shared.logger.warning(f"更新进程启动失败: {error},请手动重启服务器")
+                os._exit(0)
         if loop is not None and not loop.is_closed():
             try:
                 fut = asyncio.run_coroutine_threadsafe(_hot_restart(), loop)
@@ -1388,8 +1472,18 @@ async def _hot_restart() -> None:
         _start_webui()
 
         # 重新加载 Mod 定义
-        await ServerModManager.load()
-        await ClientModManager.load()
+        if WANT_SAFE_MODE:
+            shared.logger.warning("【安全模式】当前处于出厂安全模式 (--safe-mode)，跳过第三方 Mod 加载")
+        else:
+            await ServerModManager.load()
+            await ClientModManager.load()
+
+        # 重启看门狗守护
+        try:
+            from lib.watchdog import watchdog
+            watchdog.start(asyncio.get_running_loop(), restart_handler=_request_restart)
+        except Exception:
+            pass
 
         shared.logger.info("服务器已重启")
     except Exception as error:
@@ -1620,7 +1714,7 @@ async def _dispatch_console_command(text):
         bot_queue.put_nowait(text)
         return
 
-    if text in ("exit", "quit"):
+    if text in ("exit", "quit", "stop"):
         # 触发优雅关闭:取消阻塞的 Future,让 finally 块执行 destroy()
         loop = _main_loop
         fut = _main_future
@@ -1721,9 +1815,20 @@ async def main():
     # 启动 Web 管理界面(独立线程,不阻塞主流程)
     _start_webui()
 
+    # 启动看门狗探针与自动自愈守护
+    try:
+        from lib.watchdog import watchdog
+        watchdog.start(_main_loop, restart_handler=_request_restart)
+    except Exception as e:
+        shared.logger.warning(f"看门狗启动异常: {e}")
+
     # 加载服务端 Mod 和客户端 Mod 的静态定义
-    await ServerModManager.load()
-    await ClientModManager.load()
+    if WANT_SAFE_MODE:
+        shared.logger.warning("【安全模式】已激活出厂安全模式 (--safe-mode)，跳过第三方 Mod 加载，仅保留核心通信与 WebUI")
+    else:
+        await ServerModManager.load()
+        await ClientModManager.load()
+        shared.logger.info("Mod 加载完成")
     shared.logger.info("服务器已启动")
 
     # 启动玩家列表轮询任务(如果配置启用)
@@ -1800,6 +1905,13 @@ async def destroy():
         return
     destroying = True
 
+    shared.logger.info("正在停止看门狗守护...")
+    try:
+        from lib.watchdog import watchdog
+        watchdog.stop()
+    except Exception:
+        pass
+
     shared.logger.info("正在停止 Web 管理界面...")
     try:
         from webui.server import stop_webui
@@ -1837,7 +1949,38 @@ async def destroy():
         shared.logger.warning("服务器关闭异常, 正在强制退出")
 
 
+def _run_supervisor() -> None:
+    """主控守护进程:保持控制台前台所有权,在更新/降级或请求完整重启时自动拉起新进程,
+    彻底避免旧进程退出导致 Windows 控制台 stdin 丢失或 Ctrl+C 无法终止的问题。
+    """
+    os.environ[ENV_SUPERVISED] = "1"
+    target_cmd = [sys.executable, os.path.join(ROOT, "main.py")] + sys.argv[1:]
+    while True:
+        try:
+            proc = subprocess.Popen(target_cmd, cwd=ROOT)
+            ret = proc.wait()
+        except KeyboardInterrupt:
+            # 捕获用户在终端按下的 Ctrl+C, 等待子进程完成 destroy() 清理
+            try:
+                proc.wait(timeout=8)
+            except Exception:
+                try:
+                    proc.terminate()
+                except Exception:
+                    pass
+            sys.exit(0)
+
+        if ret == RESTART_EXIT_CODE:
+            # 工作进程请求了重启(如 WebUI 更新/回滚覆盖了文件)
+            time.sleep(1.0)
+            continue
+        else:
+            sys.exit(ret)
+
+
 if __name__ == "__main__":
+    if os.environ.get(ENV_SUPERVISED) != "1" and not _is_oneshot_command():
+        _run_supervisor()
     # 首次运行检查:is_first_run 为 True 时启动图形化配置向导(向导中可设置 Web 管理端口)
     # --load-without-config 模式跳过向导,直接使用默认配置运行
     # 放在 __main__ 块内:保证 import main 无副作用(CI 导入检查等场景可安全执行)

@@ -24,8 +24,18 @@ var I18N = {
     "nav.adminLogin": "管理员登录",
     "nav.logout": "退出登录",
     "nav.webAdmin": "Web 管理",
+    "nav.safeMode": "🛡️ 安全模式",
     "nav.lightMode": "浅色模式",
     "nav.darkMode": "深色模式",
+    "dash.statHealth": "运行健康状态",
+    "dash.healthHealthy": "健康",
+    "dash.healthDegraded": "轻微延迟",
+    "dash.healthHanging": "事件循环挂起",
+    "dash.statServerName": "服务器名称",
+    "dash.statWsPort": "WebSocket 端口",
+    "dash.statWebPort": "Web 管理端口",
+    "dash.statOnlineClients": "在线客户端",
+    "dash.statUptime": "运行时间",
     // 登录页
     "login.title": "EnderBridge Web 管理",
     "login.sub": "请输入用户名和密码以继续",
@@ -844,8 +854,18 @@ var I18N = {
     "nav.adminLogin": "Admin Login",
     "nav.logout": "Logout",
     "nav.webAdmin": "Web Admin",
+    "nav.safeMode": "🛡️ Safe Mode",
     "nav.lightMode": "Light Mode",
     "nav.darkMode": "Dark Mode",
+    "dash.statHealth": "Health Status",
+    "dash.healthHealthy": "Healthy",
+    "dash.healthDegraded": "Degraded",
+    "dash.healthHanging": "Hanging",
+    "dash.statServerName": "Server Name",
+    "dash.statWsPort": "WebSocket Port",
+    "dash.statWebPort": "WebUI Port",
+    "dash.statOnlineClients": "Online Clients",
+    "dash.statUptime": "Uptime",
     // Login
     "login.title": "EnderBridge Web Admin",
     "login.sub": "Please enter username and password",
@@ -1736,7 +1756,8 @@ function renderSidebar(activePage) {
   if (!aside) return;
   var html = '<div class="brand"><span class="logo">⛏️</span><div>'
     + '<div class="name" id="srvName">EnderBridge</div>'
-    + '<div class="ver" data-i18n="nav.webAdmin">Web 管理</div>'
+    + '<div class="ver" data-i18n="nav.webAdmin">' + t("nav.webAdmin") + '</div>'
+    + '<div class="safe-mode-badge" id="safeModeBadge" style="display:none;background:#f59e0b;color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;margin-top:3px;text-align:center;" data-i18n="nav.safeMode">' + t("nav.safeMode") + '</div>'
     + '</div></div>';
   SIDEBAR_PAGES.forEach(function (p) {
     html += '<div class="nav-item" data-page="' + p[0] + '"><span>' + p[1]
