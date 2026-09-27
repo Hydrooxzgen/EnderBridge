@@ -55,15 +55,34 @@ function refreshStatus() {
   api("/status").then(function (data) {
     if (!data.ok) return;
     $("srvName").textContent = data.name;
+    if (data.safeMode) {
+      var sm = $("safeModeBadge");
+      if (sm) sm.style.display = "block";
+    }
     var uptime = data.uptime || 0;
     var s = Math.floor(uptime % 60), m = Math.floor(uptime / 60) % 60, h = Math.floor(uptime / 3600);
     var uptimeText = (h > 0 ? h + "时 " : "") + (m > 0 ? m + "分 " : "") + s + "秒";
+    var healthText = (typeof t === "function" ? t("dash.healthHealthy") : null) || "健康";
+    var healthIcon = "💚";
+    if (data.health) {
+      if (data.health.status === "degraded") {
+        healthText = ((typeof t === "function" ? t("dash.healthDegraded") : null) || "轻微延迟") + " (" + (data.health.loop_lag_ms || 0) + "ms)";
+        healthIcon = "🟡";
+      } else if (data.health.status === "hanging") {
+        healthText = (typeof t === "function" ? t("dash.healthHanging") : null) || "事件循环挂起";
+        healthIcon = "🔴";
+      } else if (data.health.loop_lag_ms !== undefined) {
+        healthText = ((typeof t === "function" ? t("dash.healthHealthy") : null) || "健康") + " (" + data.health.loop_lag_ms + "ms)";
+      }
+    }
+    var _t = (typeof t === "function") ? t : function (k) { return k; };
     $("statGrid").innerHTML =
-      statCard("📛", data.name, "服务器名称") +
-      statCard("🔌", data.port, "WebSocket 端口") +
-      statCard("🌐", data.webPort, "Web 管理端口") +
-      statCard("👥", data.clients, "在线客户端") +
-      statCard("⏱️", uptimeText, "运行时间");
+      statCard("📛", data.name, _t("dash.statServerName") || "服务器名称") +
+      statCard("🔌", data.port, _t("dash.statWsPort") || "WebSocket 端口") +
+      statCard("🌐", data.webPort, _t("dash.statWebPort") || "Web 管理端口") +
+      statCard("👥", data.clients, _t("dash.statOnlineClients") || "在线客户端") +
+      statCard(healthIcon, healthText, _t("dash.statHealth") || "运行健康状态") +
+      statCard("⏱️", uptimeText, _t("dash.statUptime") || "运行时间");
     renderPlayers(data.players || []);
   }).catch(function () {});
 }

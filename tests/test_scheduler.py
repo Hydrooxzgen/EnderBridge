@@ -189,6 +189,20 @@ class TestTaskScheduler:
         log = asyncio.run(scheduler.execute_task(task, trigger_source="test"))
         assert log["status"] == "failed"
 
+    def test_execute_backup_task(self, scheduler, tmp_path, monkeypatch):
+        import asyncio
+        fake_backup_path = str(tmp_path / "EnderBridge_backup_20260927_100000.zip")
+        monkeypatch.setattr("version_manager.package.backup_dir", lambda root, description=None, **kw: fake_backup_path)
+        task = scheduler.add_task({
+            "name": "定时备份",
+            "action_type": "backup",
+            "action_payload": "测试自动备份",
+        })
+        log = asyncio.run(scheduler.execute_task(task, trigger_source="test"))
+        assert log["status"] == "success"
+        assert "EnderBridge_backup_20260927_100000.zip" in log["output"]
+        assert "自动化备份生成成功" in log["message"]
+
 
 # ===== WebUI API 端点集成测试 =====
 

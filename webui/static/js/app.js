@@ -83,7 +83,7 @@ var _PAGE_PERM_MAP = {
   "permissions": "permissions",
   "config": "config",
   "mods": "mods",
-  "studio": "mods",
+  "studio": "studio",
   "console": "console",
   "scheduler": "scheduler",
   "banlist": "banlist",
@@ -102,7 +102,7 @@ function _getActivePage() {
 /** 如果当前页面无权限,自动跳转到第一个有权限的页面 */
 function _redirectIfNoPermission(perms) {
   var active = _getActivePage();
-  var needed = _PAGE_PERM_MAP[active];
+  var needed = _PAGE_PERM_MAP[active] || active;
   if (needed && perms.indexOf(needed) === -1) {
     // 当前页面无权限,找第一个有权限的页面
     for (var i = 0; i < _PAGE_ORDER.length; i++) {
@@ -164,6 +164,12 @@ function initSidebar(activePage, role) {
   // 动态侧边栏:先生成再高亮(页面只需留 <aside class="sidebar" data-auto-sidebar>)
   if (typeof renderSidebar === "function") renderSidebar(activePage);
   if (typeof initLang === "function") initLang();
+  api("/status").then(function (d) {
+    if (d && d.ok) {
+      if (d.name) { var srv = $("srvName"); if (srv) srv.textContent = d.name; }
+      if (d.safeMode) { var sm = $("safeModeBadge"); if (sm) sm.style.display = "block"; }
+    }
+  }).catch(function(){});
   var nav = document.querySelector('.nav-item[data-page="' + activePage + '"]');
   if (nav) nav.classList.add("active");
   document.querySelectorAll(".nav-item[data-page]").forEach(function (el) {
@@ -179,6 +185,7 @@ function initSidebar(activePage, role) {
     "permissions": "permissions",
     "config": "config",
     "mods": "mods",
+    "studio": "studio",
     "console": "console",
     "scheduler": "scheduler",
     "banlist": "banlist",
@@ -187,7 +194,7 @@ function initSidebar(activePage, role) {
   };
   document.querySelectorAll(".nav-item[data-page]").forEach(function (el) {
     var page = el.getAttribute("data-page");
-    var perm = permMap[page];
+    var perm = permMap[page] || page;
     if (perm) {
       el.style.display = hasPermission(perm) ? "" : "none";
     }

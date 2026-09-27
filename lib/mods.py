@@ -3,8 +3,10 @@
 包含事件总线、Mod 存储、客户端/服务端 Mod 管理器、SAPI 挂载等。
 """
 import asyncio
+import ctypes
 import importlib
 import json
+import threading
 import time
 
 from lib import shared
@@ -12,6 +14,13 @@ from lib.current import Current
 from lib.command import Command
 from lib.permission import PermissionManager
 from lib.sapi import SAPIMessageHandler
+
+# 确保核心配置安全防护已激活
+try:
+    from lib.security_guard import install_security_guard
+    install_security_guard()
+except Exception:
+    pass
 
 
 class _TerminalClient:
@@ -44,6 +53,13 @@ class _TerminalClient:
 
 def _mods_config() -> dict:
     try:
+        from lib.config_loader import get_config
+        cfg = get_config()
+        if "mods" in cfg and isinstance(cfg.get("mods"), dict):
+            return cfg["mods"]
+    except Exception:
+        pass
+    try:
         from config import mods
         return mods or {"client": {}, "server": {}}
     except Exception:
@@ -62,17 +78,67 @@ def _path_to_module(mod_path: str) -> str:
     return p.replace("/", ".").removesuffix(".js")
 
 
-def _import_mod(mod_path: str):
-    """动态导入 Mod 模块并返回其默认导出的 Mod 类"""
-    module = importlib.import_module(_path_to_module(mod_path))
-    return getattr(module, "Mod")
+DEFAULT_MOD_TIMEOUT = 5.0  # 单个 Mod 导入或初始化最大允许耗时 (秒)
 
 
-def _reimport_mod(mod_path: str):
-    """重新导入 Mod 模块(绕过模块缓存,对应 JS 的时间戳参数)"""
-    module = importlib.import_module(_path_to_module(mod_path))
-    importlib.reload(module)
-    return getattr(module, "Mod")
+def _kill_thread(ident: int) -> None:
+    """向指定卡死线程注入 TimeoutError 异常以安全强制终止"""
+    if ident:
+        try:
+            import ctypes
+            res = ctypes.pythonapi.PyThreadState_SetAsyncExc(
+                ctypes.c_ulong(ident),
+                ctypes.py_object(TimeoutError),
+            )
+            if res > 1:
+                ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_ulong(ident), None)
+        except Exception:
+            pass
+
+
+def _run_with_timeout(fn, timeout: float = DEFAULT_MOD_TIMEOUT, action_name: str = "执行"):
+    """在独立受控守护线程中运行目标函数；超时后自动终止卡死线程并抛出 TimeoutError"""
+    res = [None]
+    err = [None]
+
+    def _worker():
+        try:
+            res[0] = fn()
+        except BaseException as e:
+            err[0] = e
+
+    t = threading.Thread(target=_worker, name=f"ModRunner-{action_name}", daemon=True)
+    t.start()
+    t.join(timeout=timeout)
+
+    if t.is_alive():
+        _kill_thread(t.ident)
+        t.join(timeout=0.3)
+        raise TimeoutError(f"Mod {action_name} 耗时超过 {timeout} 秒，疑似死循环 (while True) 或长时间阻塞！已自动熔断。")
+
+    if err[0] is not None:
+        raise err[0]
+
+    return res[0]
+
+
+def _import_mod(mod_path: str, timeout: float = DEFAULT_MOD_TIMEOUT):
+    """带超时熔断机制动态导入 Mod 模块并返回其默认导出的 Mod 类"""
+    def _do():
+        module = importlib.import_module(_path_to_module(mod_path))
+        return getattr(module, "Mod")
+
+    return _run_with_timeout(_do, timeout=timeout, action_name=f"导入模块 ({mod_path})")
+
+
+def _reimport_mod(mod_path: str, timeout: float = DEFAULT_MOD_TIMEOUT):
+    """重新导入 Mod 模块(带超时熔断机制)"""
+    def _do():
+        module = importlib.import_module(_path_to_module(mod_path))
+        importlib.reload(module)
+        return getattr(module, "Mod")
+
+    return _run_with_timeout(_do, timeout=timeout, action_name=f"重载模块 ({mod_path})")
 
 
 def _call_maybe_async(fn, *args):
@@ -259,15 +325,80 @@ class ClientModManager:
     # 存储已加载的 Mod 类定义(静态,全局共享)
     loaded_mod = {}
 
-    @staticmethod
-    async def load() -> None:
-        """从配置中读取客户端 Mod 路径并加载"""
+    # 存储加载失败或超时的 Mod 信息
+    failed_mods = {}
+
+    @classmethod
+    def load_single_mod(cls, name: str, mod_path: str, timeout: float = DEFAULT_MOD_TIMEOUT) -> tuple[bool, str]:
+        """动态加载单个客户端 Mod 类定义 (受超时熔断保护)"""
+        try:
+            mod_class = _import_mod(mod_path, timeout=timeout)
+            cls.loaded_mod[name] = mod_class
+            cls.failed_mods.pop(name, None)
+            from lib.current import Current
+            for client, manager in list(Current.client_mods.items()):
+                try:
+                    manager._instantiate_mod(name, mod_class)
+                    manager._collect_commands()
+                except Exception as e:
+                    shared.logger.error(f"Client Mod {name} 实例化失败: {e}")
+            return True, "加载成功"
+        except TimeoutError as e:
+            cls.failed_mods[name] = {
+                "status": "timeout",
+                "error": f"加载超时 (超过 {timeout}s，疑似死循环或长时间阻塞)，已自动熔断跳过！",
+                "path": mod_path
+            }
+            return False, f"加载超时 (超过 {timeout}s，检测到死循环)，已自动熔断"
+        except Exception as e:
+            cls.failed_mods[name] = {
+                "status": "failed",
+                "error": str(e),
+                "path": mod_path
+            }
+            return False, f"加载失败: {e}"
+
+    @classmethod
+    def unload_mod(cls, name: str) -> bool:
+        """卸载指定客户端 Mod 类定义及其实例"""
+        cls.loaded_mod.pop(name, None)
+        cls.failed_mods.pop(name, None)
+        from lib.current import Current
+        for client, manager in list(Current.client_mods.items()):
+            inst = manager.mod_instances.pop(name, None)
+            if inst:
+                destroy_m = manager._resolve_mod_method(inst, "onDestroy") or manager._resolve_mod_method(inst, "destroy")
+                if destroy_m:
+                    try:
+                        _call_maybe_async(destroy_m)
+                    except Exception:
+                        pass
+            manager._collect_commands()
+        return True
+
+    @classmethod
+    async def load(cls, timeout: float = DEFAULT_MOD_TIMEOUT) -> None:
+        """从配置中读取客户端 Mod 路径并加载(受超时熔断保护)"""
+        cls.failed_mods.clear()
         for name, mod_path in _mods_config().get("client", {}).items():
             try:
-                mod_class = _import_mod(mod_path)
-                ClientModManager.loaded_mod[name] = mod_class
+                mod_class = _import_mod(mod_path, timeout=timeout)
+                cls.loaded_mod[name] = mod_class
                 shared.logger.info(f"Client Mod {name} 已加载")
+            except TimeoutError as e:
+                cls.failed_mods[name] = {
+                    "status": "timeout",
+                    "error": f"加载超时 (超过 {timeout}s，疑似死循环或长时间阻塞)，已自动熔断跳过！",
+                    "path": mod_path
+                }
+                shared.logger.error(f"Client Mod {name} 加载超时 (超过 {timeout}s，检测到死循环或长时间阻塞)，已自动熔断跳过！")
+                shared.logger.debug(str(e))
             except Exception as e:
+                cls.failed_mods[name] = {
+                    "status": "failed",
+                    "error": str(e),
+                    "path": mod_path
+                }
                 shared.logger.error(f"Client Mod {name} 加载失败")
                 shared.logger.debug(str(e))
 
@@ -439,11 +570,17 @@ class ClientModManager:
             ClientModManager.loaded_mod[name] = new_class
             self._instantiate_mod(name, new_class)
             self._collect_commands()
+            ClientModManager.failed_mods.pop(name, None)
 
             message = f"Client Mod {name} 已重载"
             shared.logger.info(message)
             return {"success": True, "message": message}
         except Exception as e:
+            ClientModManager.failed_mods[name] = {
+                "status": "timeout" if isinstance(e, TimeoutError) else "failed",
+                "error": str(e),
+                "path": mod_path
+            }
             error_msg = f"Client Mod {name} 重载失败: {e}"
             shared.logger.error(error_msg)
             shared.logger.debug(getattr(e, "__traceback__", None))
@@ -848,8 +985,69 @@ class ServerModManager:
     # 存储 Mod 实例(用于调用实例方法)
     mod_instances = {}
 
+    # 存储加载失败或超时的 Mod 信息
+    failed_mods = {}
+
     # 服务端 Mod 注册的命令名集合(不含前缀),用于客户端识别"由服务端处理"的命令
     command_names = set()
+
+    @classmethod
+    def load_single_mod(cls, name: str, mod_path: str, timeout: float = DEFAULT_MOD_TIMEOUT) -> tuple[bool, str]:
+        """动态加载单个服务端 Mod (受超时熔断保护)"""
+        try:
+            mod_class = _import_mod(mod_path, timeout=timeout)
+            cls.loaded_mod[name] = mod_class
+            instance = _run_with_timeout(lambda: mod_class(), timeout=timeout, action_name=f"{name} 实例化")
+            cls.mod_instances[name] = instance
+            cls._inject_infra(instance, name)
+            cls._inject_infra(mod_class, name)
+            cls._inject_sapi(instance, mod_class, name)
+            start_method = cls._resolve_method(instance, "onStart") or cls._resolve_method(instance, "start")
+            if start_method:
+                try:
+                    _call_maybe_async(start_method)
+                except Exception as e:
+                    shared.logger.error(f"Server Mod {name}.start 执行错误: {e}")
+            cls.attach_main_client(Current.client)
+            cls._collect_command_names()
+            cls.failed_mods.pop(name, None)
+            return True, "加载成功"
+        except TimeoutError as e:
+            cls.failed_mods[name] = {
+                "status": "timeout",
+                "error": f"加载超时 (超过 {timeout}s，疑似死循环或长时间阻塞)，已自动熔断跳过！",
+                "path": mod_path
+            }
+            return False, f"加载超时 (超过 {timeout}s，检测到死循环)，已自动熔断"
+        except Exception as e:
+            cls.failed_mods[name] = {
+                "status": "failed",
+                "error": str(e),
+                "path": mod_path
+            }
+            return False, f"加载失败: {e}"
+
+    @classmethod
+    def unload_mod(cls, name: str) -> bool:
+        """卸载指定服务端 Mod"""
+        instance = cls.mod_instances.pop(name, None)
+        if instance:
+            destroy_m = cls._resolve_method(instance, "onDestroy") or cls._resolve_method(instance, "destroy") or cls._resolve_method(instance, "onStop") or cls._resolve_method(instance, "stop")
+            if destroy_m:
+                try:
+                    _call_maybe_async(destroy_m)
+                except Exception:
+                    pass
+            sapi = getattr(instance, "sapi", None)
+            if sapi and hasattr(sapi, "_detach"):
+                try:
+                    sapi._detach()
+                except Exception:
+                    pass
+        cls.loaded_mod.pop(name, None)
+        cls.failed_mods.pop(name, None)
+        cls._collect_command_names()
+        return True
 
     @classmethod
     def _resolve_method(cls, instance, name):
@@ -946,15 +1144,16 @@ class ServerModManager:
                     shared.logger.debug(str(e))
 
     @classmethod
-    async def load(cls) -> None:
-        """从配置中读取服务端 Mod 路径并加载"""
+    async def load(cls, timeout: float = DEFAULT_MOD_TIMEOUT) -> None:
+        """从配置中读取服务端 Mod 路径并加载(受超时熔断保护)"""
+        cls.failed_mods.clear()
         for name, mod_path in _mods_config().get("server", {}).items():
             try:
-                mod_class = _import_mod(mod_path)
+                mod_class = _import_mod(mod_path, timeout=timeout)
                 cls.loaded_mod[name] = mod_class
 
-                # 创建 Mod 实例
-                instance = mod_class()
+                # 创建 Mod 实例 (受超时熔断保护)
+                instance = _run_with_timeout(lambda: mod_class(), timeout=timeout, action_name=f"{name} 实例化")
                 cls.mod_instances[name] = instance
 
                 # 注入 Mod 基础设施(实例与类都注入,兼容静态方法与实例方法)
@@ -972,7 +1171,20 @@ class ServerModManager:
                         shared.logger.debug(str(e))
 
                 shared.logger.info(f"Server Mod {name} 已加载")
+            except TimeoutError as e:
+                cls.failed_mods[name] = {
+                    "status": "timeout",
+                    "error": f"加载超时 (超过 {timeout}s，疑似死循环或长时间阻塞)，已自动熔断跳过！",
+                    "path": mod_path
+                }
+                shared.logger.error(f"Server Mod {name} 加载超时 (超过 {timeout}s，检测到死循环或长时间阻塞)，已自动熔断跳过！")
+                shared.logger.debug(str(e))
             except Exception as e:
+                cls.failed_mods[name] = {
+                    "status": "failed",
+                    "error": str(e),
+                    "path": mod_path
+                }
                 shared.logger.error(f"Server Mod {name} 加载失败")
                 shared.logger.debug(str(e))
 
@@ -1192,9 +1404,15 @@ class ServerModManager:
 
             message = f"Server Mod {mod_name} 已重载"
             shared.logger.info(message)
+            cls.failed_mods.pop(mod_name, None)
             cls._collect_command_names()
             return {"success": True, "message": message}
         except Exception as e:
+            cls.failed_mods[mod_name] = {
+                "status": "timeout" if isinstance(e, TimeoutError) else "failed",
+                "error": str(e),
+                "path": mod_path
+            }
             error_msg = f"Server Mod {mod_name} 重载失败: {e}"
             shared.logger.error(error_msg)
             shared.logger.debug(getattr(e, "__traceback__", None))

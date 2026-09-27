@@ -1,28 +1,48 @@
-﻿// ===== 权限管理页面逻辑 =====
+// ===== 权限管理页面逻辑 =====
 var permData = { owner: "YourXboxName", op: [], user: [], blocker: [] };
 var _systemMode = false;
 var _PERM_META = [
-  { key: "dashboard", label: "nav.dashboard", icon: "📊" },
-  { key: "config",    label: "nav.config", icon: "⚙️" },
-  { key: "mods",      label: "nav.mods", icon: "🧩" },
-  { key: "console",   label: "nav.console", icon: "💻" },
+  { key: "dashboard",   label: "nav.dashboard",   icon: "📊" },
   { key: "permissions", label: "nav.permissions", icon: "👥" },
-  { key: "banlist",   label: "nav.banlist", icon: "🚫" },
-  { key: "audit",     label: "nav.audit", icon: "📋" },
-  { key: "update",    label: "nav.update", icon: "🔄" },
-  { key: "restart",   label: "nav.restart", icon: "🔁" }
+  { key: "config",      label: "nav.config",      icon: "⚙️" },
+  { key: "mods",        label: "nav.mods",        icon: "🧩" },
+  { key: "studio",      label: "nav.studio",      icon: "🎨" },
+  { key: "console",     label: "nav.console",     icon: "💻" },
+  { key: "scheduler",   label: "nav.scheduler",   icon: "⏰" },
+  { key: "audit",       label: "nav.audit",       icon: "📋" },
+  { key: "update",      label: "nav.update",      icon: "🔄" },
+  { key: "banlist",     label: "nav.banlist",     icon: "🚫" },
+  { key: "restart",     label: "nav.restart",     icon: "🔁" }
 ];
 
 // 渲染权限 label:图标 + 当前语言文案(语言切换时重新渲染即可刷新)
 function _permLabel(p) {
-  return (p.icon ? p.icon + " " : "") + t(p.label);
+  var icon = p.icon ? p.icon + " " : "";
+  if (p.label && typeof t === "function") {
+    var txt = t(p.label);
+    if (txt && txt !== p.label) return icon + txt;
+  }
+  return icon + (p.name || p.key);
+}
+
+function loadPermMeta(callback) {
+  api("/permissions/meta").then(function (data) {
+    if (data && data.ok && Array.isArray(data.permissions) && data.permissions.length > 0) {
+      _PERM_META = data.permissions;
+    }
+    if (typeof callback === "function") callback();
+  }).catch(function () {
+    if (typeof callback === "function") callback();
+  });
 }
 
 // 语言切换时重渲染动态区域(静态区由 applyI18n 处理;由 i18n.js setLang() 回调)
 function _refreshPermLang() {
-  loadPermissions();
-  loadRoles();
-  loadUsers();
+  loadPermMeta(function () {
+    loadPermissions();
+    loadRoles();
+    loadUsers();
+  });
   // 用户弹窗若正打开:刷新标题/密码占位符/角色下拉,保留当前选择重填覆盖区
   // (applyI18n 会把 modalPassword 占位符重置为 perm.passwordPh,需按编辑态纠正)
   var _um = typeof $ === "function" ? $("userModal") : null;
@@ -68,7 +88,11 @@ requireAuth(function (role) {
       sessionStorage.setItem(USER_KEY, JSON.stringify(user));
     }
   }).catch(function(){});
-  loadPermissions();
+  loadPermMeta(function () {
+    loadPermissions();
+    loadRoles();
+    loadUsers();
+  });
 });
 
 function loadPermissions() {

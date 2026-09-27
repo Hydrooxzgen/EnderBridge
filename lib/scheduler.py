@@ -449,13 +449,12 @@ class TaskScheduler:
 
                 elif action_type == "backup":
                     # 自动备份配置与数据
-                    from lib.package import create_export_zip
-                    zip_name = f"auto_backup_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
-                    zip_path = os.path.join(ROOT, "backups", zip_name)
-                    os.makedirs(os.path.join(ROOT, "backups"), exist_ok=True)
-                    create_export_zip(zip_path)
-                    output = f"备份文件已生成: backups/{zip_name}"
-                    message = "自动化备份生成成功"
+                    from version_manager.package import backup_dir, BACKUP_KEEP_COUNT
+                    desc = action_payload.strip() if action_payload and action_payload.strip() else "[定时任务] 自动备份"
+                    backup_path = backup_dir(ROOT, description=desc)
+                    fname = os.path.basename(backup_path)
+                    output = f"备份文件已生成: {fname}"
+                    message = f"自动化备份生成成功: {fname}"
 
                 else:
                     status = "failed"

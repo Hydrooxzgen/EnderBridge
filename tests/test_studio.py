@@ -37,7 +37,7 @@ class DummyHandler:
     def __init__(self, path="/api/studio/assets", body=None, user_perms=None, headers=None):
         self.path = path
         self._body = body or {}
-        self.user_perms = user_perms if user_perms is not None else ["mods"]
+        self.user_perms = user_perms if user_perms is not None else ["studio", "mods"]
         self.headers = headers or {"Content-Type": "application/json"}
         self.responses = []
         self.response_headers = {}
