@@ -886,6 +886,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if path == "/api/config":
             self._api_get_config()
             return
+        if path == "/api/permissions/meta":
+            self._api_get_permissions_meta()
+            return
         if path == "/api/permissions":
             self._api_get_permissions()
             return
@@ -2245,6 +2248,13 @@ class WebUIHandler(BaseHTTPRequestHandler):
         else:
             self._respond({"ok": True, "message": "配置已保存(部分设置需重启服务器生效)"})
 
+    def _api_get_permissions_meta(self) -> None:
+        """获取所有动态发现的权限元数据 (需要 permissions 权限)"""
+        if not _require_permission("permissions")(self):
+            return
+        from lib.users import get_all_permissions_meta
+        self._respond({"ok": True, "permissions": get_all_permissions_meta()})
+
     def _api_get_permissions(self) -> None:
         if not _require_permission("permissions")(self):
             return
@@ -2865,8 +2875,8 @@ class WebUIHandler(BaseHTTPRequestHandler):
     # ===== Studio 创意资产工坊 API =====
 
     def _api_studio_get_assets(self) -> None:
-        """获取指定分类或全部资产列表 (需要 mods 权限)"""
-        if not _require_permission("mods")(self):
+        """获取指定分类或全部资产列表 (需要 studio 权限)"""
+        if not _require_permission("studio")(self):
             return
         parsed = urllib.parse.urlparse(self.path)
         qs = urllib.parse.parse_qs(parsed.query)
@@ -2885,8 +2895,8 @@ class WebUIHandler(BaseHTTPRequestHandler):
             self._respond({"ok": False, "message": f"获取资产失败: {e}"})
 
     def _api_studio_get_asset_file(self) -> None:
-        """读取/下载指定资产文件 (需要 mods 权限)"""
-        if not _require_permission("mods")(self):
+        """读取/下载指定资产文件 (需要 studio 权限)"""
+        if not _require_permission("studio")(self):
             return
         parsed = urllib.parse.urlparse(self.path)
         qs = urllib.parse.parse_qs(parsed.query)
@@ -2921,8 +2931,8 @@ class WebUIHandler(BaseHTTPRequestHandler):
             self._respond({"ok": False, "message": f"读取失败: {e}"})
 
     def _api_studio_get_palette(self) -> None:
-        """获取方块调色板 (需要 mods 权限)"""
-        if not _require_permission("mods")(self):
+        """获取方块调色板 (需要 studio 权限)"""
+        if not _require_permission("studio")(self):
             return
         from lib.studio import get_block_palette
         try:
@@ -2932,8 +2942,8 @@ class WebUIHandler(BaseHTTPRequestHandler):
             self._respond({"ok": False, "message": f"读取调色板失败: {e}"})
 
     def _api_studio_get_blueprint_voxels(self) -> None:
-        """获取蓝图离线 3D 体素渲染数据 (需要 mods 权限)"""
-        if not _require_permission("mods")(self):
+        """获取蓝图离线 3D 体素渲染数据 (需要 studio 权限)"""
+        if not _require_permission("studio")(self):
             return
         from lib.studio import parse_blueprint_voxels
         query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
@@ -2959,7 +2969,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
 
     def _api_studio_post_blueprint_voxels(self) -> None:
         """从客户端直接接收本地蓝图文件并实时返回 3D 体素 (无需连接 MC 客户端)"""
-        if not _require_permission("mods")(self):
+        if not _require_permission("studio")(self):
             return
         import base64
         import tempfile
@@ -2992,7 +3002,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
 
     def _api_studio_get_blueprint_html(self) -> None:
         """导出独立离线单文件 3D 蓝图预览 HTML"""
-        if not _require_permission("mods")(self):
+        if not _require_permission("studio")(self):
             return
         from lib.studio import parse_blueprint_voxels, generate_standalone_blueprint_html
         query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
@@ -3019,7 +3029,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
 
     def _api_studio_post_blueprint_html(self) -> None:
         """从客户端传入的体素数据直接生成并导出独立离线单文件 3D 网页"""
-        if not _require_permission("mods")(self):
+        if not _require_permission("studio")(self):
             return
         from lib.studio import generate_standalone_blueprint_html
         body = self._read_body()
@@ -3042,14 +3052,14 @@ class WebUIHandler(BaseHTTPRequestHandler):
             self._respond({"ok": False, "message": f"生成 HTML 失败: {e}"}, status=400)
 
     def _api_studio_textures_status(self) -> None:
-        """获取方块纹理包当前状态与统计 (需要 config 或 mods 权限)"""
+        """获取方块纹理包当前状态与统计 (需要 studio、config 或 mods 权限)"""
         user = _auth_user(self)
         perms = user.get("permissions", [])
-        if "config" not in perms and "mods" not in perms and "*" not in perms and "admin" not in perms:
+        if "studio" not in perms and "config" not in perms and "mods" not in perms and "*" not in perms and "admin" not in perms:
             if not user.get("role"):
                 self._respond_denied()
             else:
-                self._respond({"ok": False, "message": "无权限:需要 config 或 mods 权限"}, status=403)
+                self._respond({"ok": False, "message": "无权限:需要 studio、config 或 mods 权限"}, status=403)
             return
         from lib.studio import get_textures_status
         try:
@@ -3059,14 +3069,14 @@ class WebUIHandler(BaseHTTPRequestHandler):
             self._respond({"ok": False, "message": f"获取材质包状态失败: {e}"}, status=500)
 
     def _api_studio_textures_download(self) -> None:
-        """下载/更新方块材质包，或从本机客户端提取 (需要 config 或 mods 权限)"""
+        """下载/更新方块材质包，或从本机客户端提取 (需要 studio、config 或 mods 权限)"""
         user = _auth_user(self)
         perms = user.get("permissions", [])
-        if "config" not in perms and "mods" not in perms and "*" not in perms and "admin" not in perms:
+        if "studio" not in perms and "config" not in perms and "mods" not in perms and "*" not in perms and "admin" not in perms:
             if not user.get("role"):
                 self._respond_denied()
             else:
-                self._respond({"ok": False, "message": "无权限:需要 config 或 mods 权限"}, status=403)
+                self._respond({"ok": False, "message": "无权限:需要 studio、config 或 mods 权限"}, status=403)
             return
         body = self._read_body()
         source = str(body.get("source") or "online").strip().lower()
@@ -3082,14 +3092,14 @@ class WebUIHandler(BaseHTTPRequestHandler):
             self._respond({"ok": False, "message": f"材质包操作失败: {e}"}, status=500)
 
     def _api_studio_textures_uninstall(self) -> None:
-        """卸载方块材质包并释放空间 (需要 config 或 mods 权限)"""
+        """卸载方块材质包并释放空间 (需要 studio、config 或 mods 权限)"""
         user = _auth_user(self)
         perms = user.get("permissions", [])
-        if "config" not in perms and "mods" not in perms and "*" not in perms and "admin" not in perms:
+        if "studio" not in perms and "config" not in perms and "mods" not in perms and "*" not in perms and "admin" not in perms:
             if not user.get("role"):
                 self._respond_denied()
             else:
-                self._respond({"ok": False, "message": "无权限:需要 config 或 mods 权限"}, status=403)
+                self._respond({"ok": False, "message": "无权限:需要 studio、config 或 mods 权限"}, status=403)
             return
         from lib.studio import uninstall_textures
         try:
@@ -3100,7 +3110,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
 
     def _api_studio_upload(self) -> None:
         """上传资产文件 (支持 Base64 JSON 与 multipart/form-data)"""
-        if not _require_permission("mods")(self):
+        if not _require_permission("studio")(self):
             return
         import base64
         from lib.studio import save_asset_file
@@ -3172,7 +3182,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
 
     def _api_studio_save_text(self) -> None:
         """保存文本资产 (如 .mcfunc 脚本文件)"""
-        if not _require_permission("mods")(self):
+        if not _require_permission("studio")(self):
             return
         body = self._read_body()
         cat = (body.get("category") or "").strip()
@@ -3189,8 +3199,8 @@ class WebUIHandler(BaseHTTPRequestHandler):
             self._respond({"ok": False, "message": f"保存失败: {e}"})
 
     def _api_studio_delete_asset(self) -> None:
-        """删除指定资产文件 (需要 mods 权限)"""
-        if not _require_permission("mods")(self):
+        """删除指定资产文件 (需要 studio 权限)"""
+        if not _require_permission("studio")(self):
             return
         body = self._read_body()
         cat = (body.get("category") or "").strip()
@@ -3206,8 +3216,8 @@ class WebUIHandler(BaseHTTPRequestHandler):
             self._respond({"ok": False, "message": f"删除失败: {e}"})
 
     def _api_studio_action(self) -> None:
-        """在游戏内执行 Studio 动作 (需要 mods 权限)"""
-        if not _require_permission("mods")(self):
+        """在游戏内执行 Studio 动作 (需要 studio 权限)"""
+        if not _require_permission("studio")(self):
             return
         body = self._read_body()
         action = (body.get("action") or "").strip()

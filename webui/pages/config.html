@@ -24,7 +24,7 @@
         <span class="icon">🤖</span><span class="label-text" data-i18n="cfg.catAi">AI 配置</span>
       </div>
       <div class="cfg-sidebar-item" data-cfg-cat="integration">
-        <span class="icon">🔗</span><span class="label-text" data-i18n="cfg.catIntegration">集成 / 服务</span>
+        <span class="icon">🐧</span><span class="label-text" data-i18n="cfg.catIntegration">机器人 / QQ互联</span>
       </div>
       <div class="cfg-sidebar-item" data-cfg-cat="aliases">
         <span class="icon">🔧</span><span class="label-text" data-i18n="cfg.catAliases">命令别名</span>
@@ -298,10 +298,11 @@
         </div>
 
         <div class="cfg-section" id="cfgCardQq">
-          <h3 data-i18n="cfg.qqTitle">💬 QQ 桥接</h3>
+          <h3 data-i18n="cfg.qqTitle">🐧 QQ 互联 (OneBot v11 / NapCat)</h3>
+          <p class="hint" style="margin:0 0 10px 0;">通过 NapCat / OneBot v11 WebSocket 实现 MC 服务器与指定 QQ 群双向互通。游戏内与控制台命令：<code>$qq send &lt;消息&gt;</code>、<code>$qq check</code>（检测连接）、<code>$qq toggle</code>（切换转发）。</p>
           <div class="cfg-switch">
             <label class="switch"><input type="checkbox" id="cfg-qq"><span class="track"></span></label>
-            <span class="switch-label" data-i18n="cfg.qqEnable">启用 QQ 桥接 (features.qq.enabled)</span>
+            <span class="switch-label" data-i18n="cfg.qqEnable">启用 QQ 互联 (features.qq.enabled)</span>
           </div>
           <div class="cfg-sub-box show" id="qqFields">
             <div class="cfg-grid">

@@ -57,21 +57,73 @@ def verify_password(password: str, password_hash: str) -> bool:
     return False
 
 
+# ===== 权限元数据与自适应自动发现机制 =====
+
+BUILTIN_PERM_META = [
+    {"key": "dashboard", "label": "nav.dashboard", "icon": "📊", "name": "仪表盘"},
+    {"key": "permissions", "label": "nav.permissions", "icon": "👥", "name": "权限管理"},
+    {"key": "config", "label": "nav.config", "icon": "⚙️", "name": "功能设置"},
+    {"key": "mods", "label": "nav.mods", "icon": "🧩", "name": "Mod 管理"},
+    {"key": "studio", "label": "nav.studio", "icon": "🎨", "name": "创意工坊"},
+    {"key": "console", "label": "nav.console", "icon": "💻", "name": "控制台"},
+    {"key": "scheduler", "label": "nav.scheduler", "icon": "⏰", "name": "任务计划"},
+    {"key": "audit", "label": "nav.audit", "icon": "📋", "name": "审计日志"},
+    {"key": "update", "label": "nav.update", "icon": "🔄", "name": "检查更新"},
+    {"key": "banlist", "label": "nav.banlist", "icon": "🚫", "name": "封禁管理"},
+    {"key": "restart", "label": "nav.restart", "icon": "🔁", "name": "重启服务器"},
+]
+
+
+def discover_all_permissions() -> list[str]:
+    """动态扫描 webui/pages/*.html 及内置操作, 自动发现所有权限项"""
+    perms = set()
+    for item in BUILTIN_PERM_META:
+        perms.add(item["key"])
+
+    pages_dir = os.path.join(ROOT, "webui", "pages")
+    if os.path.isdir(pages_dir):
+        for fname in os.listdir(pages_dir):
+            if fname.endswith(".html"):
+                base = fname[:-5].lower()
+                if base not in ("login", "404"):
+                    perms.add(base)
+
+    order = {item["key"]: idx for idx, item in enumerate(BUILTIN_PERM_META)}
+    return sorted(perms, key=lambda k: (order.get(k, 1000), k))
+
+
+def get_all_permissions_meta() -> list[dict]:
+    """返回动态发现的完整权限元数据列表 (供 WebUI 前端矩阵渲染)"""
+    discovered = discover_all_permissions()
+    meta_map = {item["key"]: dict(item) for item in BUILTIN_PERM_META}
+    result = []
+    for key in discovered:
+        if key in meta_map:
+            result.append(meta_map[key])
+        else:
+            result.append({
+                "key": key,
+                "label": f"nav.{key}",
+                "icon": "📄",
+                "name": key.capitalize(),
+            })
+    return result
+
+
+# 所有可能的权限 (动态发现)
+ALL_PERMISSIONS = discover_all_permissions()
+
 # ===== 默认角色 =====
 
 DEFAULT_ROLES = {
     "admin": {
         "label": "管理员",
-        "permissions": [
-            "dashboard", "config", "mods", "console",
-            "permissions", "banlist", "audit", "update", "restart",
-            "scheduler",
-        ],
+        "permissions": discover_all_permissions(),
     },
     "operator": {
         "label": "操作员",
         "permissions": [
-            "dashboard", "mods", "console", "banlist", "audit",
+            "dashboard", "mods", "studio", "console", "banlist", "audit",
             "scheduler",
         ],
     },
@@ -82,13 +134,6 @@ DEFAULT_ROLES = {
         ],
     },
 }
-
-# 所有可能的权限
-ALL_PERMISSIONS = [
-    "dashboard", "config", "mods", "console",
-    "permissions", "banlist", "audit", "update", "restart",
-    "scheduler",
-]
 
 
 # ===== 用户管理器 =====
@@ -118,12 +163,15 @@ class UserManager:
                     data = json.load(f)
                 self._users = data.get("users", [])
                 if data.get("roles"):
+                    current_all = discover_all_permissions()
                     # 合并:确保新版本新增的权限不会因旧 users.json 而丢失
                     for role_name, default_info in DEFAULT_ROLES.items():
                         existing = data["roles"].get(role_name, {})
                         existing_perms = set(existing.get("permissions", []))
                         default_perms = set(default_info.get("permissions", []))
                         merged = existing_perms | default_perms  # 并集,只增不减
+                        if role_name == "admin":
+                            merged = merged | set(current_all)
                         if merged != existing_perms:
                             existing["permissions"] = sorted(merged)
                         data["roles"][role_name] = existing
@@ -211,7 +259,7 @@ class UserManager:
         overrides = user.get("permissions", {})
         no_inherit = user.get("no_role_inherit", False)
         result = []
-        for perm in ALL_PERMISSIONS:
+        for perm in discover_all_permissions():
             override = overrides.get(perm)
             if override is False:
                 continue  # 明确拒绝
@@ -280,12 +328,13 @@ class UserManager:
                     return {"ok": False, "message": f"角色 {kwargs['role']} 不存在"}
                 user["role"] = kwargs["role"]
             if "permissions" in kwargs:
-                # 合并权限覆盖:只接受 ALL_PERMISSIONS 中的有效值
+                # 合并权限覆盖:只接受 discover_all_permissions() 中的有效值
                 raw = kwargs["permissions"]
                 if isinstance(raw, dict):
+                    valid_perms = set(discover_all_permissions())
                     cleaned = {}
                     for k, v in raw.items():
-                        if k in ALL_PERMISSIONS and isinstance(v, bool):
+                        if k in valid_perms and isinstance(v, bool):
                             cleaned[k] = v
                     user["permissions"] = cleaned
             if "no_role_inherit" in kwargs:
@@ -383,9 +432,10 @@ class UserManager:
             return {"ok": False, "message": "角色名不能为空"}
         if name in self._roles:
             return {"ok": False, "message": f"角色 {name} 已存在"}
+        valid_perms = set(discover_all_permissions())
         self._roles[name] = {
             "label": label or name,
-            "permissions": [p for p in (permissions or []) if p in ALL_PERMISSIONS],
+            "permissions": [p for p in (permissions or []) if p in valid_perms],
         }
         self.save()
         return {"ok": True, "message": f"角色 {name} 已创建"}
@@ -416,7 +466,8 @@ class UserManager:
             self._roles[role_name]["label"] = label
         if permissions is not None:
             # 验证权限值
-            valid = [p for p in permissions if p in ALL_PERMISSIONS]
+            valid_perms = set(discover_all_permissions())
+            valid = [p for p in permissions if p in valid_perms]
             self._roles[role_name]["permissions"] = valid
         self.save()
         # 刷新所有使用该角色的在线会话权限(用户可能有自定义覆盖,需重新计算)
