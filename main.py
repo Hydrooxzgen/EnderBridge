@@ -15,6 +15,16 @@ from uuid import uuid4
 # ===== 常量定义区=====
 # --- 路径常量 ---
 ROOT = os.path.dirname(os.path.abspath(__file__))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+
+# 挂载核心配置与系统文件安全防护卫士 (PEP 578: 严防第三方 Mod 篡改或删除核心配置)
+try:
+    from lib.security_guard import install_security_guard
+    install_security_guard()
+except Exception:
+    pass
+
 CONFIG_DIR = os.path.join(ROOT, "config")
 CONFIG_PY = os.path.join(CONFIG_DIR, "config.py")
 CONFIG_JSON = os.path.join(CONFIG_DIR, "config.json")
@@ -31,14 +41,13 @@ DESCRIPTION = """
 fix1: 修复更新(降级)后无法在终端输入或者通过ctrl+c停止服务器的问题
 feat1: 挂起检测看门狗与自愈探针
 feat2: 定时自动备份引擎与元数据联动
+feat3: 出厂安全排障模式(--safe-mode)
+safe_feature 1: 解决重要安全漏洞
+feat4: 新增webui启用/禁用mod功能
+feat5: 新增导入mod功能
 """
-MINIMIUM_ALLOWED_VERSION = "b0.4.0" # 因为b0.4.0版本大量重写了账户登录逻辑, 所以, 设置了拒绝降级到b0.4.0-的版本
-                                    # 但是如果你需要降级低于b0.4.0的版本，请更改这里的值为b0.0.0以删除限制
-                                    # 但请注意，降级后若想重新升级至b0.4.0及以上版本, 程序不会自动创建admin账户默认密码
-                                    # 你需要自己计算admin密码的哈希值并手动修改users.json (计算哈希值请使用tell_me_hash.py)
-                                    # 或者临时修改guest用户组为'admin'
-                                    # 否则, 你无法获取admin权限
-                                    # 注: 请一定在使用完该操作后把guest用户组重新改回'viewer', 否则任何人都可以使用guest账号获取admin权限!
+MINIMIUM_ALLOWED_VERSION = "v1.0.0" # 因为v1.0.0版本新增了重要安全改进，大大降低了被第三方恶意mod入侵的风险，所以限制了降级
+                                    # 但是如果你需要降级低于v1.0.0的版本，请更改这里的值为b0.0.0以删除限制
 
 GITHUB_REPO = "Hydrooxzgen/EnderBridge"  # You can edit this to your own repository if you fork it :)
 

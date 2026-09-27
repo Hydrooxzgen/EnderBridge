@@ -114,6 +114,9 @@ def save_config(config: dict) -> bool:
         with open(CONFIG_JSON, "w", encoding="utf-8") as f:
             json.dump(save_data, f, ensure_ascii=False, indent=2)
 
+        global _config_cache
+        _config_cache = None
+
         return True
     except Exception as e:
         print(f"[Config] 保存配置失败: {e}")
@@ -193,10 +196,10 @@ def migrate_json_to_py() -> bool:
 _config_cache = None
 
 
-def get_config() -> dict:
+def get_config(force_reload: bool = False) -> dict:
     """获取配置（带缓存）"""
     global _config_cache
-    if _config_cache is None:
+    if _config_cache is None or force_reload:
         _config_cache = load_config()
     return _config_cache
 

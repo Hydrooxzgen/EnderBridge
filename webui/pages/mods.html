@@ -12,7 +12,10 @@
 <div class="main">
   <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:16px;">
     <h2 data-i18n="mods.title" style="margin:0;">🧩 Mod 管理</h2>
-    <button class="btn btn-sm" id="modRefresh" data-i18n="mods.refresh">🔄 刷新</button>
+    <div class="row gap-10" style="align-items:center;">
+      <button class="btn btn-primary btn-sm" id="modImportBtn" data-i18n="mods.importBtn">📥 导入 Mod</button>
+      <button class="btn btn-sm" id="modRefresh" data-i18n="mods.refresh">🔄 刷新</button>
+    </div>
   </div>
 
   <div class="card card-gap" style="padding:14px 16px;">
@@ -20,7 +23,8 @@
       <div class="tab-split" id="modStatusTabs" style="margin:0;">
         <span class="chip-tab active" data-tab="all"><span data-i18n="mods.tabAll">全部</span> <code id="cntAll" style="font-size:11px;opacity:0.8;">(0)</code></span>
         <span class="chip-tab" data-tab="active"><span data-i18n="mods.tabActive">正常运行</span> <code id="cntActive" style="font-size:11px;opacity:0.8;">(0)</code></span>
-        <span class="chip-tab" data-tab="failed"><span data-i18n="mods.tabFailed">加载失败</span> <code id="cntFailed" style="font-size:11px;opacity:0.8;">(0)</code></span>
+        <span class="chip-tab" data-tab="failed"><span data-i18n="mods.tabFailed">异常/熔断</span> <code id="cntFailed" style="font-size:11px;opacity:0.8;">(0)</code></span>
+        <span class="chip-tab" data-tab="disabled"><span data-i18n="mods.tabDisabled">已禁用</span> <code id="cntDisabled" style="font-size:11px;opacity:0.8;">(0)</code></span>
       </div>
       <div style="position:relative;flex:1;min-width:220px;max-width:380px;">
         <input type="text" id="modSearchInput" style="width:100%;padding:7px 32px 7px 12px;border:1px solid var(--card-border);border-radius:6px;background:var(--input-bg);color:var(--text);font-size:13px;" placeholder="🔍 搜索 Mod 名称、文件路径..." data-i18n-ph="mods.searchPh" autocomplete="off" />
@@ -101,6 +105,77 @@
           <button type="button" class="btn btn-sm" id="modCfgResetBtn" data-i18n="mods.cfgReset">🔄 还原</button>
           <button type="button" class="btn btn-sm" id="modCfgCancelBtn" data-i18n="mods.cfgClose">关闭</button>
           <button type="button" class="btn btn-primary btn-sm" id="modCfgSaveBtn" data-i18n="mods.cfgSaveReload">💾 保存并热重载</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 导入新 Mod Modal ===== -->
+  <div class="modal-overlay" id="modImportModal" style="display:none;">
+    <div class="modal-card" style="width:640px;max-width:95vw;box-sizing:border-box;">
+      <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <h3 style="margin:0;" data-i18n="mods.importModalTitle">📥 导入新 Mod</h3>
+        <button type="button" class="btn btn-sm" id="modImportCloseBtn" style="padding:2px 8px;font-size:16px;border:none;background:transparent;cursor:pointer;color:var(--text-dim);" title="关闭">✖</button>
+      </div>
+      
+      <div class="tab-split" id="modImportTabs" style="margin-bottom:14px;">
+        <span class="chip-tab active" data-tab="scan" data-i18n="mods.importScanTab">🔍 发现本地 Mod</span>
+        <span class="chip-tab" data-tab="manual" data-i18n="mods.importManualTab">✏️ 手动填写</span>
+        <span class="chip-tab" data-tab="upload" data-i18n="mods.importUploadTab">📁 上传 Mod 文件</span>
+      </div>
+
+      <!-- Tab 1: 本地扫描发现 -->
+      <div id="importScanPane">
+        <div style="font-size:13px;color:var(--text-dim);margin-bottom:10px;">
+          扫描到以下 <code>mod/</code> 目录中尚未配置的 Mod 文件，可直接一键添加：
+        </div>
+        <div id="modScanList" style="max-height:260px;overflow-y:auto;border:1px solid var(--card-border);border-radius:6px;padding:8px;background:var(--input-bg);">
+          <div class="td-faint" style="text-align:center;padding:20px;">正在扫描 mod 目录...</div>
+        </div>
+      </div>
+
+      <!-- Tab 2: 手动填写 -->
+      <div id="importManualPane" style="display:none;">
+        <div style="margin-bottom:12px;">
+          <label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Mod 名称 (唯一标识符)</label>
+          <input type="text" id="manualModName" placeholder="例如: MyCustomMod" style="width:100%;padding:8px 12px;border:1px solid var(--card-border);border-radius:6px;background:var(--input-bg);color:var(--text);font-size:13px;box-sizing:border-box;">
+        </div>
+        <div style="margin-bottom:12px;">
+          <label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Mod 类型</label>
+          <select id="manualModSide" style="width:100%;padding:8px 12px;border:1px solid var(--card-border);border-radius:6px;background:var(--input-bg);color:var(--text);font-size:13px;box-sizing:border-box;">
+            <option value="client">客户端 Mod (处理玩家指令/个人功能/事件响应)</option>
+            <option value="server">服务端 Mod (全服常驻逻辑/聊天过滤/SAPI通信)</option>
+          </select>
+        </div>
+        <div style="margin-bottom:12px;">
+          <label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">模块导入路径</label>
+          <input type="text" id="manualModPath" placeholder="例如: mod.my_mod 或 mod/my_mod.py" style="width:100%;padding:8px 12px;border:1px solid var(--card-border);border-radius:6px;background:var(--input-bg);color:var(--text);font-size:13px;box-sizing:border-box;">
+        </div>
+        <div style="margin-bottom:16px;">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;">
+            <input type="checkbox" id="manualModAutoEnable" checked>
+            <span>导入后立即启用该 Mod</span>
+          </label>
+        </div>
+        <div class="row" style="justify-content:flex-end;gap:10px;">
+          <button type="button" class="btn btn-sm" id="manualCancelBtn">取消</button>
+          <button type="button" class="btn btn-primary btn-sm" id="manualSubmitBtn">确认导入</button>
+        </div>
+      </div>
+
+      <!-- Tab 3: 上传文件 -->
+      <div id="importUploadPane" style="display:none;">
+        <div style="margin-bottom:14px;padding:24px;border:2px dashed var(--card-border);border-radius:8px;text-align:center;background:var(--input-bg);">
+          <input type="file" id="modUploadFile" accept=".py" style="display:none;">
+          <div style="font-size:32px;margin-bottom:8px;">🐍</div>
+          <div style="font-size:14px;font-weight:600;margin-bottom:4px;">选择 Python Mod 文件 (.py)</div>
+          <div style="font-size:12px;color:var(--text-dim);margin-bottom:12px;">文件将安全保存至服务器 <code>mod/</code> 目录</div>
+          <button type="button" class="btn btn-sm" id="modSelectFileBtn">选择文件</button>
+          <div id="modSelectedFileName" style="margin-top:8px;font-size:12px;font-weight:bold;color:var(--accent);"></div>
+        </div>
+        <div class="row" style="justify-content:flex-end;gap:10px;">
+          <button type="button" class="btn btn-sm" id="uploadCancelBtn">取消</button>
+          <button type="button" class="btn btn-primary btn-sm" id="uploadSubmitBtn" disabled>上传并导入</button>
         </div>
       </div>
     </div>

@@ -1,6 +1,6 @@
 // ===== Mod 管理页面逻辑 (含实时搜索与状态分类 Tab) =====
-var _allMods = { client: {}, server: {} };
-var _activeTab = "all"; // "all" | "active" | "failed"
+var _allMods = { client: {}, server: {}, disabledClient: {}, disabledServer: {} };
+var _activeTab = "all"; // "all" | "active" | "failed" | "disabled"
 var _searchKeyword = "";
 
 requireAuth(function (role) {
@@ -8,10 +8,12 @@ requireAuth(function (role) {
   initTheme();
   initLang();
   loadMods();
-  // 访客隐藏重载按钮
+  // 访客隐藏重载和管理按钮
   if (role === "guest") {
     var reloadAll = $("modReloadAll");
     if (reloadAll) reloadAll.style.display = "none";
+    var importBtn = $("modImportBtn");
+    if (importBtn) importBtn.style.display = "none";
   }
 });
 
@@ -20,7 +22,12 @@ function loadMods() {
   if (refreshBtn) refreshBtn.disabled = true;
   api("/mods").then(function (data) {
     if (!data.ok) return;
-    _allMods = data.mods || { client: {}, server: {} };
+    var raw = data.mods || {};
+    _allMods.client = raw.client || {};
+    _allMods.server = raw.server || {};
+    var dis = raw.disabled || {};
+    _allMods.disabledClient = dis.client || {};
+    _allMods.disabledServer = dis.server || {};
     updateTabCounts();
     renderFilteredMods();
   }).catch(function () {
@@ -34,33 +41,51 @@ function updateTabCounts() {
   var total = 0;
   var active = 0;
   var failed = 0;
+  var disabled = 0;
 
   ["client", "server"].forEach(function (side) {
     var list = _allMods[side] || {};
     Object.keys(list).forEach(function (name) {
       total++;
-      if (list[name].importable) active++;
-      else failed++;
+      var item = list[name];
+      if (item.status === "active") active++;
+      else if (item.status === "timeout" || item.status === "failed" || item.status === "syntax_error") failed++;
+    });
+  });
+
+  ["disabledClient", "disabledServer"].forEach(function (sideKey) {
+    var list = _allMods[sideKey] || {};
+    Object.keys(list).forEach(function (name) {
+      total++;
+      disabled++;
     });
   });
 
   if ($("cntAll")) $("cntAll").textContent = "(" + total + ")";
   if ($("cntActive")) $("cntActive").textContent = "(" + active + ")";
   if ($("cntFailed")) $("cntFailed").textContent = "(" + failed + ")";
+  if ($("cntDisabled")) $("cntDisabled").textContent = "(" + disabled + ")";
 }
 
-function filterMods(mods) {
+function filterMods(activeMods, disabledMods) {
   var res = {};
   var matched = 0;
   var kw = _searchKeyword.toLowerCase();
 
-  Object.keys(mods).forEach(function (name) {
-    var info = mods[name];
-    var isOk = Boolean(info.importable);
+  var allForSide = {};
+  Object.keys(activeMods || {}).forEach(function (k) { allForSide[k] = activeMods[k]; });
+  Object.keys(disabledMods || {}).forEach(function (k) { allForSide[k] = disabledMods[k]; });
+
+  Object.keys(allForSide).forEach(function (name) {
+    var info = allForSide[name];
+    var isEnabled = info.enabled !== false;
+    var isOk = info.status === "active";
+    var isFailed = info.status === "timeout" || info.status === "failed" || info.status === "syntax_error";
 
     // Tab 分类过滤
     if (_activeTab === "active" && !isOk) return;
-    if (_activeTab === "failed" && isOk) return;
+    if (_activeTab === "failed" && !isFailed) return;
+    if (_activeTab === "disabled" && isEnabled) return;
 
     // 搜索关键词过滤 (匹配名称或文件路径)
     if (kw) {
@@ -73,23 +98,21 @@ function filterMods(mods) {
     matched++;
   });
 
-  return { mods: res, matchedCount: matched };
+  var totalForSide = Object.keys(activeMods || {}).length + Object.keys(disabledMods || {}).length;
+  return { mods: res, matchedCount: matched, totalCount: totalForSide };
 }
 
 function renderFilteredMods() {
-  var clientResult = filterMods(_allMods.client || {});
-  var serverResult = filterMods(_allMods.server || {});
-
-  var clientTotal = Object.keys(_allMods.client || {}).length;
-  var serverTotal = Object.keys(_allMods.server || {}).length;
+  var clientResult = filterMods(_allMods.client || {}, _allMods.disabledClient || {});
+  var serverResult = filterMods(_allMods.server || {}, _allMods.disabledServer || {});
 
   var clientCountEl = $("modClientCount");
   if (clientCountEl) {
-    clientCountEl.textContent = "(" + clientResult.matchedCount + "/" + clientTotal + ")";
+    clientCountEl.textContent = "(" + clientResult.matchedCount + "/" + clientResult.totalCount + ")";
   }
   var serverCountEl = $("modServerCount");
   if (serverCountEl) {
-    serverCountEl.textContent = "(" + serverResult.matchedCount + "/" + serverTotal + ")";
+    serverCountEl.textContent = "(" + serverResult.matchedCount + "/" + serverResult.totalCount + ")";
   }
 
   $("modBodyClient").innerHTML = renderModRows(clientResult.mods, "client");
@@ -109,11 +132,62 @@ function renderModRows(mods, side) {
   }
   return keys.map(function (name) {
     var info = mods[name];
-    var ok = info.importable;
+    var isEnabled = info.enabled !== false;
+    var statusHtml = "";
+
+    if (!isEnabled || info.status === "disabled") {
+      statusHtml = '<span class="badge-sec-warn" style="display:inline-flex;align-items:center;gap:4px;"><span class="status-dot" style="background:var(--text-dim);"></span> ' + escapeHtml(t("mods.statusDisabled") || "已禁用") + '</span>';
+    } else if (info.status === "active") {
+      statusHtml = '<span class="badge-sec-safe" style="display:inline-flex;align-items:center;gap:4px;"><span class="status-dot ok"></span> ' + escapeHtml(t("mods.statusActive") || "正常运行") + '</span>';
+    } else if (info.status === "timeout") {
+      var title = escapeHtml(info.error || "加载超时（死循环或长时间阻塞），已自动熔断");
+      statusHtml = '<span class="badge-sec-danger" style="display:inline-flex;align-items:center;gap:4px;cursor:help;" title="' + title + '"><span class="status-dot bad"></span> ⚠️ ' + escapeHtml(t("mods.statusTimeout") || "超时熔断") + '</span>';
+    } else if (info.status === "failed") {
+      var title = escapeHtml(info.error || "加载失败");
+      statusHtml = '<span class="badge-sec-danger" style="display:inline-flex;align-items:center;gap:4px;cursor:help;" title="' + title + '"><span class="status-dot bad"></span> ❌ ' + escapeHtml(t("mods.statusFailed") || "加载失败") + '</span>';
+    } else if (info.status === "safe_mode") {
+      var title = escapeHtml(info.error || "出厂安全排障模式下已跳过第三方 Mod 加载");
+      statusHtml = '<span class="badge-sec-warn" style="display:inline-flex;align-items:center;gap:4px;cursor:help;" title="' + title + '"><span class="status-dot" style="background:#eab308;"></span> 🛡️ ' + escapeHtml(t("mods.statusSafeMode") || "安全模式跳过") + '</span>';
+    } else {
+      statusHtml = '<span class="badge-sec-safe" style="display:inline-flex;align-items:center;gap:4px;opacity:0.8;"><span class="status-dot ok"></span> ' + escapeHtml(info.statusLabel || "就绪") + '</span>';
+    }
+
+    var toggleBtn = '<button class="btn btn-sm ' + (isEnabled ? "btn-warn" : "btn-primary") + ' mod-toggle-btn" data-name="' + escapeHtml(name) + '" data-side="' + side + '" data-enabled="' + (isEnabled ? "false" : "true") + '" style="margin-right:6px;">' + (isEnabled ? ("⏸️ " + (t("mods.toggleDisable") || "禁用")) : ("▶️ " + (t("mods.toggleEnable") || "启用"))) + '</button>';
+    var configBtn = '<button class="btn btn-sm mod-config-btn" data-name="' + escapeHtml(name) + '" data-side="' + side + '" style="margin-right:6px;">⚙️ ' + escapeHtml(t("mods.config") || "配置") + '</button>';
+    var reloadBtn = (side === "server" && isEnabled) ? '<button class="btn btn-sm mod-reload-btn" data-name="' + escapeHtml(name) + '" data-side="' + side + '" style="margin-right:6px;">' + escapeHtml(t("mods.reload") || "重载") + '</button>' : '';
+    var removeBtn = '<button class="btn btn-sm btn-danger mod-remove-btn" data-name="' + escapeHtml(name) + '" data-side="' + side + '" title="' + escapeHtml(t("mods.remove") || "移除") + '">🗑️</button>';
+
     return '<tr><td><strong>' + escapeHtml(name) + '</strong></td><td class="td-dim"><code>' + escapeHtml(info.path) +
-      '</code></td><td><span class="status-dot ' + (ok ? "ok" : "bad") + '"></span>' + (ok ? t("mods.importOk") : t("mods.importFail")) +
-      '</td><td style="white-space:nowrap;"><button class="btn btn-sm mod-config-btn" data-name="' + escapeHtml(name) + '" data-side="' + side + '" style="margin-right:6px;">⚙️ ' + t("mods.config") + '</button><button class="btn btn-sm mod-reload-btn" data-name="' + escapeHtml(name) + '" data-side="' + side + '">' + t("mods.reload") + '</button></td></tr>';
+      '</code></td><td>' + statusHtml +
+      '</td><td style="white-space:nowrap;">' + toggleBtn + configBtn + reloadBtn + removeBtn + '</td></tr>';
   }).join("");
+}
+
+function toggleMod(name, side, targetEnabled, btn) {
+  btn.disabled = true;
+  var oldText = btn.textContent;
+  btn.textContent = "⏳";
+  api("/mods/toggle", { method: "POST", body: JSON.stringify({ name: name, side: side, enabled: targetEnabled }) })
+    .then(function (res) {
+      toast(res.message || (targetEnabled ? "Mod 已启用" : "Mod 已禁用"), res.ok ? "ok" : "err");
+      if (res.ok) loadMods();
+    })
+    .catch(function () { toast(t("mods.reqFail"), "err"); })
+    .finally(function () { btn.disabled = false; btn.textContent = oldText; });
+}
+
+function removeMod(name, side, btn) {
+  var tpl = t("mods.removeConfirm") || "确定要从配置中移除 Mod '{name}' 吗？";
+  var msg = tpl.replace("{name}", name);
+  if (!confirm(msg)) return;
+  btn.disabled = true;
+  api("/mods/remove", { method: "POST", body: JSON.stringify({ name: name, side: side }) })
+    .then(function (res) {
+      toast(res.message || "Mod 已移除", res.ok ? "ok" : "err");
+      if (res.ok) loadMods();
+    })
+    .catch(function () { toast(t("mods.reqFail"), "err"); })
+    .finally(function () { btn.disabled = false; });
 }
 
 function reloadMod(name, side, btn) {
@@ -206,6 +280,21 @@ document.addEventListener("click", function (e) {
   var btn = e.target.closest(".mod-reload-btn");
   if (!btn) return;
   reloadMod(btn.dataset.name, btn.dataset.side, btn);
+});
+
+// 单个 Mod 启用/禁用(事件委托)
+document.addEventListener("click", function (e) {
+  var btn = e.target.closest(".mod-toggle-btn");
+  if (!btn) return;
+  var targetEnabled = btn.dataset.enabled === "true";
+  toggleMod(btn.dataset.name, btn.dataset.side, targetEnabled, btn);
+});
+
+// 单个 Mod 移除(事件委托)
+document.addEventListener("click", function (e) {
+  var btn = e.target.closest(".mod-remove-btn");
+  if (!btn) return;
+  removeMod(btn.dataset.name, btn.dataset.side, btn);
 });
 
 // ===== Mod 在线专属配置文件编辑与热重载逻辑 =====
@@ -527,4 +616,232 @@ document.addEventListener("click", function (e) {
   if (!btn) return;
   openModConfig(btn.dataset.name, btn.dataset.side);
 });
+
+// ===== 导入 Mod 弹窗逻辑 =====
+var _importTab = "scan";
+var _selectedUploadFile = null;
+
+function openImportModal() {
+  var modal = $("modImportModal");
+  if (modal) modal.style.display = "flex";
+  switchImportTab("scan");
+  loadDiscoveredMods();
+}
+
+function closeImportModal() {
+  var modal = $("modImportModal");
+  if (modal) modal.style.display = "none";
+  _selectedUploadFile = null;
+  if ($("modSelectedFileName")) $("modSelectedFileName").textContent = "";
+  if ($("uploadSubmitBtn")) $("uploadSubmitBtn").disabled = true;
+  if ($("modUploadFile")) $("modUploadFile").value = "";
+}
+
+function switchImportTab(tabKey) {
+  _importTab = tabKey;
+  var tabs = $("modImportTabs");
+  if (tabs) {
+    tabs.querySelectorAll(".chip-tab").forEach(function (el) {
+      el.classList.toggle("active", el.dataset.tab === tabKey);
+    });
+  }
+  if ($("importScanPane")) $("importScanPane").style.display = tabKey === "scan" ? "block" : "none";
+  if ($("importManualPane")) $("importManualPane").style.display = tabKey === "manual" ? "block" : "none";
+  if ($("importUploadPane")) $("importUploadPane").style.display = tabKey === "upload" ? "block" : "none";
+}
+
+function loadDiscoveredMods() {
+  var listEl = $("modScanList");
+  if (!listEl) return;
+  listEl.innerHTML = '<div class="td-faint" style="text-align:center;padding:20px;">' + (t("mods.loading") || "正在扫描 mod 目录...") + '</div>';
+
+  api("/mods/scan").then(function (res) {
+    if (!res.ok) {
+      listEl.innerHTML = '<div class="td-faint" style="color:var(--danger);padding:16px;">' + escapeHtml(res.message || "扫描失败") + '</div>';
+      return;
+    }
+    var unconf = res.unconfigured || [];
+    if (!unconf.length) {
+      listEl.innerHTML = '<div class="td-faint" style="text-align:center;padding:24px;">🎉 mod/ 目录下未发现未配置的 Mod 文件（全部已配置）</div>';
+      return;
+    }
+
+    var html = '<table class="perm-table" style="margin:0;font-size:12px;">' +
+      '<thead><tr><th>建议名称</th><th>类型</th><th>文件与模块</th><th>操作</th></tr></thead><tbody>';
+
+    unconf.forEach(function (item) {
+      var side = item.suggestedSide || "client";
+      html += '<tr>' +
+        '<td><strong>' + escapeHtml(item.name) + '</strong></td>' +
+        '<td><span class="badge-sec-safe">' + (side === "server" ? "服务端" : "客户端") + '</span></td>' +
+        '<td><code>' + escapeHtml(item.module) + '</code><div style="font-size:11px;color:var(--text-dim);">' + escapeHtml(item.file) + '</div></td>' +
+        '<td><button class="btn btn-sm btn-primary scan-import-btn" data-name="' + escapeHtml(item.name) + '" data-side="' + side + '" data-path="' + escapeHtml(item.module) + '">➕ 导入</button></td>' +
+        '</tr>';
+    });
+
+    html += '</tbody></table>';
+    listEl.innerHTML = html;
+  }).catch(function () {
+    listEl.innerHTML = '<div class="td-faint" style="color:var(--danger);padding:16px;">网络异常，扫描失败</div>';
+  });
+}
+
+function submitManualImport() {
+  var name = ($("manualModName") ? $("manualModName").value : "").trim();
+  var side = $("manualModSide") ? $("manualModSide").value : "client";
+  var path = ($("manualModPath") ? $("manualModPath").value : "").trim();
+  var autoEnable = $("manualModAutoEnable") ? $("manualModAutoEnable").checked : true;
+
+  if (!name) {
+    toast("Mod 名称不能为空", "err");
+    if ($("manualModName")) $("manualModName").focus();
+    return;
+  }
+  if (!path) {
+    toast("模块导入路径不能为空", "err");
+    if ($("manualModPath")) $("manualModPath").focus();
+    return;
+  }
+
+  var btn = $("manualSubmitBtn");
+  if (btn) btn.disabled = true;
+
+  api("/mods/import", {
+    method: "POST",
+    body: JSON.stringify({ name: name, side: side, path: path, auto_enable: autoEnable }),
+  }).then(function (res) {
+    if (res.ok) {
+      toast(res.message || "Mod 导入成功", "ok");
+      closeImportModal();
+      loadMods();
+    } else {
+      toast(res.message || "导入失败", "err");
+    }
+  }).catch(function () {
+    toast(t("mods.reqFail"), "err");
+  }).finally(function () {
+    if (btn) btn.disabled = false;
+  });
+}
+
+var modImportBtn = $("modImportBtn");
+if (modImportBtn) modImportBtn.addEventListener("click", openImportModal);
+
+var modImportCloseBtn = $("modImportCloseBtn");
+if (modImportCloseBtn) modImportCloseBtn.addEventListener("click", closeImportModal);
+var manualCancelBtn = $("manualCancelBtn");
+if (manualCancelBtn) manualCancelBtn.addEventListener("click", closeImportModal);
+var uploadCancelBtn = $("uploadCancelBtn");
+if (uploadCancelBtn) uploadCancelBtn.addEventListener("click", closeImportModal);
+
+var modImportTabs = $("modImportTabs");
+if (modImportTabs) {
+  modImportTabs.addEventListener("click", function (e) {
+    var tab = e.target.closest(".chip-tab");
+    if (!tab) return;
+    switchImportTab(tab.dataset.tab || "scan");
+  });
+}
+
+var manualSubmitBtn = $("manualSubmitBtn");
+if (manualSubmitBtn) manualSubmitBtn.addEventListener("click", submitManualImport);
+
+document.addEventListener("click", function (e) {
+  var btn = e.target.closest(".scan-import-btn");
+  if (!btn) return;
+  btn.disabled = true;
+  api("/mods/import", {
+    method: "POST",
+    body: JSON.stringify({
+      name: btn.dataset.name,
+      side: btn.dataset.side,
+      path: btn.dataset.path,
+      auto_enable: true,
+    }),
+  }).then(function (res) {
+    if (res.ok) {
+      toast(res.message || "Mod 导入成功", "ok");
+      closeImportModal();
+      loadMods();
+    } else {
+      toast(res.message || "导入失败", "err");
+      btn.disabled = false;
+    }
+  }).catch(function () {
+    toast(t("mods.reqFail"), "err");
+    btn.disabled = false;
+  });
+});
+
+var modSelectFileBtn = $("modSelectFileBtn");
+var modUploadFile = $("modUploadFile");
+var uploadSubmitBtn = $("uploadSubmitBtn");
+
+if (modSelectFileBtn && modUploadFile) {
+  modSelectFileBtn.addEventListener("click", function () { modUploadFile.click(); });
+  modUploadFile.addEventListener("change", function () {
+    if (modUploadFile.files && modUploadFile.files[0]) {
+      _selectedUploadFile = modUploadFile.files[0];
+      if ($("modSelectedFileName")) {
+        $("modSelectedFileName").textContent = "已选中: " + _selectedUploadFile.name + " (" + Math.round(_selectedUploadFile.size / 1024) + " KB)";
+      }
+      if (uploadSubmitBtn) uploadSubmitBtn.disabled = false;
+    }
+  });
+}
+
+if (uploadSubmitBtn) {
+  uploadSubmitBtn.addEventListener("click", function () {
+    if (!_selectedUploadFile) return;
+    uploadSubmitBtn.disabled = true;
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      var content = e.target.result;
+      api("/mods/upload", {
+        method: "POST",
+        body: JSON.stringify({ filename: _selectedUploadFile.name, content: content }),
+      }).then(function (res) {
+        if (!res.ok) {
+          toast(res.message || "上传失败", "err");
+          uploadSubmitBtn.disabled = false;
+          return;
+        }
+        toast("文件已上传，正在导入 Mod 配置...", "ok");
+        api("/mods/import", {
+          method: "POST",
+          body: JSON.stringify({
+            name: res.name,
+            side: "client",
+            path: res.module,
+            auto_enable: true,
+          }),
+        }).then(function (importRes) {
+          if (importRes.ok) {
+            toast(importRes.message || "Mod 导入成功", "ok");
+            closeImportModal();
+            loadMods();
+          } else {
+            toast(importRes.message || "配置导入失败，已保存至 mod/ 目录", "warn");
+            switchImportTab("manual");
+            if ($("manualModName")) $("manualModName").value = res.name;
+            if ($("manualModPath")) $("manualModPath").value = res.module;
+          }
+        }).catch(function () {
+          toast(t("mods.reqFail"), "err");
+        });
+      }).catch(function () {
+        toast("上传失败", "err");
+        uploadSubmitBtn.disabled = false;
+      });
+    };
+    reader.readAsText(_selectedUploadFile, "UTF-8");
+  });
+}
+
+var modImportModal = $("modImportModal");
+if (modImportModal) {
+  modImportModal.addEventListener("click", function (e) {
+    if (e.target === modImportModal) closeImportModal();
+  });
+}
 

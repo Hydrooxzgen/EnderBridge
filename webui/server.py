@@ -892,6 +892,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if path == "/api/mods":
             self._api_get_mods()
             return
+        if path == "/api/mods/scan":
+            self._api_scan_mods()
+            return
         if path == "/api/mods/config":
             self._api_get_mod_config()
             return
@@ -1042,6 +1045,18 @@ class WebUIHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/mods/config":
             self._api_save_mod_config()
+            return
+        if parsed.path == "/api/mods/toggle":
+            self._api_toggle_mod()
+            return
+        if parsed.path == "/api/mods/import":
+            self._api_import_mod()
+            return
+        if parsed.path == "/api/mods/remove":
+            self._api_remove_mod()
+            return
+        if parsed.path == "/api/mods/upload":
+            self._api_upload_mod()
             return
         if parsed.path == "/api/studio/upload":
             self._api_studio_upload()
@@ -2259,17 +2274,340 @@ class WebUIHandler(BaseHTTPRequestHandler):
     def _api_get_mods(self) -> None:
         if not _require_permission("mods")(self):
             return
-        ns = _load_config_module()
-        mods = ns.get("mods", {}) or {"client": {}, "server": {}}
-        # 附加模块可导入性检测
-        result = {"client": {}, "server": {}}
-        for side in ("client", "server"):
-            for name, mod_path in (mods.get(side) or {}).items():
-                result[side][name] = {
+        from lib.config_loader import get_config
+        cfg = get_config(force_reload=True)
+        mods_cfg = cfg.get("mods", {}) or {}
+        disabled_cfg = mods_cfg.get("disabled", {}) or {}
+        disabled_client = disabled_cfg.get("client", {}) if isinstance(disabled_cfg, dict) else {}
+        disabled_server = disabled_cfg.get("server", {}) if isinstance(disabled_cfg, dict) else {}
+
+        # 获取运行时管理器状态
+        try:
+            from lib.mods import ClientModManager, ServerModManager
+            c_loaded = ClientModManager.loaded_mod
+            c_failed = ClientModManager.failed_mods
+            s_loaded = ServerModManager.loaded_mod
+            s_failed = ServerModManager.failed_mods
+        except Exception:
+            c_loaded, c_failed, s_loaded, s_failed = {}, {}, {}, {}
+
+        result = {"client": {}, "server": {}, "disabled": {"client": {}, "server": {}}}
+
+        # 1. 客户端 Mod
+        for name, mod_path in (mods_cfg.get("client") or {}).items():
+            if _is_safe_mode:
+                status, label, err = "safe_mode", "安全模式跳过", "安全排障模式下已跳过第三方 Mod 加载"
+            elif name in c_loaded:
+                status, label, err = "active", "正常运行", None
+            elif name in c_failed:
+                f_info = c_failed[name]
+                status = f_info.get("status", "failed")
+                label = "超时熔断" if status == "timeout" else "加载失败"
+                err = f_info.get("error", "加载失败")
+            else:
+                ok, parse_err = _inspect_mod_static(mod_path)
+                if not ok:
+                    status, label, err = "failed", "文件异常", parse_err
+                else:
+                    status, label, err = "ready", "待连接加载", None
+            result["client"][name] = {
+                "path": mod_path,
+                "enabled": True,
+                "status": status,
+                "statusLabel": label,
+                "error": err,
+                "importable": status in ("active", "ready"),
+            }
+
+        # 2. 服务端 Mod
+        for name, mod_path in (mods_cfg.get("server") or {}).items():
+            if _is_safe_mode:
+                status, label, err = "safe_mode", "安全模式跳过", "安全排障模式下已跳过第三方 Mod 加载"
+            elif name in s_loaded:
+                status, label, err = "active", "正常运行", None
+            elif name in s_failed:
+                f_info = s_failed[name]
+                status = f_info.get("status", "failed")
+                label = "超时熔断" if status == "timeout" else "加载失败"
+                err = f_info.get("error", "加载失败")
+            else:
+                ok, parse_err = _inspect_mod_static(mod_path)
+                if not ok:
+                    status, label, err = "failed", "文件异常", parse_err
+                else:
+                    status, label, err = "ready", "就绪", None
+            result["server"][name] = {
+                "path": mod_path,
+                "enabled": True,
+                "status": status,
+                "statusLabel": label,
+                "error": err,
+                "importable": status in ("active", "ready"),
+            }
+
+        # 3. 禁用的 Mod
+        for side, side_map in (("client", disabled_client), ("server", disabled_server)):
+            for name, mod_path in (side_map or {}).items():
+                result["disabled"][side][name] = {
                     "path": mod_path,
-                    "importable": _check_importable(mod_path),
+                    "enabled": False,
+                    "status": "disabled",
+                    "statusLabel": "已禁用",
+                    "error": None,
+                    "importable": False,
                 }
-        self._respond({"ok": True, "mods": result})
+
+        self._respond({"ok": True, "mods": result, "safeMode": _is_safe_mode})
+
+    def _api_toggle_mod(self) -> None:
+        """启用或禁用指定 Mod (需要 mods 权限)"""
+        if not _require_permission("mods")(self):
+            return
+        body = self._read_body()
+        name = (body.get("name") or "").strip()
+        side = (body.get("side") or "").strip()
+        enabled = body.get("enabled")
+        if not name or side not in ("client", "server") or enabled is None:
+            self._respond({"ok": False, "message": "缺少必要参数 (name, side, enabled)"})
+            return
+
+        from lib.config_loader import get_config, save_config
+        cfg = get_config(force_reload=True)
+        mods_cfg = cfg.setdefault("mods", {"client": {}, "server": {}, "disabled": {"client": {}, "server": {}}})
+        disabled_cfg = mods_cfg.setdefault("disabled", {})
+        if not isinstance(disabled_cfg, dict):
+            disabled_cfg = {"client": {}, "server": {}}
+            mods_cfg["disabled"] = disabled_cfg
+        disabled_cfg.setdefault("client", {})
+        disabled_cfg.setdefault("server", {})
+        mods_cfg.setdefault("client", {})
+        mods_cfg.setdefault("server", {})
+
+        from lib.mods import ClientModManager, ServerModManager
+
+        if not enabled:
+            # 禁用 Mod: 从 active 移除，放入 disabled
+            if name in mods_cfg[side]:
+                mod_path = mods_cfg[side].pop(name)
+                disabled_cfg[side][name] = mod_path
+                # 动态卸载
+                if side == "server":
+                    ServerModManager.unload_mod(name)
+                else:
+                    ClientModManager.unload_mod(name)
+                save_config(cfg)
+                _audit(self, "mods", f"禁用 {side} Mod: {name} ({mod_path})")
+                self._respond({"ok": True, "message": f"{side} Mod {name} 已禁用", "enabled": False})
+            elif name in disabled_cfg[side]:
+                self._respond({"ok": True, "message": f"{side} Mod {name} 已经处于禁用状态", "enabled": False})
+            else:
+                self._respond({"ok": False, "message": f"未找到 Mod: {name}"})
+        else:
+            # 启用 Mod: 从 disabled 移除，放入 active
+            if name in disabled_cfg[side]:
+                mod_path = disabled_cfg[side].pop(name)
+                mods_cfg[side][name] = mod_path
+                # 尝试动态加载
+                load_msg = ""
+                if side == "server":
+                    ok, load_msg = ServerModManager.load_single_mod(name, mod_path)
+                else:
+                    ok, load_msg = ClientModManager.load_single_mod(name, mod_path)
+                save_config(cfg)
+                _audit(self, "mods", f"启用 {side} Mod: {name} ({mod_path})")
+                msg = f"{side} Mod {name} 已启用"
+                if load_msg and not ok:
+                    msg += f" (提示: {load_msg})"
+                self._respond({"ok": True, "message": msg, "enabled": True})
+            elif name in mods_cfg[side]:
+                self._respond({"ok": True, "message": f"{side} Mod {name} 已经处于启用状态", "enabled": True})
+            else:
+                self._respond({"ok": False, "message": f"未在禁用列表中找到 Mod: {name}"})
+
+    def _api_scan_mods(self) -> None:
+        """扫描 mod/ 目录获取未配置的可用 Mod 文件 (需要 mods 权限)"""
+        if not _require_permission("mods")(self):
+            return
+        from lib.config_loader import get_config
+        cfg = get_config(force_reload=True)
+        mods_cfg = cfg.get("mods", {}) or {}
+        disabled_cfg = mods_cfg.get("disabled", {}) or {}
+        configured_paths = set()
+
+        for side in ("client", "server"):
+            for p in (mods_cfg.get(side) or {}).values():
+                configured_paths.add(str(p).replace("\\", "/"))
+            if isinstance(disabled_cfg, dict):
+                for p in (disabled_cfg.get(side) or {}).values():
+                    configured_paths.add(str(p).replace("\\", "/"))
+
+        mod_dir = os.path.join(ROOT, "mod")
+        discovered = []
+
+        if os.path.isdir(mod_dir):
+            for item in os.listdir(mod_dir):
+                item_path = os.path.join(mod_dir, item)
+                if item.startswith("__") or item.startswith("."):
+                    continue
+                if os.path.isfile(item_path) and item.endswith(".py"):
+                    stem = item[:-3]
+                    module_name = f"mod.{stem}"
+                    is_configured = (
+                        module_name in configured_paths
+                        or f"mod/{item}" in configured_paths
+                        or f"mod.{stem}" in configured_paths
+                    )
+                    suggested_side = _guess_mod_side(item_path)
+                    discovered.append({
+                        "name": stem,
+                        "module": module_name,
+                        "file": f"mod/{item}",
+                        "configured": is_configured,
+                        "suggestedSide": suggested_side,
+                    })
+                elif os.path.isdir(item_path):
+                    main_py = os.path.join(item_path, "main.py")
+                    init_py = os.path.join(item_path, "__init__.py")
+                    target_file = main_py if os.path.isfile(main_py) else (init_py if os.path.isfile(init_py) else None)
+                    if target_file:
+                        sub_name = "main" if target_file == main_py else ""
+                        module_name = f"mod.{item}.{sub_name}" if sub_name else f"mod.{item}"
+                        is_configured = module_name in configured_paths or f"mod/{item}" in configured_paths
+                        suggested_side = _guess_mod_side(target_file)
+                        discovered.append({
+                            "name": item,
+                            "module": module_name,
+                            "file": f"mod/{item}/{os.path.basename(target_file)}",
+                            "configured": is_configured,
+                            "suggestedSide": suggested_side,
+                        })
+
+        unconfigured = [d for d in discovered if not d["configured"]]
+        self._respond({"ok": True, "discovered": discovered, "unconfigured": unconfigured})
+
+    def _api_import_mod(self) -> None:
+        """导入并注册新 Mod (需要 mods 权限)"""
+        if not _require_permission("mods")(self):
+            return
+        body = self._read_body()
+        name = (body.get("name") or "").strip()
+        side = (body.get("side") or "client").strip()
+        mod_path = (body.get("path") or "").strip()
+        auto_enable = bool(body.get("auto_enable", True))
+
+        if not name:
+            self._respond({"ok": False, "message": "Mod 名称不能为空"})
+            return
+        if not re.match(r"^[A-Za-z0-9_\-]+$", name):
+            self._respond({"ok": False, "message": "Mod 名称仅支持字母、数字、下划线及短横线"})
+            return
+        if side not in ("client", "server"):
+            self._respond({"ok": False, "message": "Mod 类型必须为 client 或 server"})
+            return
+        if not mod_path:
+            self._respond({"ok": False, "message": "Mod 路径不能为空"})
+            return
+
+        from lib.config_loader import get_config, save_config
+        cfg = get_config(force_reload=True)
+        mods_cfg = cfg.setdefault("mods", {"client": {}, "server": {}, "disabled": {"client": {}, "server": {}}})
+        disabled_cfg = mods_cfg.setdefault("disabled", {})
+        if not isinstance(disabled_cfg, dict):
+            disabled_cfg = {"client": {}, "server": {}}
+            mods_cfg["disabled"] = disabled_cfg
+        disabled_cfg.setdefault("client", {})
+        disabled_cfg.setdefault("server", {})
+        mods_cfg.setdefault("client", {})
+        mods_cfg.setdefault("server", {})
+
+        if name in mods_cfg[side] or name in disabled_cfg[side]:
+            self._respond({"ok": False, "message": f"{side} 列表中已存在名为 '{name}' 的 Mod，请先移除或更换名称"})
+            return
+
+        from lib.mods import ClientModManager, ServerModManager
+
+        if auto_enable:
+            mods_cfg[side][name] = mod_path
+            ok = True
+            msg = ""
+            if side == "server":
+                ok, msg = ServerModManager.load_single_mod(name, mod_path)
+            else:
+                ok, msg = ClientModManager.load_single_mod(name, mod_path)
+            save_config(cfg)
+            _audit(self, "mods", f"导入并启用新 {side} Mod: {name} ({mod_path})")
+            resp_msg = f"Mod '{name}' 已成功导入并启用！"
+            if msg and not ok:
+                resp_msg += f" (提示: {msg})"
+            self._respond({"ok": True, "message": resp_msg, "name": name, "side": side, "enabled": True})
+        else:
+            disabled_cfg[side][name] = mod_path
+            save_config(cfg)
+            _audit(self, "mods", f"导入新 {side} Mod (已禁用): {name} ({mod_path})")
+            self._respond({"ok": True, "message": f"Mod '{name}' 已导入为已禁用状态", "name": name, "side": side, "enabled": False})
+
+    def _api_remove_mod(self) -> None:
+        """从配置中移除指定 Mod (需要 mods 权限)"""
+        if not _require_permission("mods")(self):
+            return
+        body = self._read_body()
+        name = (body.get("name") or "").strip()
+        side = (body.get("side") or "").strip()
+        if not name or side not in ("client", "server"):
+            self._respond({"ok": False, "message": "缺少必要参数 (name, side)"})
+            return
+
+        from lib.config_loader import get_config, save_config
+        cfg = get_config(force_reload=True)
+        mods_cfg = cfg.setdefault("mods", {"client": {}, "server": {}, "disabled": {"client": {}, "server": {}}})
+        disabled_cfg = mods_cfg.get("disabled", {}) or {}
+
+        removed = False
+        if name in mods_cfg.get(side, {}):
+            mods_cfg[side].pop(name)
+            removed = True
+            from lib.mods import ClientModManager, ServerModManager
+            if side == "server":
+                ServerModManager.unload_mod(name)
+            else:
+                ClientModManager.unload_mod(name)
+
+        if isinstance(disabled_cfg, dict) and name in disabled_cfg.get(side, {}):
+            disabled_cfg[side].pop(name)
+            removed = True
+
+        if removed:
+            save_config(cfg)
+            _audit(self, "mods", f"移除 {side} Mod 配置: {name}")
+            self._respond({"ok": True, "message": f"Mod '{name}' 已成功移除"})
+        else:
+            self._respond({"ok": False, "message": f"未在配置中找到 Mod '{name}'"})
+
+    def _api_upload_mod(self) -> None:
+        """上传 Mod Python 文件到 mod/ 目录 (需要 mods 权限)"""
+        if not _require_permission("mods")(self):
+            return
+        body = self._read_body()
+        filename = (body.get("filename") or "").strip()
+        content = body.get("content")
+        if not filename or content is None:
+            self._respond({"ok": False, "message": "缺少 filename 或 content 参数"})
+            return
+        base_name = os.path.basename(filename)
+        if not base_name.endswith(".py") or ".." in base_name or "/" in base_name or "\\" in base_name:
+            self._respond({"ok": False, "message": "无效的文件名，必须为以 .py 结尾的文件名"})
+            return
+
+        target_path = os.path.join(ROOT, "mod", base_name)
+        try:
+            with open(target_path, "w", encoding="utf-8") as f:
+                f.write(content)
+            stem = base_name[:-3]
+            module_name = f"mod.{stem}"
+            _audit(self, "mods", f"上传 Mod 文件: {base_name}")
+            self._respond({"ok": True, "message": f"文件 {base_name} 上传成功", "filename": base_name, "module": module_name, "name": stem})
+        except Exception as e:
+            self._respond({"ok": False, "message": f"上传保存失败: {e}"})
 
     def _api_reload_all(self) -> None:
         if not _require_permission("mods")(self):
@@ -3602,18 +3940,78 @@ class WebUIHandler(BaseHTTPRequestHandler):
             self._respond({"ok": False, "message": f"执行失败: {e}"})
 
 
-def _check_importable(mod_path: str) -> bool:
-    """检测 mod 模块能否导入(轻量检查,不真正实例化)"""
+def _resolve_mod_file_path(mod_path: str, root_dir: str = ROOT) -> str | None:
+    """根据 Mod 导入路径或文件路径解析出实际存在的本地文件绝对路径"""
+    p = str(mod_path).replace("\\", "/")
+    while p.startswith("../"):
+        p = p[3:]
+    p = p.removesuffix(".js")
+
+    if p.endswith(".py"):
+        direct = os.path.join(root_dir, p)
+        if os.path.isfile(direct):
+            return direct
+    else:
+        direct = os.path.join(root_dir, p)
+        if os.path.isfile(direct):
+            return direct
+        py_path = os.path.join(root_dir, p.replace(".", "/") + ".py")
+        if os.path.isfile(py_path):
+            return py_path
+        pkg_init = os.path.join(root_dir, p.replace(".", "/"), "__init__.py")
+        if os.path.isfile(pkg_init):
+            return pkg_init
+        pkg_main = os.path.join(root_dir, p.replace(".", "/"), "main.py")
+        if os.path.isfile(pkg_main):
+            return pkg_main
+    return None
+
+
+def _inspect_mod_static(mod_path: str, root_dir: str = ROOT) -> tuple[bool, str | None]:
+    """通过静态 AST 解析检测 Mod 语法与文件存在性，绝不执行模块代码，彻底杜绝死循环阻塞"""
+    file_path = _resolve_mod_file_path(mod_path, root_dir)
+    if not file_path:
+        return False, "Mod 文件不存在"
     try:
-        import importlib
-        p = str(mod_path).replace("\\", "/")
-        while p.startswith("../"):
-            p = p[3:]
-        p = p.replace("/", ".").removesuffix(".js")
-        importlib.import_module(p)
-        return True
+        import ast
+        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+            code = f.read()
+        ast.parse(code, filename=file_path)
+        return True, None
+    except SyntaxError as e:
+        return False, f"代码语法错误: {e.msg} (第 {e.lineno} 行)"
+    except Exception as e:
+        return False, f"读取失败: {e}"
+
+
+def _guess_mod_side(file_path: str) -> str:
+    """根据静态 AST 特征猜测 Mod 类型 (client 或 server)"""
+    try:
+        import ast
+        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+            code = f.read()
+        tree = ast.parse(code, filename=file_path)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef):
+                for base in node.bases:
+                    if isinstance(base, ast.Name):
+                        if "server" in base.id.lower():
+                            return "server"
+                        if "client" in base.id.lower():
+                            return "client"
+            if isinstance(node, ast.Call):
+                func = getattr(node, "func", None)
+                if isinstance(func, ast.Attribute) and func.attr in ("tell", "tellAll", "runCommand"):
+                    return "client"
+        return "client"
     except Exception:
-        return False
+        return "client"
+
+
+def _check_importable(mod_path: str) -> bool:
+    """检测 mod 模块能否导入(安全静态检测,绝不执行代码)"""
+    ok, _ = _inspect_mod_static(mod_path)
+    return ok
 
 
 # ===== 服务器生命周期 =====
