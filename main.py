@@ -35,9 +35,10 @@ USERS_JSON = os.path.join(CONFIG_DIR, "users.json")
 UPDATE_MARKER = os.path.join(ROOT, ".update_pending")
 
 # --- 版本常量 ---
-VERSION = "v1.0.0 dev"
+VERSION = "v1.0.0"
 # ↓仅当不为None时从Github拉取更新日志, 反之则直接显示该变量内容。
-DESCRIPTION = """
+DESCRIPTION = None
+"""
 fix1: 修复更新(降级)后无法在终端输入或者通过ctrl+c停止服务器的问题
 feat1: 挂起检测看门狗与自愈探针
 feat2: 定时自动备份引擎与元数据联动
@@ -47,6 +48,7 @@ feat4: 新增webui启用/禁用mod功能
 feat5: 新增导入mod功能
 feat_for_dev1: 权限界面现在可以自动读取features而不是每次更新需要手动添加
 fix2: 修复访客进入mod管理界面不是只读的bug
+fix3: 修复了访客mod界面只读提示的i18n显示错误的问题
 """
 MINIMIUM_ALLOWED_VERSION = "v1.0.0" # 因为v1.0.0版本新增了重要安全改进，大大降低了被第三方恶意mod入侵的风险，所以限制了降级
                                     # 但是如果你需要降级低于v1.0.0的版本，请更改这里的值为b0.0.0以删除限制

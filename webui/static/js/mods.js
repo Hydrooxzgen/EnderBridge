@@ -163,8 +163,8 @@ function renderModRows(mods, side) {
 
     var opHtml = "";
     if (_isReadOnly) {
-      // 访客/只读角色模式：无禁用、启用、重载、移除等破坏性按钮，仅提供只读查看配置
-      opHtml = '<button class="btn btn-sm mod-config-btn" data-name="' + escapeHtml(name) + '" data-side="' + side + '" data-readonly="true">🔍 ' + escapeHtml(t("mods.viewConfig") || "查看配置") + '</button>';
+      // 访客/只读角色模式：无禁用、启用、重载、移除等破坏性按钮，且禁止查看配置（防止敏感 API Key 泄露）
+      opHtml = '<span class="muted" style="font-size:13px;padding:0 8px;">-</span>';
     } else {
       var toggleBtn = '<button class="btn btn-sm ' + (isEnabled ? "btn-warn" : "btn-primary") + ' mod-toggle-btn" data-name="' + escapeHtml(name) + '" data-side="' + side + '" data-enabled="' + (isEnabled ? "false" : "true") + '" style="margin-right:6px;">' + (isEnabled ? ("⏸️ " + (t("mods.toggleDisable") || "禁用")) : ("▶️ " + (t("mods.toggleEnable") || "启用"))) + '</button>';
       var configBtn = '<button class="btn btn-sm mod-config-btn" data-name="' + escapeHtml(name) + '" data-side="' + side + '" style="margin-right:6px;">⚙️ ' + escapeHtml(t("mods.config") || "配置") + '</button>';
@@ -456,6 +456,10 @@ function gotoModErrorLine() {
 }
 
 function openModConfig(name, side) {
+  if (_isReadOnly) {
+    toast(t("mods.cfgGuestBlocked") || "无权限: 访客无法查看 Mod 配置", "err");
+    return;
+  }
   _currentEditingMod.name = name;
   _currentEditingMod.side = side;
 

@@ -440,6 +440,24 @@ class TestModReadOnlySecurity:
         assert s == 403
         assert "无操作权限" in d["message"]
 
+    def test_guest_cannot_get_mod_config(self):
+        """确保访客无法读取 Mod 配置文件 (防止泄露 API Key、Token 等敏感凭据)"""
+        h = DummyHandler(path="/api/mods/config?name=AI&side=client", is_guest=True)
+        h._api_get_mod_config()
+        s, d = h.responses[0]
+        assert s == 403
+        assert d["ok"] is False
+        assert "访客" in d["message"]
+
+    def test_viewer_cannot_get_mod_config(self):
+        """确保只读角色 viewer 也无法读取 Mod 配置文件 (防止泄露 API Key)"""
+        h = DummyHandler(path="/api/mods/config?name=AI&side=client", role="viewer")
+        h._api_get_mod_config()
+        s, d = h.responses[0]
+        assert s == 403
+        assert d["ok"] is False
+        assert "访客或只读角色" in d["message"]
+
     def test_guest_cannot_import_or_upload(self):
         h_import = DummyHandler(path="/api/mods/import", body={"name": "test", "side": "client", "path": "mod.test"}, is_guest=True)
         h_import._api_import_mod()

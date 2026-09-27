@@ -2722,7 +2722,11 @@ class WebUIHandler(BaseHTTPRequestHandler):
         return {"configType": "file", "target": rel, "filePath": default_file, "section": None}
 
     def _api_get_mod_config(self) -> None:
-        """获取指定 Mod 的配置文件或配置节 (需要 mods 权限)"""
+        """获取指定 Mod 的配置文件或配置节 (访客/只读角色禁止，防止向访客泄露 API Key 等敏感配置)"""
+        user = _auth_user(self)
+        if user.get("is_guest") or user.get("role") == "viewer":
+            self._respond({"ok": False, "message": "无权限: 访客或只读角色无法查看 Mod 配置"}, status=403)
+            return
         if not _require_permission("mods")(self):
             return
         parsed = urllib.parse.urlparse(self.path)
