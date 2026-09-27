@@ -157,7 +157,7 @@ def _audit_hook(event: str, args: tuple) -> None:
 def _log_and_block(caller: str, target: str, action: str) -> None:
     """记录安全告警并抛出 PermissionError 中断非法操作"""
     caller_name = os.path.basename(caller) if caller else "未知 Mod"
-    msg = f"[EnderBridge 安全防护] 成功拦截第三方 Mod ({caller_name}) 企图非法{action}核心系统配置: {target}"
+    msg = f"[EnderBridge 安全防护] 成功拦截第三方 Mod ({caller_name}) 企图非法{action}核心系统配置: {target}的操作！ "
     try:
         from lib import shared
         if hasattr(shared, "logger"):

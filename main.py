@@ -46,6 +46,7 @@ safe_feature 1: 解决重要安全漏洞
 feat4: 新增webui启用/禁用mod功能
 feat5: 新增导入mod功能
 feat_for_dev1: 权限界面现在可以自动读取features而不是每次更新需要手动添加
+fix2: 修复访客进入mod管理界面不是只读的bug
 """
 MINIMIUM_ALLOWED_VERSION = "v1.0.0" # 因为v1.0.0版本新增了重要安全改进，大大降低了被第三方恶意mod入侵的风险，所以限制了降级
                                     # 但是如果你需要降级低于v1.0.0的版本，请更改这里的值为b0.0.0以删除限制

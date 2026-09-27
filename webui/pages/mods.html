@@ -18,6 +18,10 @@
     </div>
   </div>
 
+  <div id="modReadOnlyBanner" style="display:none;margin-bottom:12px;padding:8px 14px;border-radius:8px;background:rgba(59,130,246,0.12);border-left:4px solid var(--accent);font-size:13px;color:var(--text);" data-i18n="mods.readOnlyHint">
+    👁️ 访客模式：仅支持查看 Mod 状态与配置，无法进行修改或执行操作。
+  </div>
+
   <div class="card card-gap" style="padding:14px 16px;">
     <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
       <div class="tab-split" id="modStatusTabs" style="margin:0;">
@@ -66,8 +70,8 @@
       <div class="row" style="justify-content:space-between;align-items:flex-start;margin-bottom:12px;">
         <div>
           <h3 style="margin:0 0 4px 0;display:flex;align-items:center;gap:8px;">
-            <span>⚙️</span>
-            <span data-i18n="mods.cfgTitle">编辑 Mod 配置</span>
+            <span id="modCfgModalIcon">⚙️</span>
+            <span data-i18n="mods.cfgTitle" id="modCfgModalTitleText">编辑 Mod 配置</span>
             <span class="badge-sec-safe" id="modCfgModalName" style="font-size:12px;font-weight:bold;">Mod</span>
           </h3>
           <div style="font-size:12px;color:var(--text-dim);">

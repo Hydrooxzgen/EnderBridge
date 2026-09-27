@@ -9,10 +9,12 @@ from lib.config_loader import reload_config, get_config
 
 
 class DummyHandler:
-    def __init__(self, path="/api/mods/config", body=None, user_perms=None):
+    def __init__(self, path="/api/mods/config", body=None, user_perms=None, role="admin", is_guest=False):
         self.path = path
         self._body = body or {}
         self.user_perms = user_perms if user_perms is not None else ["mods"]
+        self.user_role = role
+        self.is_guest = is_guest
         self.responses = []
 
     def _read_body(self):
@@ -39,8 +41,13 @@ DummyHandler._api_upload_mod = WebUIHandler._api_upload_mod
 @pytest.fixture(autouse=True)
 def mock_perms(monkeypatch):
     monkeypatch.setattr(
-        "webui.server._require_permission",
-        lambda perm: (lambda handler: True if perm in handler.user_perms else (handler._respond({"ok": False, "message": f"需要 {perm} 权限"}, status=403) or False))
+        "webui.server._auth_user",
+        lambda handler: {
+            "username": getattr(handler, "user_name", "admin"),
+            "role": getattr(handler, "user_role", "admin"),
+            "permissions": getattr(handler, "user_perms", ["mods"]),
+            "is_guest": getattr(handler, "is_guest", False),
+        }
     )
 
 
@@ -407,5 +414,49 @@ class TestModManagementAPIs:
         assert d["ok"] is True
         assert (mod_dir / "my_uploaded_mod.py").exists()
         assert (mod_dir / "my_uploaded_mod.py").read_text(encoding="utf-8") == "class Mod:\n    pass\n"
+
+
+class TestModReadOnlySecurity:
+    """测试访客 (guest) 与观察者 (viewer) 的严格只读防护"""
+
+    def test_guest_cannot_toggle_mod(self):
+        h = DummyHandler(path="/api/mods/toggle", body={"name": "test", "side": "client", "enabled": False}, is_guest=True)
+        h._api_toggle_mod()
+        s, d = h.responses[0]
+        assert s == 403
+        assert "无操作权限" in d["message"]
+
+    def test_viewer_cannot_remove_mod(self):
+        h = DummyHandler(path="/api/mods/remove", body={"name": "test", "side": "client"}, role="viewer")
+        h._api_remove_mod()
+        s, d = h.responses[0]
+        assert s == 403
+        assert "无操作权限" in d["message"]
+
+    def test_guest_cannot_save_mod_config(self):
+        h = DummyHandler(path="/api/mods/config", body={"name": "test", "side": "client", "content": "{}"}, is_guest=True)
+        h._api_save_mod_config()
+        s, d = h.responses[0]
+        assert s == 403
+        assert "无操作权限" in d["message"]
+
+    def test_guest_cannot_import_or_upload(self):
+        h_import = DummyHandler(path="/api/mods/import", body={"name": "test", "side": "client", "path": "mod.test"}, is_guest=True)
+        h_import._api_import_mod()
+        assert h_import.responses[0][0] == 403
+
+        h_upload = DummyHandler(path="/api/mods/upload", body={"filename": "test.py", "content": "pass"}, is_guest=True)
+        h_upload._api_upload_mod()
+        assert h_upload.responses[0][0] == 403
+
+    def test_guest_can_read_mods(self, monkeypatch):
+        fake_cfg = {"mods": {"client": {}, "server": {}, "disabled": {}}}
+        monkeypatch.setattr("lib.config_loader.get_config", lambda *args, **kwargs: fake_cfg)
+        h_get = DummyHandler(path="/api/mods", is_guest=True)
+        h_get._api_get_mods()
+        s, d = h_get.responses[0]
+        assert s == 200
+        assert d["ok"] is True
+
 
 

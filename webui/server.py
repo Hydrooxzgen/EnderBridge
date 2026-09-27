@@ -710,6 +710,23 @@ def _require_permission(permission: str):
     return checker
 
 
+def _require_write_permission(permission: str):
+    """写操作权限检查: 必须拥有对应权限且不能是 guest 或 viewer 只读角色"""
+    def checker(handler) -> bool:
+        user = _auth_user(handler)
+        if user.get("is_guest") or user.get("role") == "viewer":
+            handler._respond({"ok": False, "message": "无操作权限: 访客或只读角色无法执行修改操作"}, status=403)
+            return False
+        if permission in user.get("permissions", []):
+            return True
+        if not user.get("role"):
+            handler._respond_denied()
+        else:
+            handler._respond({"ok": False, "message": f"无权限:需要 {permission} 权限"}, status=403)
+        return False
+    return checker
+
+
 def _audit(handler, type_: str, message: str) -> None:
     """写入审计日志(类型: ban/user/role/config/system/update/command)"""
     try:
@@ -2370,8 +2387,8 @@ class WebUIHandler(BaseHTTPRequestHandler):
         self._respond({"ok": True, "mods": result, "safeMode": _is_safe_mode})
 
     def _api_toggle_mod(self) -> None:
-        """启用或禁用指定 Mod (需要 mods 权限)"""
-        if not _require_permission("mods")(self):
+        """启用或禁用指定 Mod (需要 mods 写权限，访客/只读角色禁止)"""
+        if not _require_write_permission("mods")(self):
             return
         body = self._read_body()
         name = (body.get("name") or "").strip()
@@ -2496,8 +2513,8 @@ class WebUIHandler(BaseHTTPRequestHandler):
         self._respond({"ok": True, "discovered": discovered, "unconfigured": unconfigured})
 
     def _api_import_mod(self) -> None:
-        """导入并注册新 Mod (需要 mods 权限)"""
-        if not _require_permission("mods")(self):
+        """导入并注册新 Mod (需要 mods 写权限，访客/只读角色禁止)"""
+        if not _require_write_permission("mods")(self):
             return
         body = self._read_body()
         name = (body.get("name") or "").strip()
@@ -2557,8 +2574,8 @@ class WebUIHandler(BaseHTTPRequestHandler):
             self._respond({"ok": True, "message": f"Mod '{name}' 已导入为已禁用状态", "name": name, "side": side, "enabled": False})
 
     def _api_remove_mod(self) -> None:
-        """从配置中移除指定 Mod (需要 mods 权限)"""
-        if not _require_permission("mods")(self):
+        """从配置中移除指定 Mod (需要 mods 写权限，访客/只读角色禁止)"""
+        if not _require_write_permission("mods")(self):
             return
         body = self._read_body()
         name = (body.get("name") or "").strip()
@@ -2594,8 +2611,8 @@ class WebUIHandler(BaseHTTPRequestHandler):
             self._respond({"ok": False, "message": f"未在配置中找到 Mod '{name}'"})
 
     def _api_upload_mod(self) -> None:
-        """上传 Mod Python 文件到 mod/ 目录 (需要 mods 权限)"""
-        if not _require_permission("mods")(self):
+        """上传 Mod Python 文件到 mod/ 目录 (需要 mods 写权限，访客/只读角色禁止)"""
+        if not _require_write_permission("mods")(self):
             return
         body = self._read_body()
         filename = (body.get("filename") or "").strip()
@@ -2620,7 +2637,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
             self._respond({"ok": False, "message": f"上传保存失败: {e}"})
 
     def _api_reload_all(self) -> None:
-        if not _require_permission("mods")(self):
+        if not _require_write_permission("mods")(self):
             return
         try:
             import asyncio
@@ -2631,8 +2648,8 @@ class WebUIHandler(BaseHTTPRequestHandler):
             self._respond({"ok": False, "message": f"重载失败: {e}"})
 
     def _api_reload_mod(self) -> None:
-        """重载单个 Mod(需要 mods 权限)"""
-        if not _require_permission("mods")(self):
+        """重载单个 Mod(需要 mods 写权限，访客/只读角色禁止)"""
+        if not _require_write_permission("mods")(self):
             return
         body = self._read_body()
         name = (body.get("name") or "").strip()
@@ -2757,8 +2774,8 @@ class WebUIHandler(BaseHTTPRequestHandler):
             self._respond({"ok": False, "message": f"读取 Mod 配置失败: {e}"})
 
     def _api_save_mod_config(self) -> None:
-        """保存指定 Mod 的配置并执行热重载 (需要 mods 权限)"""
-        if not _require_permission("mods")(self):
+        """保存指定 Mod 的配置并执行热重载 (需要 mods 写权限，访客/只读角色禁止)"""
+        if not _require_write_permission("mods")(self):
             return
         body = self._read_body()
         name = (body.get("name") or "").strip()

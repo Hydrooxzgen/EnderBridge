@@ -2,19 +2,28 @@
 var _allMods = { client: {}, server: {}, disabledClient: {}, disabledServer: {} };
 var _activeTab = "all"; // "all" | "active" | "failed" | "disabled"
 var _searchKeyword = "";
+var _currentUser = null;
+var _isReadOnly = false;
 
 requireAuth(function (role) {
   initSidebar("mods", role);
   initTheme();
   initLang();
-  loadMods();
-  // 访客隐藏重载和管理按钮
-  if (role === "guest") {
+  _currentUser = getCurrentUser();
+  _isReadOnly = (role === "guest" || _currentUser.role === "viewer");
+
+  // 访客与只读角色隐藏重载所有和导入按钮及重载提示，并显示只读横幅
+  if (_isReadOnly) {
+    var banner = $("modReadOnlyBanner");
+    if (banner) banner.style.display = "block";
     var reloadAll = $("modReloadAll");
     if (reloadAll) reloadAll.style.display = "none";
     var importBtn = $("modImportBtn");
     if (importBtn) importBtn.style.display = "none";
+    var reloadHint = document.querySelector(".hint[data-i18n='mods.reloadHint']");
+    if (reloadHint) reloadHint.style.display = "none";
   }
+  loadMods();
 });
 
 function loadMods() {
@@ -152,18 +161,29 @@ function renderModRows(mods, side) {
       statusHtml = '<span class="badge-sec-safe" style="display:inline-flex;align-items:center;gap:4px;opacity:0.8;"><span class="status-dot ok"></span> ' + escapeHtml(info.statusLabel || "就绪") + '</span>';
     }
 
-    var toggleBtn = '<button class="btn btn-sm ' + (isEnabled ? "btn-warn" : "btn-primary") + ' mod-toggle-btn" data-name="' + escapeHtml(name) + '" data-side="' + side + '" data-enabled="' + (isEnabled ? "false" : "true") + '" style="margin-right:6px;">' + (isEnabled ? ("⏸️ " + (t("mods.toggleDisable") || "禁用")) : ("▶️ " + (t("mods.toggleEnable") || "启用"))) + '</button>';
-    var configBtn = '<button class="btn btn-sm mod-config-btn" data-name="' + escapeHtml(name) + '" data-side="' + side + '" style="margin-right:6px;">⚙️ ' + escapeHtml(t("mods.config") || "配置") + '</button>';
-    var reloadBtn = (side === "server" && isEnabled) ? '<button class="btn btn-sm mod-reload-btn" data-name="' + escapeHtml(name) + '" data-side="' + side + '" style="margin-right:6px;">' + escapeHtml(t("mods.reload") || "重载") + '</button>' : '';
-    var removeBtn = '<button class="btn btn-sm btn-danger mod-remove-btn" data-name="' + escapeHtml(name) + '" data-side="' + side + '" title="' + escapeHtml(t("mods.remove") || "移除") + '">🗑️</button>';
+    var opHtml = "";
+    if (_isReadOnly) {
+      // 访客/只读角色模式：无禁用、启用、重载、移除等破坏性按钮，仅提供只读查看配置
+      opHtml = '<button class="btn btn-sm mod-config-btn" data-name="' + escapeHtml(name) + '" data-side="' + side + '" data-readonly="true">🔍 ' + escapeHtml(t("mods.viewConfig") || "查看配置") + '</button>';
+    } else {
+      var toggleBtn = '<button class="btn btn-sm ' + (isEnabled ? "btn-warn" : "btn-primary") + ' mod-toggle-btn" data-name="' + escapeHtml(name) + '" data-side="' + side + '" data-enabled="' + (isEnabled ? "false" : "true") + '" style="margin-right:6px;">' + (isEnabled ? ("⏸️ " + (t("mods.toggleDisable") || "禁用")) : ("▶️ " + (t("mods.toggleEnable") || "启用"))) + '</button>';
+      var configBtn = '<button class="btn btn-sm mod-config-btn" data-name="' + escapeHtml(name) + '" data-side="' + side + '" style="margin-right:6px;">⚙️ ' + escapeHtml(t("mods.config") || "配置") + '</button>';
+      var reloadBtn = (side === "server" && isEnabled) ? '<button class="btn btn-sm mod-reload-btn" data-name="' + escapeHtml(name) + '" data-side="' + side + '" style="margin-right:6px;">' + escapeHtml(t("mods.reload") || "重载") + '</button>' : '';
+      var removeBtn = '<button class="btn btn-sm btn-danger mod-remove-btn" data-name="' + escapeHtml(name) + '" data-side="' + side + '" title="' + escapeHtml(t("mods.remove") || "移除") + '">🗑️</button>';
+      opHtml = toggleBtn + configBtn + reloadBtn + removeBtn;
+    }
 
     return '<tr><td><strong>' + escapeHtml(name) + '</strong></td><td class="td-dim"><code>' + escapeHtml(info.path) +
       '</code></td><td>' + statusHtml +
-      '</td><td style="white-space:nowrap;">' + toggleBtn + configBtn + reloadBtn + removeBtn + '</td></tr>';
+      '</td><td style="white-space:nowrap;">' + opHtml + '</td></tr>';
   }).join("");
 }
 
 function toggleMod(name, side, targetEnabled, btn) {
+  if (_isReadOnly) {
+    toast(t("mods.readOnlyHint") || "访客模式无法禁用或启用 Mod", "err");
+    return;
+  }
   btn.disabled = true;
   var oldText = btn.textContent;
   btn.textContent = "⏳";
@@ -177,6 +197,10 @@ function toggleMod(name, side, targetEnabled, btn) {
 }
 
 function removeMod(name, side, btn) {
+  if (_isReadOnly) {
+    toast(t("mods.readOnlyHint") || "访客模式无法移除 Mod", "err");
+    return;
+  }
   var tpl = t("mods.removeConfirm") || "确定要从配置中移除 Mod '{name}' 吗？";
   var msg = tpl.replace("{name}", name);
   if (!confirm(msg)) return;
@@ -191,6 +215,10 @@ function removeMod(name, side, btn) {
 }
 
 function reloadMod(name, side, btn) {
+  if (_isReadOnly) {
+    toast(t("mods.readOnlyHint") || "访客模式无法重载 Mod", "err");
+    return;
+  }
   btn.disabled = true;
   btn.textContent = "⏳";
   api("/mods/reload", { method: "POST", body: JSON.stringify({ name: name, side: side }) })
@@ -435,6 +463,25 @@ function openModConfig(name, side) {
   var nameEl = $("modCfgModalName");
   var targetEl = $("modCfgModalTarget");
   var editor = $("modCfgEditor");
+  var saveBtn = $("modCfgSaveBtn");
+  var formatBtn = $("modCfgFormatBtn");
+  var resetBtn = $("modCfgResetBtn");
+  var titleText = $("modCfgModalTitleText");
+  var iconEl = $("modCfgModalIcon");
+
+  if (_isReadOnly) {
+    if (titleText) titleText.textContent = t("mods.cfgViewTitle") || "查看 Mod 配置";
+    if (iconEl) iconEl.textContent = "🔍";
+    if (saveBtn) saveBtn.style.display = "none";
+    if (formatBtn) formatBtn.style.display = "none";
+    if (resetBtn) resetBtn.style.display = "none";
+  } else {
+    if (titleText) titleText.textContent = t("mods.cfgTitle") || "编辑 Mod 配置";
+    if (iconEl) iconEl.textContent = "⚙️";
+    if (saveBtn) saveBtn.style.display = "";
+    if (formatBtn) formatBtn.style.display = "";
+    if (resetBtn) resetBtn.style.display = "";
+  }
 
   if (nameEl) nameEl.textContent = name + " (" + side + ")";
   if (targetEl) targetEl.textContent = "加载中...";
@@ -455,10 +502,11 @@ function openModConfig(name, side) {
       if (targetEl) targetEl.textContent = res.target;
       if (editor) {
         editor.disabled = false;
+        editor.readOnly = _isReadOnly;
         editor.value = res.content || "";
         validateModJson();
         updateModLineColInfo();
-        editor.focus();
+        if (!_isReadOnly) editor.focus();
       }
     })
     .catch(function () {
@@ -473,6 +521,10 @@ function closeModConfig() {
 }
 
 function saveAndReloadModConfig() {
+  if (_isReadOnly) {
+    toast(t("mods.readOnlyHint") || "访客模式无法保存 Mod 配置", "err");
+    return;
+  }
   var editor = $("modCfgEditor");
   var saveBtn = $("modCfgSaveBtn");
   if (!editor || !saveBtn) return;
