@@ -1,0 +1,89 @@
+﻿<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Design.PreviewWith>
+        <Border Padding="20">
+            <Border Background="{DynamicResource ComboBoxDropDownBackground}"
+                    BorderBrush="{DynamicResource ComboBoxDropDownBorderBrush}"
+                    BorderThickness="{DynamicResource ComboBoxDropdownBorderThickness}" Margin="0,-1,0,-1"
+                    Padding="{DynamicResource ComboBoxDropdownBorderPadding}"
+                    CornerRadius="{DynamicResource OverlayCornerRadius}">
+                <StackPanel HorizontalAlignment="Stretch">
+                    <ComboBoxItem>Item 1</ComboBoxItem>
+                    <ComboBoxItem>Item 2 long</ComboBoxItem>
+                    <ComboBoxItem>Item 2 long</ComboBoxItem>
+                    <ComboBoxItem>Item 2 long</ComboBoxItem>
+                    <ComboBoxItem IsSelected="True">Item 2 long</ComboBoxItem>
+                    <ComboBoxItem IsEnabled="False">Item 4</ComboBoxItem>
+                </StackPanel>
+            </Border>
+        </Border>
+    </Design.PreviewWith>
+
+    <Style Selector="ComboBoxItem">
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryForegroundBrush}" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Margin" Value="2.5" />
+        <Setter Property="Padding" Value="8,8" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border CornerRadius="{TemplateBinding  CornerRadius}"
+                        ClipToBounds="True"
+                        Background="{TemplateBinding Background}">
+                    <Grid Background="#01000000">
+                        <Border Name="PATH_Background"
+                                Background="{DynamicResource PrimaryBackgroundOverBrush}"
+                                ClipToBounds="True"
+                                Opacity="0" />
+
+                        <Border Width="2" Height="10"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center"
+                                CornerRadius="1"
+                                ClipToBounds="True"
+                                Margin="1,0,0,0"
+                                Background="{DynamicResource GeneralBorderBrush}"
+                                IsVisible="{TemplateBinding IsSelected}" />
+
+                        <ContentPresenter Name="PART_ContentPresenter"
+                                          Margin="4,0,0,0"
+                                          Foreground="{TemplateBinding Foreground}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          Content="{TemplateBinding Content}"
+                                          HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          Padding="{TemplateBinding Padding}" />
+                    </Grid>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+
+        <Style Selector="^ /template/ Border#PATH_Background">
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Opacity"
+                                      Duration="0:0:0.18"
+                                      Easing="QuinticEaseOut" />
+                </Transitions>
+            </Setter>
+        </Style>
+
+        <Style Selector="^:pointerover /template/ Border#PATH_Background">
+            <Setter Property="Opacity" Value="0.3" />
+        </Style>
+
+        <Style Selector="^:pressed /template/ Border#PATH_Background">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+
+        <Style Selector="^:selected">
+            <Style Selector="^  /template/ Border#PATH_Background">
+                <Setter Property="Opacity" Value="0.8" />
+            </Style>
+        </Style>
+
+        <Style Selector="^:disabled">
+            <Setter Property="Opacity" Value="0.6" />
+        </Style>
+    </Style>
+</Styles>

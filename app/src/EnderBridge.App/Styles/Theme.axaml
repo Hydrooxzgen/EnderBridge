@@ -1,0 +1,76 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Styles.Resources>
+        <!-- BedrockBoot Inspired Color Palette -->
+        <Color x:Key="AccentColor">#486860</Color>
+        <Color x:Key="AccentHoverColor">#587C73</Color>
+        <Color x:Key="AccentPressedColor">#3A554E</Color>
+        
+        <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" />
+        <SolidColorBrush x:Key="AccentHoverBrush" Color="{StaticResource AccentHoverColor}" />
+        <SolidColorBrush x:Key="AccentPressedBrush" Color="{StaticResource AccentPressedColor}" />
+
+        <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#121316" />
+        <SolidColorBrush x:Key="CardBackgroundBrush" Color="#1A1C20" />
+        <SolidColorBrush x:Key="CardHoverBackgroundBrush" Color="#22252B" />
+        <SolidColorBrush x:Key="CardBorderBrush" Color="#2D3139" />
+        
+        <SolidColorBrush x:Key="SidebarBackgroundBrush" Color="#16181D" />
+        <SolidColorBrush x:Key="SidebarItemHoverBrush" Color="#20232A" />
+        <SolidColorBrush x:Key="SidebarItemSelectedBrush" Color="#282C35" />
+
+        <SolidColorBrush x:Key="StatusOkBrush" Color="#22C55E" />
+        <SolidColorBrush x:Key="StatusWarnBrush" Color="#EAB308" />
+        <SolidColorBrush x:Key="StatusDangerBrush" Color="#EF4444" />
+        <SolidColorBrush x:Key="StatusInfoBrush" Color="#3B82F6" />
+    </Styles.Resources>
+
+    <!-- BedrockBoot Style BorderCard -->
+    <Style Selector="Border.BorderCard">
+        <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="10" />
+        <Setter Property="Padding" Value="16" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.2" />
+                <BrushTransition Property="BorderBrush" Duration="0:0:0.2" />
+            </Transitions>
+        </Setter>
+    </Style>
+
+    <Style Selector="Border.BorderCard:pointerover">
+        <Setter Property="Background" Value="{DynamicResource CardHoverBackgroundBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+    </Style>
+
+    <!-- Navigation Button Style -->
+    <Style Selector="Button.NavButton">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="#CCCCCC" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="12,10" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.18" />
+                <BrushTransition Property="Foreground" Duration="0:0:0.18" />
+            </Transitions>
+        </Setter>
+    </Style>
+
+    <Style Selector="Button.NavButton:pointerover">
+        <Setter Property="Background" Value="{DynamicResource SidebarItemHoverBrush}" />
+        <Setter Property="Foreground" Value="#FFFFFF" />
+    </Style>
+
+    <Style Selector="Button.NavButton.Selected">
+        <Setter Property="Background" Value="{DynamicResource SidebarItemSelectedBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource AccentHoverBrush}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+</Styles>

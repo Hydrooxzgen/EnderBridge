@@ -1,0 +1,63 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Design.PreviewWith>
+        <Border Padding="20" Width="280">
+            <StackPanel Spacing="10">
+                <CalendarDatePicker />
+                <CalendarDatePicker IsEnabled="False" />
+            </StackPanel>
+        </Border>
+    </Design.PreviewWith>
+
+    <Style Selector="CalendarDatePicker">
+        <Setter Property="Background" Value="{DynamicResource PrimaryBackgroundBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PrimaryBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryForegroundBrush}" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <Style Selector="CalendarDatePicker /template/ TextBox#PART_TextBox">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="6,0,0,6" />
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryForegroundBrush}" />
+    </Style>
+
+    <Style Selector="CalendarDatePicker /template/ Button#PART_FlyoutButton">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="CornerRadius" Value="0,6,6,0" />
+        <Setter Property="Padding" Value="8,0" />
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryForegroundSecondaryBrush}" />
+    </Style>
+
+    <Style Selector="CalendarDatePicker /template/ Button#PART_FlyoutButton:pointerover">
+        <Setter Property="Foreground" Value="{DynamicResource AccentBackgroundBrush}" />
+    </Style>
+
+    <Style Selector="CalendarDatePicker:focus /template/ TextBox#PART_TextBox">
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryForegroundBrush}" />
+    </Style>
+
+    <Style Selector="CalendarDatePicker:disabled">
+        <Setter Property="Opacity" Value="0.55" />
+    </Style>
+
+    <!-- 下拉弹出的 Calendar 容器 -->
+    <Style Selector="CalendarDatePicker /template/ Popup > Border">
+        <Setter Property="Background" Value="{DynamicResource BackgroundSecondaryBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PrimaryBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Padding" Value="6" />
+    </Style>
+
+    <Style Selector="CalendarDatePicker /template/ Calendar#PART_Calendar">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+    </Style>
+</Styles>

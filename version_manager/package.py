@@ -33,15 +33,31 @@ CONFIG_TEMPLATE_ALLOW = {
     "config/users.example.json",
 }
 
-# 导出时排除用户数据/设置(与 UPDATE_KEEP 对称,另排除 Bot 的 npm 依赖)
+# 导出时排除用户数据/设置(与 UPDATE_KEEP 对称,另排除 Bot 的 npm 依赖及客户端工程/构建产物)
 EXPORT_EXCLUDE = UPDATE_KEEP | {
     "node_modules",  # Bot 的 npm 依赖(约 500MB),用户需自行 npm install
+    "app",           # 客户端桌面端工程源码及中间编译产物
+    "build",         # 构建输出目录
+    "dist",          # 发行包目录
+    ".venv",         # Python 虚拟环境
 }
 EXPORT_FORCE_INCLUDE = set(CONFIG_TEMPLATE_ALLOW)
-EXPORT_SKIP_DIRS = {"__pycache__"}
-EXPORT_SKIP_EXTS = {".pyc", ".pyo"}
+EXPORT_SKIP_DIRS = {"__pycache__", "bin", "obj"}
+EXPORT_SKIP_EXTS = {".pyc", ".pyo", ".exe", ".dll", ".pdb", ".apk", ".zip"}
 EXPORT_IGNORE_FILE = ".exportignore"
 NONEEDS_FILE = ".noneeds"
+
+# 更新前热备份跳过的目录与扩展名 (排除客户端庞大二进制产物、node_modules 及 venv，确保秒级轻量备份)
+BACKUP_SKIP_DIRS = {
+    "__pycache__", ".git", ".github", "backups", "node_modules",
+    ".venv", "venv", "env", ".env", ".pytest_cache",
+    ".idea", ".vscode", ".vs", "dist", "build", "bin", "obj",
+    "app",
+}
+BACKUP_SKIP_EXTS = {
+    ".pyc", ".pyo", ".exe", ".dll", ".pdb", ".apk",
+    ".zip", ".tar", ".gz", ".tgz", ".bz2", ".xz",
+}
 
 _ZIP_SUFFIX = (".zip",)
 _TAR_SUFFIXES = (".tar.gz", ".tgz", ".tar.bz2", ".tar.xz", ".tar")
@@ -526,9 +542,30 @@ def backup_dir(root, dest_dir=None, keep=BACKUP_KEEP_COUNT, description: str = N
                 }
                 z.writestr(".backup_meta.json", json.dumps(meta_content, ensure_ascii=False, indent=2))
             for dirpath, dirnames, filenames in os.walk(root):
-                dirnames[:] = [d for d in dirnames if d not in ("__pycache__", ".git", "backups")]
+                rel_dir = os.path.relpath(dirpath, root)
+                rel_dir = "" if rel_dir == "." else rel_dir.replace(os.sep, "/")
+
+                pruned = []
+                for d in dirnames:
+                    child_rel = f"{rel_dir}/{d}" if rel_dir else d
+                    top_dir = child_rel.split("/", 1)[0]
+                    if (
+                        d in BACKUP_SKIP_DIRS
+                        or top_dir in BACKUP_SKIP_DIRS
+                        or d.endswith(".WebView2")
+                        or d.startswith(".venv")
+                        or d == "node_modules"
+                        or d in ("bin", "obj")
+                    ):
+                        continue
+                    pruned.append(d)
+                dirnames[:] = pruned
+
                 for fname_item in filenames:
-                    if os.path.splitext(fname_item)[1].lower() in EXPORT_SKIP_EXTS:
+                    ext = os.path.splitext(fname_item)[1].lower()
+                    if ext in BACKUP_SKIP_EXTS or ext in EXPORT_SKIP_EXTS:
+                        continue
+                    if fname_item.endswith(".tmp") or fname_item.endswith(".log"):
                         continue
                     abspath = os.path.join(dirpath, fname_item)
                     rel = os.path.relpath(abspath, root).replace(os.sep, "/")

@@ -1,0 +1,64 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Design.PreviewWith>
+        <Border Padding="20">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <RepeatButton Content="按住我" Width="100" Height="32" />
+                <RepeatButton Content="Disabled" Width="100" Height="32" IsEnabled="False" />
+            </StackPanel>
+        </Border>
+    </Design.PreviewWith>
+
+    <Style Selector="RepeatButton">
+        <Setter Property="Background" Value="{DynamicResource PrimaryBackgroundBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PrimaryBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryForegroundBrush}" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Grid>
+                    <Border Name="Path_Border"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}">
+                        <Border Name="Path_Background"
+                                HorizontalAlignment="Stretch"
+                                VerticalAlignment="Stretch"
+                                CornerRadius="{TemplateBinding CornerRadius}"
+                                Background="{DynamicResource AccentSubtleBrush}"
+                                Opacity="0">
+                            <Border.Transitions>
+                                <Transitions>
+                                    <DoubleTransition Property="Opacity" Duration="0:0:0.18" Easing="QuinticEaseOut" />
+                                </Transitions>
+                            </Border.Transitions>
+                        </Border>
+                    </Border>
+                    <ContentPresenter Content="{TemplateBinding Content}"
+                                      Foreground="{TemplateBinding Foreground}"
+                                      Padding="{TemplateBinding Padding}"
+                                      HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                      VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                </Grid>
+            </ControlTemplate>
+        </Setter>
+
+        <Style Selector="^:disabled">
+            <Setter Property="Opacity" Value="0.55" />
+        </Style>
+        <Style Selector="^:pointerover Border#Path_Border">
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBorderBrush}" />
+        </Style>
+        <Style Selector="^:pointerover Border#Path_Background">
+            <Setter Property="Opacity" Value="0.3" />
+        </Style>
+        <Style Selector="^:pressed Border#Path_Background">
+            <Setter Property="Background" Value="{DynamicResource AccentSubtlePressedBrush}" />
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+    </Style>
+</Styles>

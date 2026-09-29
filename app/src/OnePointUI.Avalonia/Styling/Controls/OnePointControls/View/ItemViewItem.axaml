@@ -1,0 +1,119 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:OnePointUI.Avalonia.Styling.Controls.OnePointControls.View"
+        xmlns:onePointControls="clr-namespace:OnePointUI.Avalonia.Styling.Controls.OnePointControls">
+    <Design.PreviewWith>
+        <controls:ItemView SelectedIndex="0">
+            <controls:ItemViewItem>
+                <Grid Width="200"
+                      Height="80" />
+            </controls:ItemViewItem>
+            <controls:ItemViewItem>
+                <Grid Width="200"
+                      Height="80" />
+            </controls:ItemViewItem>
+            <controls:ItemViewItem>
+                <Grid Width="200"
+                      Height="80" />
+            </controls:ItemViewItem>
+        </controls:ItemView>
+    </Design.PreviewWith>
+
+    <Style Selector="controls|ItemViewItem">
+        <Setter Property="CornerRadius"
+                Value="6" />
+        <Setter Property="Margin"
+                Value="5" />
+        <!-- Set Defaults -->
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Grid>
+                    <Border CornerRadius="{TemplateBinding CornerRadius}"
+                            Background="{DynamicResource PrimaryBackgroundOverBrush}"
+                            Name="PART_Background"
+                            Opacity="0">
+                        <Border.Transitions>
+                            <Transitions>
+                                <DoubleTransition Property="Opacity"
+                                                  Duration="0:0:0.1" />
+                            </Transitions>
+                        </Border.Transitions>
+                    </Border>
+
+                    <Grid>
+                        <ContentPresenter Name="PART_ContentPresenter"
+                                          Background="{TemplateBinding Background}"
+                                          BorderBrush="{TemplateBinding BorderBrush}"
+                                          BorderThickness="{TemplateBinding BorderThickness}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                                          Content="{TemplateBinding Content}"
+                                          Padding="{TemplateBinding Padding}"
+                                          VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          CornerRadius="{TemplateBinding CornerRadius}" />
+                    </Grid>
+
+                    <Border CornerRadius="{TemplateBinding CornerRadius}"
+                            BorderThickness="1"
+                            Name="PART_Border"
+                            ClipToBounds="True"
+                            BorderBrush="{DynamicResource PrimaryBorderBrush}">
+                        <Border.Transitions>
+                            <Transitions>
+                                <ThicknessTransition Property="BorderThickness"
+                                                     Duration="0:0:0.1" />
+                            </Transitions>
+                        </Border.Transitions>
+
+                        <Grid HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                              Name="PART_CheckIcon"
+                              IsVisible="False"
+                              Width="24" Height="24">
+                            <Border CornerRadius="0,0,4,0"
+                                    ClipToBounds="True">
+                                <Path Fill="{DynamicResource PrimaryForegroundBrush}"
+                                      Margin="0,0,0,0"
+                                      Stretch="Fill">
+                                    <Path.Data>
+                                        <PathGeometry>
+                                            <PathFigure StartPoint="0,1">
+                                                <LineSegment Point="1,1" />
+                                                <LineSegment Point="1,0" />
+                                            </PathFigure>
+                                        </PathGeometry>
+                                    </Path.Data>
+                                </Path>
+                            </Border>
+
+                            <onePointControls:FontIcon Glyph="&#xE73E;"
+                                                       FontSize="14"
+                                                       HorizontalAlignment="Right"
+                                                       VerticalAlignment="Bottom"
+                                                       Margin="0,0,1,0"
+                                                       Foreground="{DynamicResource BackgroundBrush}" />
+                        </Grid>
+                    </Border>
+                </Grid>
+            </ControlTemplate>
+        </Setter>
+
+        <Style Selector="^:selected">
+            <Style Selector="^ /template/ Border#PART_Border">
+                <Setter Property="BorderThickness" Value="2" />
+                <Setter Property="BorderBrush" Value="{DynamicResource PrimaryForegroundBrush}" />
+            </Style>
+            <Style Selector="^ /template/ Border#PART_Background">
+                <Setter Property="Opacity" Value="0.8" />
+            </Style>
+            <Style Selector="^ /template/ Grid#PART_CheckIcon">
+                <Setter Property="IsVisible" Value="True" />
+            </Style>
+        </Style>
+
+        <Style Selector="^:pointerover">
+            <Style Selector="^ /template/ Border#PART_Background">
+                <Setter Property="Opacity" Value="0.6" />
+            </Style>
+        </Style>
+    </Style>
+</Styles>

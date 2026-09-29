@@ -28,6 +28,7 @@ IMPORT_NAMES = {
     "mido": "mido",
     "openai": "openai",
     "websocket-client": "websocket",
+    "bcrypt": "bcrypt",
 }
 
 

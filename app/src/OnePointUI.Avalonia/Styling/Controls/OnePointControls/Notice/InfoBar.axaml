@@ -1,0 +1,53 @@
+﻿<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:OnePointUI.Avalonia.Styling.Controls.OnePointControls.Notice"
+        xmlns:onePointControls="clr-namespace:OnePointUI.Avalonia.Styling.Controls.OnePointControls">
+    <Design.PreviewWith>
+        <controls:InfoBar State="Warning"
+                          Title="提示"
+                          Message="111" />
+    </Design.PreviewWith>
+
+    <Style Selector="controls|InfoBar">
+        <Setter Property="CornerRadius" Value="6" />
+        <!-- Set Defaults -->
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border CornerRadius="{TemplateBinding CornerRadius}"
+                        ClipToBounds="True"
+                        MinHeight="38" MinWidth="120">
+                    <Grid>
+                        <Border Name="BackgroundBorder"
+                                Opacity="0.7"
+                                Background="{TemplateBinding Backcolor}" />
+
+                        <Grid ColumnDefinitions="32,*">
+                            <onePointControls:FontIcon Foreground="{TemplateBinding IconColor}"
+                                                       Opacity="0.6"
+                                                       Margin="0,13,0,13"
+                                                       HorizontalAlignment="Center"
+                                                       VerticalAlignment="Top"
+                                                       Glyph="{TemplateBinding Glyph}" />
+
+                            <Grid Grid.Column="1" VerticalAlignment="Center">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <TextBlock Grid.Column="0"
+                                           Margin="0,0,10,0"
+                                           Text="{TemplateBinding Title}"
+                                           FontWeight="Bold" />
+
+                                <TextBlock Grid.Column="1"
+                                           Margin="0,0,12,0"
+                                           Text="{TemplateBinding Message}" />
+                            </Grid>
+                        </Grid>
+                    </Grid>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+</Styles>

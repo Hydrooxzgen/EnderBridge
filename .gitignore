@@ -28,3 +28,11 @@ users.json
 webui/static/textures/blocks/*
 !webui/static/textures/blocks/.gitkeep
 .exportignore
+# 客户端编译输出
+dist/
+app/**/bin/
+app/**/obj/
+EnderBridge.exe
+*.WebView2/
+*.WebView2
+app_error.log

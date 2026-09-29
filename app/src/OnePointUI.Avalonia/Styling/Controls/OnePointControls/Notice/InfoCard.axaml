@@ -1,0 +1,35 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:OnePointUI.Avalonia.Styling.Controls.OnePointControls.Notice"
+        xmlns:onePointControls="clr-namespace:OnePointUI.Avalonia.Styling.Controls.OnePointControls">
+    <Design.PreviewWith>
+        <controls:InfoCard VerticalAlignment="Center"
+                           HorizontalAlignment="Center"
+                           BigTitle="这里没有任何东西"
+                           Message="也许您可以换个关键词再尝试呢.jpg11111111111111111111"
+                           Name="NoneBox" />
+    </Design.PreviewWith>
+
+    <Style Selector="controls|InfoCard">
+        <!-- Set Defaults -->
+        <Setter Property="Template">
+            <ControlTemplate>
+                <StackPanel>
+                    <onePointControls:FontIcon Glyph="{TemplateBinding Glyph}"
+                                               HorizontalAlignment="Left"
+                                               Foreground="{DynamicResource PrimaryForegroundBrush}"
+                                               FontSize="36" />
+
+                    <onePointControls:LineTextBlock FontSize="22"
+                                                    HorizontalAlignment="Left"
+                                                    Text="{TemplateBinding BigTitle}"
+                                                    Margin="0,12,0,12" />
+
+                    <TextBlock Margin="0,0"
+                               Text="{TemplateBinding Message}"
+                               FontSize="11" />
+                </StackPanel>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+</Styles>

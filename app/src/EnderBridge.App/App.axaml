@@ -1,0 +1,11 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:core="clr-namespace:OnePointUI.Avalonia.Style.Core;assembly=OnePointUI.Avalonia"
+             x:Class="EnderBridge.App.App"
+             RequestedThemeVariant="Dark">
+    <Application.Styles>
+        <core:OnePointTheme AccentColor="#486860" ThemeVariant="Dark" />
+        <FluentTheme />
+        <StyleInclude Source="avares://EnderBridge.App/Styles/Theme.axaml" />
+    </Application.Styles>
+</Application>

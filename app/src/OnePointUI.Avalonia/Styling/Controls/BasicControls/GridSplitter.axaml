@@ -1,0 +1,30 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Design.PreviewWith>
+        <Border Padding="20" Width="240" Height="60">
+            <Grid ColumnDefinitions="*,4,*">
+                <Border Grid.Column="0" Background="{DynamicResource AccentLighterBrush}" />
+                <GridSplitter Grid.Column="1"
+                              ResizeDirection="Columns"
+                              Background="{DynamicResource PrimaryBorderBrush}" />
+                <Border Grid.Column="2" Background="{DynamicResource AccentLightBrush}" />
+            </Grid>
+        </Border>
+    </Design.PreviewWith>
+
+    <Style Selector="GridSplitter">
+        <Setter Property="Background" Value="{DynamicResource PrimaryBorderBrush}" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{TemplateBinding Background}" />
+            </ControlTemplate>
+        </Setter>
+
+        <Style Selector="^:pointerover">
+            <Setter Property="Background" Value="{DynamicResource AccentBackgroundBrush}" />
+        </Style>
+        <Style Selector="^:pressed">
+            <Setter Property="Background" Value="{DynamicResource AccentBackgroundPressedBrush}" />
+        </Style>
+    </Style>
+</Styles>

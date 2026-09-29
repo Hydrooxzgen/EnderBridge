@@ -1,0 +1,95 @@
+﻿<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:OnePointUI.Avalonia.Styling.Controls.OnePointControls">
+    <Design.PreviewWith>
+        <controls:LineTextBlock Text="Test" FontSize="36" /> <!-- 可以在这里调整预览的 LineHeight -->
+    </Design.PreviewWith>
+
+    <Style Selector="controls|LineTextBlock">
+        <!-- Set Defaults -->
+        <Setter Property="FontSize" Value="30" />
+        <Setter Property="Margin" Value="5" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Grid>
+                    <!-- 修改 Border 的 Height 绑定 -->
+                    <Border Background="{DynamicResource AccentBorderBrush}"
+                            VerticalAlignment="Bottom"
+                            CornerRadius="4"
+                            Margin="0,0,0,0"
+                            Name="PATH_LineBorder"
+                            Height="8" />
+
+                    <TextBlock Text="{TemplateBinding Text}"
+                               FontSize="{TemplateBinding FontSize}"
+                               FontWeight="{TemplateBinding FontWeight}"
+                               Margin="5,0"
+                               VerticalAlignment="Center"
+                               Name="PATH_TextBlock1" />
+
+                    <TextBlock Text="{TemplateBinding Text}"
+                               FontSize="{TemplateBinding FontSize}"
+                               FontWeight="{TemplateBinding FontWeight}"
+                               Margin="5,0"
+                               Opacity="0"
+                               Foreground="White"
+                               VerticalAlignment="Center"
+                               Name="PATH_TextBlock2" />
+
+                    <Border Height="6"
+                            Name="PATH_HaloBorder"
+                            VerticalAlignment="Bottom">
+                        <controls:PointHalo CornerRadius="3" />
+                    </Border>
+                </Grid>
+            </ControlTemplate>
+        </Setter>
+
+        <Style Selector="^ Border#PATH_LineBorder">
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Height"
+                                      Duration="0:0:0.2"
+                                      Easing="ExponentialEaseOut" />
+                </Transitions>
+            </Setter>
+        </Style>
+
+        <Style Selector="^ Border#PATH_HaloBorder">
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Height"
+                                      Duration="0:0:0.2"
+                                      Easing="ExponentialEaseOut" />
+                </Transitions>
+            </Setter>
+        </Style>
+
+        <Style Selector="^ TextBlock#PATH_TextBlock2">
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Opacity"
+                                      Duration="0:0:0.38"
+                                      Easing="ExponentialEaseOut" />
+                </Transitions>
+            </Setter>
+        </Style>
+
+        <!-- 悬停时改变 Border 的高度 -->
+        <Style Selector="^:pointerover Border#PATH_LineBorder">
+            <Setter Property="Height"
+                    Value="{Binding Bounds.Height, 
+                   RelativeSource={RelativeSource AncestorType=Control}}" />
+        </Style>
+
+        <Style Selector="^:pointerover Border#PATH_HaloBorder">
+            <Setter Property="Height"
+                    Value="{Binding Bounds.Height, 
+                   RelativeSource={RelativeSource AncestorType=Control}}" />
+        </Style>
+
+        <Style Selector="^:pointerover TextBlock#PATH_TextBlock2">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+    </Style>
+</Styles>

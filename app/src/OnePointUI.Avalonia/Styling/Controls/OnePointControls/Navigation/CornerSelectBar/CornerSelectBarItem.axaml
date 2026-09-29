@@ -1,0 +1,114 @@
+﻿<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:OnePointUI.Avalonia.Styling.Controls.OnePointControls.Navigation.CornerSelectBar"
+        xmlns:onePointControls="clr-namespace:OnePointUI.Avalonia.Styling.Controls.OnePointControls">
+    <Design.PreviewWith>
+        <Border Padding="20" Background="#F3F3F3">
+            <controls:CornerSelectBar>
+                <controls:CornerSelectBarItem ItemText="Dashboard" Glyph="&#xE80F;" />
+                <controls:CornerSelectBarItem ItemText="Settings" Glyph="&#xE713;" />
+                <controls:CornerSelectBarItem ItemText="Profile" Glyph="&#xE77B;" />
+            </controls:CornerSelectBar>
+        </Border>
+    </Design.PreviewWith>
+
+    <Style Selector="controls|CornerSelectBarItem">
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Padding" Value="12,10" />
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryForegroundBrush}" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Panel Background="Transparent">
+                    <Border Name="PART_Background"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            Background="{DynamicResource PrimaryBackgroundOverBrush}"
+                            Opacity="0">
+                        <Border.Transitions>
+                            <Transitions>
+                                <DoubleTransition Property="Opacity" Duration="0:0:0.2" />
+                            </Transitions>
+                        </Border.Transitions>
+                    </Border>
+
+                    <Border Padding="{TemplateBinding Padding}">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Panel Width="18" Height="18">
+                                <onePointControls:FontIcon Name="PART_Icon"
+                                                           Glyph="{TemplateBinding Glyph}"
+                                                           FontSize="18"
+                                                           Opacity="0.6" />
+                                <onePointControls:FontIcon Name="PART_ColorIcon"
+                                                           Glyph="{TemplateBinding Glyph}"
+                                                           Foreground="{DynamicResource AccentBackgroundBrush}"
+                                                           FontSize="18"
+                                                           Opacity="0" />
+                            </Panel>
+
+                            <TextBlock Name="PART_ItemText"
+                                       Text="{TemplateBinding ItemText}"
+                                       VerticalAlignment="Center"
+                                       FontWeight="Medium"
+                                       Foreground="{TemplateBinding Foreground}"
+                                       Opacity="0.7">
+                                <TextBlock.Transitions>
+                                    <Transitions>
+                                        <DoubleTransition Property="Opacity" Duration="0:0:0.2" />
+                                    </Transitions>
+                                </TextBlock.Transitions>
+                            </TextBlock>
+                        </StackPanel>
+                    </Border>
+
+                    <Border VerticalAlignment="Bottom" HorizontalAlignment="Stretch" Height="3" Margin="14,0,14,2">
+                        <Border Name="PART_AccentBackground"
+                                Width="0"
+                                CornerRadius="1.5"
+                                Background="{DynamicResource AccentBackgroundBrush}"
+                                Opacity="0">
+                            <Border.RenderTransform>
+                                <TranslateTransform Y="2" />
+                            </Border.RenderTransform>
+                            <Border.Transitions>
+                                <Transitions>
+                                    <DoubleTransition Property="Width" Duration="0:0:0.3" Easing="QuarticEaseOut" />
+                                    <DoubleTransition Property="Opacity" Duration="0:0:0.2" />
+                                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.3"
+                                                                   Easing="QuarticEaseOut" />
+                                </Transitions>
+                            </Border.Transitions>
+                        </Border>
+                    </Border>
+                </Panel>
+            </ControlTemplate>
+        </Setter>
+
+        <Style Selector="^:pointerover /template/ Border#PART_Background">
+            <Setter Property="Opacity" Value="0.5" />
+        </Style>
+        <Style Selector="^:pointerover /template/ TextBlock#PART_ItemText">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+
+        <Style Selector="^:selected">
+            <Style Selector="^ /template/ Border#PART_Background">
+                <Setter Property="Opacity" Value="1" />
+            </Style>
+            <Style Selector="^ /template/ TextBlock#PART_ItemText">
+                <Setter Property="Foreground" Value="{DynamicResource AccentBackgroundBrush}" />
+                <Setter Property="Opacity" Value="1" />
+            </Style>
+            <Style Selector="^ /template/ onePointControls|FontIcon#PART_Icon">
+                <Setter Property="Opacity" Value="0" />
+            </Style>
+            <Style Selector="^ /template/ onePointControls|FontIcon#PART_ColorIcon">
+                <Setter Property="Opacity" Value="1" />
+            </Style>
+            <Style Selector="^ /template/ Border#PART_AccentBackground">
+                <Setter Property="Width" Value="16" />
+                <Setter Property="Opacity" Value="1" />
+                <Setter Property="RenderTransform" Value="translateY(0px)" />
+            </Style>
+        </Style>
+    </Style>
+</Styles>

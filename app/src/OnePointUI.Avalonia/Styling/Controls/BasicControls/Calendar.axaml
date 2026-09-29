@@ -1,0 +1,59 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Design.PreviewWith>
+        <Border Padding="20">
+            <Calendar />
+        </Border>
+    </Design.PreviewWith>
+
+    <Style Selector="Calendar">
+        <Setter Property="Background" Value="{DynamicResource BackgroundSecondaryBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PrimaryBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryForegroundBrush}" />
+        <Setter Property="Padding" Value="8" />
+    </Style>
+
+    <Style Selector="CalendarItem">
+        <Setter Property="Background" Value="{DynamicResource BackgroundSecondaryBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PrimaryBorderBrush}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryForegroundBrush}" />
+    </Style>
+
+    <Style Selector="CalendarDayButton">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryForegroundBrush}" />
+        <Setter Property="MinWidth" Value="32" />
+        <Setter Property="MinHeight" Value="32" />
+        <Setter Property="Margin" Value="1" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Name="PART_Border"
+                        Background="{TemplateBinding Background}"
+                        CornerRadius="{TemplateBinding CornerRadius}"
+                        Margin="{TemplateBinding Margin}">
+                    <ContentPresenter Content="{TemplateBinding Content}"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center" />
+                </Border>
+            </ControlTemplate>
+        </Setter>
+
+        <Style Selector="^:pointerover">
+            <Setter Property="Background" Value="{DynamicResource AccentSubtleBrush}" />
+        </Style>
+        <Style Selector="^:selected">
+            <Setter Property="Background" Value="{DynamicResource AccentBackgroundBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource AccentForegroundBrush}" />
+        </Style>
+        <Style Selector="^:inactive">
+            <Setter Property="Opacity" Value="0.4" />
+        </Style>
+        <Style Selector="^:disabled">
+            <Setter Property="Opacity" Value="0.4" />
+        </Style>
+    </Style>
+</Styles>

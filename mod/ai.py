@@ -117,7 +117,11 @@ class Mod:
                     if name not in online_players:
                         del cls.player_data[name]
 
-        cls.cleanup_task = asyncio.get_running_loop().create_task(_loop())
+        try:
+            cls.cleanup_task = asyncio.get_running_loop().create_task(_loop())
+        except RuntimeError:
+            # 当前线程无运行中的事件循环(如在线程池熔断检测中实例化)，将在 onStart 中调度
+            cls.cleanup_task = None
 
     # 停止自动清理
     @classmethod
@@ -140,6 +144,10 @@ class Mod:
     # 构造函数
     def __init__(self, client=None):
         self.client = client
+        Mod.start_cleanup()
+
+    # 生命周期启动钩子
+    def onStart(self):
         Mod.start_cleanup()
 
     # 返回命令定义
@@ -285,6 +293,13 @@ class Mod:
 
     # 销毁方法(服务端与客户端共用)
     def onDestroy(self):
-        Mod.stop_cleanup()
-        Mod.player_data.clear()
+        try:
+            from lib.mods import ServerModManager
+            is_server_mod_active = ServerModManager.get_mod("AI") is not None and self.client is not None
+        except Exception:
+            is_server_mod_active = False
+
+        if not is_server_mod_active:
+            Mod.stop_cleanup()
+            Mod.player_data.clear()
         self.client = None

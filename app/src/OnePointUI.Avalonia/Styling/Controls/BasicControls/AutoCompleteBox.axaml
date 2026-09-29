@@ -1,0 +1,48 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Design.PreviewWith>
+        <Border Padding="20">
+            <StackPanel Width="240" Spacing="10">
+                <AutoCompleteBox Watermark="搜索..." />
+                <AutoCompleteBox Watermark="禁用" IsEnabled="False" />
+            </StackPanel>
+        </Border>
+    </Design.PreviewWith>
+
+    <Style Selector="AutoCompleteBox">
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryForegroundBrush}" />
+        <Setter Property="Background" Value="{DynamicResource PrimaryBackgroundBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PrimaryBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="MinHeight" Value="32" />
+        <Setter Property="Padding" Value="10,0" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Name="PART_RootBorder"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        Background="{TemplateBinding Background}"
+                        CornerRadius="{TemplateBinding CornerRadius}"
+                        MinHeight="{TemplateBinding MinHeight}">
+                    <TextBox Name="PART_TextBox"
+                             Background="Transparent"
+                             BorderBrush="Transparent"
+                             BorderThickness="0"
+                             Padding="{TemplateBinding Padding}"
+                             Foreground="{TemplateBinding Foreground}"
+                             Watermark="{TemplateBinding Watermark}"
+                             CornerRadius="{TemplateBinding CornerRadius}"
+                             MinHeight="0" />
+                </Border>
+            </ControlTemplate>
+        </Setter>
+
+        <Style Selector="^:disabled">
+            <Setter Property="Opacity" Value="0.55" />
+        </Style>
+        <Style Selector="^:focus Border#PART_RootBorder">
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBorderBrush}" />
+        </Style>
+    </Style>
+</Styles>

@@ -1,0 +1,108 @@
+﻿<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Design.PreviewWith>
+        <Border Padding="20">
+            <!-- Add Controls for Previewer Here -->
+            <ToggleSwitch />
+        </Border>
+    </Design.PreviewWith>
+
+    <!-- Add Styles Here -->
+    <Style Selector="ToggleSwitch">
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Panel Background="Transparent">
+                    <Grid Width="{TemplateBinding Width}" Height="{TemplateBinding Height}">
+                        <Border Margin="0,0,0,0"
+                                Height="28" Width="58"
+                                CornerRadius="100"
+                                ClipToBounds="False"
+                                HorizontalAlignment="Left"
+                                Name="Path_Background"
+                                BorderBrush="{DynamicResource PrimaryDisabled2ForegroundBrush}"
+                                BorderThickness="1" />
+
+                        <Canvas x:Name="PART_SwitchKnob" Width="30" HorizontalAlignment="Left" Margin="4">
+                            <Grid x:Name="PART_MovingKnobs">
+                                <Border Name="PART_Knob" HorizontalAlignment="Left"
+                                        ClipToBounds="False"
+                                        Margin="0,0,0,0">
+                                    <Border Height="18" Width="18"
+                                            CornerRadius="100"
+                                            ClipToBounds="False"
+                                            Margin="1,1,0,1"
+                                            Background="{DynamicResource PrimaryDisabled2ForegroundBrush}"
+                                            Name="PART_Knob_Net" />
+                                </Border>
+                            </Grid>
+                        </Canvas>
+                    </Grid>
+                </Panel>
+            </ControlTemplate>
+        </Setter>
+        <Setter Property="KnobTransitions">
+            <Transitions>
+                <DoubleTransition
+                    Easing="QuinticEaseOut"
+                    Property="Canvas.Left"
+                    Duration="0:0:0.18" />
+            </Transitions>
+        </Setter>
+    </Style>
+
+    <Style Selector="Border#PART_Knob">
+        <Setter Property="Transitions">
+            <Transitions>
+                <ThicknessTransition Property="Margin"
+                                     Duration="0:0:01"
+                                     Easing="BackEaseOut" />
+            </Transitions>
+        </Setter>
+    </Style>
+
+    <Style Selector="Border#PART_Knob_Net">
+        <Setter Property="Transitions">
+            <Transitions>
+                <ThicknessTransition Property="Margin"
+                                     Duration="0:0:0.18"
+                                     Easing="BackEaseOut" />
+                <DoubleTransition Property="Height"
+                                  Duration="0:0:0.18"
+                                  Easing="BackEaseOut" />
+                <DoubleTransition Property="Width"
+                                  Duration="0:0:0.18"
+                                  Easing="BackEaseOut" />
+            </Transitions>
+        </Setter>
+    </Style>
+
+    <Style Selector="ToggleSwitch:checked Border#PART_Knob">
+        <Setter Property="Margin" Value="0.25,0,0,0" />
+    </Style>
+    <Style Selector="ToggleSwitch:checked Border#PART_Knob_Net">
+        <Setter Property="Margin" Value="0,0,0,0" />
+    </Style>
+    <Style Selector="ToggleSwitch:checked Border#PART_Knob_Net">
+        <Setter Property="Height" Value="20" />
+        <Setter Property="Width" Value="20" />
+        <Setter Property="Background" Value="{DynamicResource AccentDarkestBrush}" />
+    </Style>
+    <Style Selector="ToggleSwitch:checked Border#Path_Background">
+        <Setter Property="Background" Value="{DynamicResource AccentBackgroundBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentBorderBrush}" />
+    </Style>
+    <Style Selector="ToggleSwitch:pointerover Border#PART_Knob_Net">
+        <Setter Property="Margin" Value="-1,-1,0,-1" />
+        <Setter Property="Width" Value="22" />
+        <Setter Property="Height" Value="22" />
+    </Style>
+    <Style Selector="ToggleSwitch:pressed Border#PART_Knob_Net">
+        <Setter Property="Margin" Value="2,2,0,2" />
+        <Setter Property="Width" Value="16" />
+        <Setter Property="Height" Value="16" />
+    </Style>
+
+    <Style Selector="ToggleSwitch:disabled Border#Path_Background">
+        <Setter Property="Background" Value="{DynamicResource PrimaryDisabledForegroundBrush}" />
+    </Style>
+</Styles>

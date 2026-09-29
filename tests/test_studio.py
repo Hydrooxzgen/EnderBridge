@@ -684,5 +684,37 @@ class TestStudioActions:
         z_edges = [e for e in edges if e[0][0] == e[1][0] and e[0][1] == e[1][1] and e[0][2] != e[1][2]]
         assert len(z_edges) == 4
 
+    def test_api_studio_get_asset_file_mime_and_cache(self, tmp_path, monkeypatch):
+        from webui.server import WebUIHandler
+        import lib.studio as studio
+
+        pictures_dir = tmp_path / "resources" / "pictures"
+        pictures_dir.mkdir(parents=True)
+        img_file = pictures_dir / "test.png"
+        img = Image.new("RGBA", (16, 16), (255, 0, 0, 255))
+        img.save(str(img_file))
+
+        monkeypatch.setattr(studio, "get_base_path", lambda c: str(pictures_dir) if c == "image" else str(tmp_path))
+
+        handler = DummyHandler(path="/api/studio/asset-file?category=image&file=test.png", user_perms=["studio"])
+        WebUIHandler._api_studio_get_asset_file(handler)
+
+        assert handler.status == 200
+        assert handler.response_headers.get("Content-Type") == "image/png"
+        assert "private" in handler.response_headers.get("Cache-Control", "")
+        assert len(handler.wfile.data) > 0
+
+    def test_auth_user_loopback_ipv6_gui(self, monkeypatch):
+        monkeypatch.undo()
+        from webui.server import _auth_user
+        class MockReq:
+            path = "/api/studio/assets?gui=1"
+            headers = {"X-EB-GUI": "1"}
+            client_address = ("::ffff:127.0.0.1", 54321)
+        u = _auth_user(MockReq())
+        assert u["role"] == "admin"
+        assert "studio" in u["permissions"]
+
+
 
 

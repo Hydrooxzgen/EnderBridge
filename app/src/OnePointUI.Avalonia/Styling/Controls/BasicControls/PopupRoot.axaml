@@ -1,0 +1,31 @@
+﻿<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:behaviors="clr-namespace:OnePointUI.Avalonia.Behaviors"
+        x:ClassModifier="internal">
+    <Style Selector="PopupRoot">
+        <Setter Property="Background" Value="{x:Null}" />
+        <Setter Property="TransparencyLevelHint" Value="Transparent" />
+        <Setter Property="behaviors:PopupDismissBehavior.EnableDismiss" Value="True" />
+        <Setter Property="FontWeight" Value="Normal" />
+        <Setter Property="FontStyle" Value="Normal" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <LayoutTransformControl LayoutTransform="{TemplateBinding Transform}">
+                    <Panel>
+                        <Border Name="PART_TransparencyFallback" IsHitTestVisible="False" />
+                        <VisualLayerManager>
+                            <ContentPresenter Name="PART_ContentPresenter"
+                                              Background="{TemplateBinding Background}"
+                                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                                              Content="{TemplateBinding Content}"
+                                              Padding="{TemplateBinding Padding}" />
+                        </VisualLayerManager>
+                    </Panel>
+                </LayoutTransformControl>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="OverlayLayer">
+        <Setter Property="IsHitTestVisible" Value="True" />
+    </Style>
+</Styles>

@@ -1,0 +1,51 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+        主题资源由 ThemeManager 在运行时动态生成；
+        此文件仅作为可被外部 StyleInclude 引入的占位与示例。
+        中性色（背景/前景/边框）根据 ThemeVariant 自动切换；主题色相关画笔根据 AccentColor 实时衍生。
+    -->
+
+    <!--
+        可用画笔一览（按用途分组）：
+        ── 中性背景 ──
+        BackgroundBrush                  画布/窗口背景
+        BackgroundSecondaryBrush         卡片/次级容器背景
+        BackgroundTertiaryBrush          三级容器背景
+        BackgroundHoverBrush             容器悬停底色
+        BackgroundSubtleBrush            极弱背景
+        PrimaryBackgroundBrush           主控件底色
+        PrimaryBackgroundOverBrush       主控件悬停底色
+        PrimaryBackgroundPressedBrush    主控件按下底色
+        PrimarySubtleBackgroundBrush     半透明底色（用于开关/选中态）
+        ── 中性边框 ──
+        PrimaryBorderBrush               主边框
+        PrimaryBorderHoverBrush          悬停边框
+        PrimaryBorderPressedBrush        按下边框
+        PrimaryDisabledBorderBrush       禁用边框
+        ── 文字/前景 ──
+        PrimaryForegroundBrush           主文字
+        PrimaryForegroundSecondaryBrush  次级文字
+        PrimaryDisabledForegroundBrush   禁用文字
+        PrimaryDisabled2ForegroundBrush  禁用次级文字
+        PrimaryAccentForegroundBrush     主题色文字（用于超链接等）
+        ── 主题色（由 AccentColor 自动衍生）──
+        AccentBackgroundBrush            主题色（主）
+        AccentBackgroundHoverBrush       主题色悬停
+        AccentBackgroundPressedBrush     主题色按下
+        AccentBorderBrush                主题色边框
+        AccentBorderHoverBrush           主题色悬停边框
+        AccentForegroundBrush            主题色上文字（高对比度）
+        AccentForegroundSecondaryBrush   主题色上次级文字
+        AccentLightBrush                 主题色浅一档
+        AccentLighterBrush               主题色浅两档
+        AccentDarkBrush                  主题色深一档
+        AccentDarkerBrush                主题色深两档
+        AccentDarkestBrush               主题色深三档
+        AccentSubtleBrush                极弱主题色（选中/高亮底）
+        AccentSubtleHoverBrush           极弱主题色悬停
+        AccentSubtlePressedBrush         极弱主题色按下
+        ── 其它 ──
+        ShadowBrush / GlowBrush          阴影/光晕
+    -->
+</ResourceDictionary>

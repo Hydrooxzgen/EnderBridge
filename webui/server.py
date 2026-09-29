@@ -655,9 +655,27 @@ def _auth_user(handler) -> dict:
 
     通过会话 token 查找用户。无 token 时回退到 guest 访客。
     """
-    token = _extract_session_token(handler)
+    # 0) 本地 GUI 信任凭证 (Loopback + X-EB-GUI: 1 或 ?gui=1 / ?eb_gui=1)
+    parsed_qs = urllib.parse.parse_qs(urllib.parse.urlparse(handler.path).query)
+    is_gui = (
+        handler.headers.get("X-EB-GUI", "") == "1"
+        or parsed_qs.get("gui", [""])[0] == "1"
+        or parsed_qs.get("eb_gui", [""])[0] == "1"
+    )
+    if is_gui:
+        client_ip = handler.client_address[0] if hasattr(handler, "client_address") else ""
+        if client_ip in ("127.0.0.1", "::1", "localhost", "testclient") or client_ip.endswith("127.0.0.1"):
+            from lib.users import discover_all_permissions
+            return {
+                "username": "gui_admin",
+                "role": "admin",
+                "permissions": discover_all_permissions(),
+                "system": True,
+                "is_guest": False,
+            }
 
     # 1) 通过 session token 查找
+    token = _extract_session_token(handler)
     if token:
         session = user_manager.validate_session(token)
         if session:
@@ -2937,13 +2955,14 @@ class WebUIHandler(BaseHTTPRequestHandler):
                 self._respond({"ok": True, "filename": fn, "category": cat, "content": content})
                 return
 
-            mime = CATEGORIES.get(cat, {}).get("mime") or mimetypes.guess_type(fn)[0] or "application/octet-stream"
+            mime = mimetypes.guess_type(fn)[0] or CATEGORIES.get(cat, {}).get("mime") or "application/octet-stream"
             with open(filepath, "rb") as f:
                 content = f.read()
             self.send_response(200)
             self.send_header("Content-Type", mime)
             self.send_header("Content-Length", str(len(content)))
             self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Cache-Control", "private, max-age=300")
             self.end_headers()
             self.wfile.write(content)
         except FileNotFoundError:

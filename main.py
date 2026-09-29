@@ -35,20 +35,11 @@ USERS_JSON = os.path.join(CONFIG_DIR, "users.json")
 UPDATE_MARKER = os.path.join(ROOT, ".update_pending")
 
 # --- 版本常量 ---
-VERSION = "v1.0.0"
+VERSION = "v1.1.0 dev"
 # ↓仅当不为None时从Github拉取更新日志, 反之则直接显示该变量内容。
-DESCRIPTION = None
-"""
-fix1: 修复更新(降级)后无法在终端输入或者通过ctrl+c停止服务器的问题
-feat1: 挂起检测看门狗与自愈探针
-feat2: 定时自动备份引擎与元数据联动
-feat3: 出厂安全排障模式(--safe-mode)
-safe_feature 1: 解决重要安全漏洞
-feat4: 新增webui启用/禁用mod功能
-feat5: 新增导入mod功能
-feat_for_dev1: 权限界面现在可以自动读取features而不是每次更新需要手动添加
-fix2: 修复访客进入mod管理界面不是只读的bug
-fix3: 修复了访客mod界面只读提示的i18n显示错误的问题
+DESCRIPTION = """
+feature1: App管理界面(beta)
+fix1: 修复无法在webui预览像素画源文件的问题
 """
 MINIMIUM_ALLOWED_VERSION = "v1.0.0" # 因为v1.0.0版本新增了重要安全改进，大大降低了被第三方恶意mod入侵的风险，所以限制了降级
                                     # 但是如果你需要降级低于v1.0.0的版本，请更改这里的值为b0.0.0以删除限制
@@ -69,10 +60,12 @@ WANT_GOTO_OOBE = "--goto-oobe" in sys.argv
 WANT_UPDATE = "update" in sys.argv
 WANT_ROLLBACK = "--rollback" in sys.argv
 WANT_PREVIEW = "preview" in sys.argv
+WANT_SET_PASSWORD = ("--set-password" in sys.argv) or ("--password" in sys.argv)
 ARGV_NOT_EXIST = not WANT_RESET\
 and not WANT_VIEW_VERSION and not WANT_EXPORT \
 and not WANT_VIEW_DESCRIPTION and not WANT_HELP \
-and not WANT_ROLLBACK and not WANT_PREVIEW
+and not WANT_ROLLBACK and not WANT_PREVIEW \
+and not WANT_SET_PASSWORD
 
 # --- 终端提示符常量 ---
 CONSOLE_PROMPT = "EnderBridge> "
@@ -91,6 +84,7 @@ def _is_oneshot_command() -> bool:
         or WANT_UPDATE
         or WANT_ROLLBACK
         or WANT_PREVIEW
+        or WANT_SET_PASSWORD
         or ("--no-supervisor" in sys.argv)
         or (os.environ.get("EB_NO_SUPERVISOR") == "1")
     )
@@ -143,10 +137,27 @@ def _check_minimum_version(new_version: str) -> None:
 
 
 # ===== 依赖检测(必须早于任何第三方mod使用) ===== 
-# websockets 使用动态导入:缺失时自动运行 setup.py 安装,成功后继续启动。
+# 自动发现虚拟环境并检测核心依赖 (websockets, bcrypt)
+def _ensure_venv_path() -> None:
+    for _v in (".venv", "venv", "env"):
+        _sp = os.path.join(ROOT, _v, "Lib", "site-packages")
+        if not os.path.isdir(_sp):
+            _lib = os.path.join(ROOT, _v, "lib")
+            if os.path.isdir(_lib):
+                for _pv in os.listdir(_lib):
+                    _p = os.path.join(_lib, _pv, "site-packages")
+                    if os.path.isdir(_p):
+                        _sp = _p
+                        break
+        if os.path.isdir(_sp) and _sp not in sys.path:
+            sys.path.insert(0, _sp)
+
+_ensure_venv_path()
+
 def _dependencies_ok() -> bool:
     try:
         import websockets  # noqa: F401
+        import bcrypt      # noqa: F401
         return True
     except ImportError:
         return False
@@ -256,12 +267,14 @@ if WANT_HELP:
     print("  update <压缩包>       一键升级(保留配置,默认自动备份)")
     print("  export [输出路径]     一键导出为zip")
     print("  --rollback [备份包]   回滚到指定备份(默认最新)")
+    print("  --set-password [用户] <密码> 设置/重置 WebUI 用户密码(默认用户: admin)")
     print()
     print("选项:")
     print("  --help, -h            显示此帮助信息")
     print("  --version, -v         显示当前版本")
     print("  --safe-mode           安全模式启动: 跳过第三方 Mod 加载，仅保留核心通信与 WebUI")
     print("  --reset-all           一键重置所有配置")
+    print("  --set-password <密码> 重置管理员 admin 密码")
     print("  --load-without-config 跳过配置直接启动(调试用)")
     print("  --system              启用系统保留账户模式")
     print("  --goto-oobe           重新进入配置向导(保留当前配置)")
@@ -269,6 +282,7 @@ if WANT_HELP:
     print()
     print("示例:")
     print("  python main.py                                      启动服务器")
+    print("  python main.py --set-password 123456                将 admin 密码重置为 123456")
     print("  python main.py preview 樱花塔.litematic             在本地浏览器 3D 预览蓝图")
     print("  python main.py preview 樱花塔 --export out.html     导出独立离线 HTML 预览网页")
     print("  python main.py update update.zip                    从压缩包升级")
@@ -277,6 +291,35 @@ if WANT_HELP:
     print("  python main.py export D:/backup/eb.zip              导出到指定路径")
     print("  python main.py --reset-all                          重置所有配置")
     print("  python main.py --version                            查看版本")
+    sys.exit(0)
+
+# ===== 密码设置/重置:python main.py --set-password [用户=admin] <新密码> =====
+if WANT_SET_PASSWORD:
+    args = [a for a in sys.argv if a not in ("--set-password", "--password")]
+    pos_args = [a for a in args[1:] if not a.startswith("-")]
+    if len(pos_args) == 1:
+        target_user = "admin"
+        new_pw = pos_args[0]
+    elif len(pos_args) >= 2:
+        target_user = pos_args[0]
+        new_pw = pos_args[1]
+    else:
+        print("[用法] python main.py --set-password <新密码>")
+        print("       python main.py --set-password <用户名> <新密码>")
+        sys.exit(1)
+
+    from lib.users import user_manager, hash_password
+    user_manager.load()
+    u = user_manager.get_user(target_user)
+    if not u:
+        user_manager.add_user(target_user, new_pw, role="admin")
+    else:
+        u["password_hash"] = hash_password(new_pw)
+        user_manager.save()
+    print("========================================")
+    print(f"  [EnderBridge] 用户 [{target_user}] 密码已成功更新！")
+    print(f"  新密码: {new_pw}")
+    print("========================================")
     sys.exit(0)
 
 # ===== 回滚:python main.py --rollback [备份包] =====
@@ -1323,10 +1366,11 @@ def _start_webui() -> None:
         banlist.load()
         # 从配置加载自动封禁参数(window/threshold/duration)和开关
         banlist.load_auto_ban_config()
-        # 首次运行或升级:打印 admin 凭证到终端
+        # 首次运行或升级:打印 admin 凭证到终端并输出到日志
         if user_manager._first_run_password:
             admin_pw = user_manager._first_run_password
             user_manager._first_run_password = None  # 只打印一次
+            shared.logger.info(f"[EnderBridge] WebUI 用户系统已初始化，初始管理员: admin，初始密码: {admin_pw}")
             print("=" * 44)
             print("  [EnderBridge] WebUI 用户系统已初始化")
             print(f"  用户名: admin")
@@ -1691,7 +1735,8 @@ def _console_list():
 def _show_prompt():
     """显示终端提示符(防重复:提示符已在行首时不重复输出)"""
     global _prompt_visible
-    if _restarting or _prompt_visible:
+    # 在非交互终端(如 GUI 重定向管道)或重启时不向 stdout 刷提示符
+    if _restarting or _prompt_visible or not sys.stdout.isatty() or os.environ.get("EB_GUI"):
         return
     _prompt_visible = True
     sys.stdout.write(CONSOLE_PROMPT)
@@ -1702,8 +1747,9 @@ def _clear_prompt():
     """日志输出前清除当前行的提示符"""
     global _prompt_visible
     _prompt_visible = False
-    sys.stdout.write("\r\x1b[K")
-    sys.stdout.flush()
+    if sys.stdout.isatty() and not os.environ.get("EB_GUI"):
+        sys.stdout.write("\r\x1b[K")
+        sys.stdout.flush()
 
 
 # 注册控制台钩子:日志写 stdout 前清除提示符,写完后补回来

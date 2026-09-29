@@ -1,0 +1,86 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:OnePointUI.Avalonia.Styling.Controls.OnePointControls.Navigation.TabView"
+        xmlns:onePointControls="clr-namespace:OnePointUI.Avalonia.Styling.Controls.OnePointControls">
+    <Design.PreviewWith>
+        <Border Width="520" Height="240" Padding="12">
+            <controls:TabView SelectedIndex="0">
+                <controls:TabViewItem Header="Home" Glyph="&#xE80F;">
+                    <TextBlock Text="Home" Margin="16" />
+                </controls:TabViewItem>
+                <controls:TabViewItem Header="Editor">
+                    <TextBlock Text="Editor" Margin="16" />
+                </controls:TabViewItem>
+            </controls:TabView>
+        </Border>
+    </Design.PreviewWith>
+
+    <Style Selector="controls|TabView">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Stretch" />
+        <Setter Property="ItemsPanel">
+            <ItemsPanelTemplate>
+                <StackPanel Orientation="Horizontal" Spacing="4" />
+            </ItemsPanelTemplate>
+        </Setter>
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{TemplateBinding Background}">
+                    <Grid RowDefinitions="Auto,*">
+                        <Grid Grid.Row="0"
+                              Name="PART_TabStrip"
+                              MinHeight="42"
+                              Margin="8,8,8,0">
+                            <Border Background="{DynamicResource PrimaryBackgroundBrush}"
+                                    Opacity="0.55"
+                                    CornerRadius="8" />
+                            <Grid ColumnDefinitions="*,Auto">
+                                <ScrollViewer Grid.Column="0"
+                                              HorizontalScrollBarVisibility="Auto"
+                                              VerticalScrollBarVisibility="Disabled">
+                                    <Panel>
+                                        <ItemsPresenter Name="PART_ItemsPresenter"
+                                                        Margin="6,4"
+                                                        ItemsPanel="{TemplateBinding ItemsPanel}" />
+                                        <Border Name="PART_DropIndicator"
+                                                Width="2"
+                                                HorizontalAlignment="Left"
+                                                VerticalAlignment="Stretch"
+                                                CornerRadius="1"
+                                                Background="{DynamicResource AccentBackgroundBrush}"
+                                                IsVisible="False"
+                                                IsHitTestVisible="False" />
+                                    </Panel>
+                                </ScrollViewer>
+                                <Button Grid.Column="1"
+                                        Name="PART_AddButton"
+                                        Classes="NoBorder"
+                                        Width="28"
+                                        Height="28"
+                                        Margin="4,0,8,0"
+                                        VerticalAlignment="Center"
+                                        IsVisible="{TemplateBinding IsAddButtonVisible}">
+                                    <onePointControls:FontIcon Glyph="&#xE710;" FontSize="12" />
+                                </Button>
+                            </Grid>
+                        </Grid>
+                        <Border Grid.Row="1"
+                                Margin="8,6,8,8"
+                                CornerRadius="8"
+                                ClipToBounds="True"
+                                Background="{DynamicResource BackgroundSecondaryBrush}">
+                            <ContentPresenter Name="PART_SelectedContentHost"
+                                              Margin="{TemplateBinding Padding}"
+                                              HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                                              Content="{TemplateBinding SelectedContent}"
+                                              ContentTemplate="{TemplateBinding SelectedContentTemplate}" />
+                        </Border>
+                    </Grid>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+</Styles>

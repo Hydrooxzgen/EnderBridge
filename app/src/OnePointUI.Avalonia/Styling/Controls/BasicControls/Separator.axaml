@@ -1,0 +1,25 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Design.PreviewWith>
+        <Border Padding="20" Width="200">
+            <StackPanel Spacing="6">
+                <TextBlock Text="Above" />
+                <Separator />
+                <TextBlock Text="Below" />
+            </StackPanel>
+        </Border>
+    </Design.PreviewWith>
+
+    <Style Selector="Separator">
+        <Setter Property="Background" Value="{DynamicResource PrimaryBorderBrush}" />
+        <Setter Property="Margin" Value="2,4" />
+        <Setter Property="Height" Value="1" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{TemplateBinding Background}"
+                        Height="{TemplateBinding Height}"
+                        HorizontalAlignment="Stretch" />
+            </ControlTemplate>
+        </Setter>
+    </Style>
+</Styles>

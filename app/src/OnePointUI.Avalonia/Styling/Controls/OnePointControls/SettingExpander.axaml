@@ -1,0 +1,141 @@
+﻿<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:OnePointUI.Avalonia.Styling.Controls.OnePointControls"
+        xmlns:items="clr-namespace:OnePointUI.Avalonia.Styling.Controls.OnePointControls.Items">
+    <Design.PreviewWith>
+        <controls:SettingExpander Width="380"
+                                  Header="Expander"
+                                  Description="aaa">
+            <StackPanel>
+                <Button>1111</Button>
+                <Button>1111</Button>
+                <Button>1111</Button>
+                <Button>1111</Button>
+            </StackPanel>
+        </controls:SettingExpander>
+    </Design.PreviewWith>
+
+    <Style Selector="controls|SettingExpander">
+        <!-- Set Defaults -->
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Grid RowDefinitions="Auto,*">
+                    <ToggleButton Classes="Expander" Name="HeardBtn">
+                        <items:BorderCard
+                            MinHeight="{TemplateBinding MinHeight}"
+                            CornerRadius="{Binding #HeardBtn.CornerRadius}"
+                            Padding="0"
+                            Name="PATH_Border">
+                            <Grid>
+                                <Border HorizontalAlignment="Stretch"
+                                        VerticalAlignment="Stretch"
+                                        Name="PATH_Background"
+                                        CornerRadius="{Binding #HeardBtn.CornerRadius}"
+                                        ClipToBounds="True"
+                                        Background="{DynamicResource PrimaryForegroundBrush}"
+                                        Opacity="0" />
+
+                                <Border HorizontalAlignment="Stretch"
+                                        VerticalAlignment="Stretch"
+                                        CornerRadius="{Binding #HeardBtn.CornerRadius}"
+                                        ClipToBounds="True"
+                                        IsVisible="{Binding #HeardBtn.IsChecked}"
+                                        Background="{DynamicResource PrimaryBackgroundOverBrush}"
+                                        Opacity="0.1" />
+
+                                <Border Padding="8">
+                                    <Grid>
+                                        <controls:FontIcon Glyph="{TemplateBinding Glyph}"
+                                                           FontSize="28"
+                                                           Margin="8,0,0,0"
+                                                           IsVisible="{TemplateBinding IsFontIcon}"
+                                                           HorizontalAlignment="Left"
+                                                           VerticalAlignment="Center" />
+
+                                        <Image Width="32" Height="32"
+                                               Stretch="UniformToFill"
+                                               Margin="6,0,0,0"
+                                               IsVisible="{TemplateBinding IsNotFontIcon}"
+                                               Source="{TemplateBinding ImageIcon}"
+                                               HorizontalAlignment="Left"
+                                               VerticalAlignment="Center" />
+
+                                        <StackPanel VerticalAlignment="Center"
+                                                    Margin="50,0,0,0">
+                                            <ContentPresenter Content="{TemplateBinding Header}"
+                                                              FontSize="18">
+                                                <ContentPresenter.Styles>
+                                                    <Style Selector="TextBlock">
+                                                        <Setter Property="FontSize"
+                                                                Value="18" />
+                                                    </Style>
+                                                </ContentPresenter.Styles>
+                                            </ContentPresenter>
+
+                                            <ContentPresenter Content="{TemplateBinding Description}">
+                                                <ContentPresenter.Styles>
+                                                    <Style Selector="TextBlock">
+                                                        <Setter Property="FontSize"
+                                                                Value="12" />
+                                                        <Setter Property="Foreground"
+                                                                Value="Gray" />
+                                                    </Style>
+                                                </ContentPresenter.Styles>
+                                            </ContentPresenter>
+                                        </StackPanel>
+
+                                        <StackPanel Orientation="Horizontal"
+                                                    HorizontalAlignment="Right"
+                                                    VerticalAlignment="Center">
+                                            <ContentControl Content="{TemplateBinding ItemContent}"
+                                                            Margin="0,0,12,0" />
+
+                                            <Border>
+                                                <controls:FontIcon Glyph="&#xE70D;"
+                                                                   VerticalAlignment="Center"
+                                                                   Margin="0,0,8,0"
+                                                                   FontSize="16" />
+                                            </Border>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </Grid>
+                        </items:BorderCard>
+                    </ToggleButton>
+
+                    <items:BorderCard Grid.Row="1"
+                                      Padding="0"
+                                      CornerRadius="0,0,6,6"
+                                      IsVisible="{Binding #HeardBtn.IsChecked}">
+                        <ContentControl Content="{TemplateBinding Content}" />
+                    </items:BorderCard>
+                </Grid>
+            </ControlTemplate>
+        </Setter>
+
+        <Setter Property="MinHeight" Value="72" />
+
+        <Style Selector="^ /template/ Border#PATH_Background">
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Opacity"
+                                      Duration="0:0:0.08" />
+                </Transitions>
+            </Setter>
+        </Style>
+
+        <Style Selector="^:pointerover /template/ Border#PATH_Background">
+            <Setter Property="Opacity" Value="0.1" />
+        </Style>
+
+        <!-- 当Expander展开时修改顶部BorderCard的圆角 -->
+        <Style Selector="^:checked /template/ items|BorderCard#PATH_Border">
+            <Setter Property="CornerRadius" Value="6,6,0,0" />
+        </Style>
+
+        <!-- 同时修改背景边框的圆角 -->
+        <Style Selector="^:checked /template/ Border#PATH_Background">
+            <Setter Property="CornerRadius" Value="6,6,0,0" />
+        </Style>
+    </Style>
+</Styles>

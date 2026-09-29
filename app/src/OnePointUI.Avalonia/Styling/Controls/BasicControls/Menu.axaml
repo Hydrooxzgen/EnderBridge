@@ -1,0 +1,131 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Design.PreviewWith>
+        <Border Padding="20">
+            <StackPanel Width="240" Spacing="10">
+                <Menu>
+                    <MenuItem Header="_File">
+                        <MenuItem Header="_New" InputGesture="Ctrl+N" />
+                        <MenuItem Header="_Open" InputGesture="Ctrl+O" />
+                        <Separator />
+                        <MenuItem Header="E_xit" />
+                    </MenuItem>
+                    <MenuItem Header="_Edit">
+                        <MenuItem Header="_Cut" InputGesture="Ctrl+X" />
+                        <MenuItem Header="_Copy" InputGesture="Ctrl+C" />
+                    </MenuItem>
+                    <MenuItem Header="_Help" IsEnabled="False" />
+                </Menu>
+
+                <TextBlock Text="右键窗口任意位置查看 ContextMenu" />
+            </StackPanel>
+        </Border>
+    </Design.PreviewWith>
+
+    <!-- Menu 容器 -->
+    <Style Selector="Menu">
+        <Setter Property="Background" Value="{DynamicResource BackgroundSecondaryBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PrimaryBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Padding" Value="4" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="{TemplateBinding CornerRadius}"
+                        Padding="{TemplateBinding Padding}">
+                    <ItemsPresenter Name="PART_ItemsPresenter"
+                                    ItemsPanel="{TemplateBinding ItemsPanel}" />
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+
+    <!-- 顶层 MenuItem -->
+    <Style Selector="Menu > MenuItem">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryForegroundBrush}" />
+        <Setter Property="Padding" Value="10,6" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Name="PART_Header"
+                        Background="{TemplateBinding Background}"
+                        CornerRadius="{TemplateBinding CornerRadius}"
+                        Padding="{TemplateBinding Padding}">
+                    <ContentPresenter Name="PART_HeaderPresenter"
+                                      Content="{TemplateBinding Header}"
+                                      ContentTemplate="{TemplateBinding HeaderTemplate}"
+                                      VerticalAlignment="Center"
+                                      RecognizesAccessKey="True" />
+                </Border>
+            </ControlTemplate>
+        </Setter>
+
+        <Style Selector="^:pointerover Border#PART_Header">
+            <Setter Property="Background" Value="{DynamicResource AccentSubtleBrush}" />
+        </Style>
+
+        <Style Selector="^:open Border#PART_Header">
+            <Setter Property="Background" Value="{DynamicResource AccentSubtlePressedBrush}" />
+        </Style>
+
+        <Style Selector="^:disabled">
+            <Setter Property="Opacity" Value="0.5" />
+        </Style>
+    </Style>
+
+    <!-- 子级 MenuItem（在 Popup 中显示） -->
+    <Style Selector="MenuItem">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryForegroundBrush}" />
+        <Setter Property="Padding" Value="10,6" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Name="PART_Root"
+                        Background="{TemplateBinding Background}"
+                        CornerRadius="{TemplateBinding CornerRadius}"
+                        Padding="{TemplateBinding Padding}">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <ContentPresenter Grid.Column="0"
+                                          Name="PART_IconPresenter"
+                                          Content="{TemplateBinding Icon}"
+                                          Width="16" Height="16"
+                                          Margin="0,0,8,0" />
+                        <ContentPresenter Grid.Column="1"
+                                          Name="PART_HeaderPresenter"
+                                          Content="{TemplateBinding Header}"
+                                          ContentTemplate="{TemplateBinding HeaderTemplate}"
+                                          RecognizesAccessKey="True"
+                                          VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="2"
+                                   Text="{TemplateBinding InputGesture}"
+                                   Margin="16,0,0,0"
+                                   Foreground="{DynamicResource PrimaryDisabledForegroundBrush}"
+                                   VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+
+        <Style Selector="^:pointerover Border#PART_Root">
+            <Setter Property="Background" Value="{DynamicResource AccentSubtleBrush}" />
+        </Style>
+
+        <Style Selector="^:disabled">
+            <Setter Property="Opacity" Value="0.5" />
+        </Style>
+    </Style>
+
+    <!-- 子菜单的弹出面板 -->
+    <Style Selector="MenuItem > Popup > Border">
+        <Setter Property="Background" Value="{DynamicResource BackgroundTertiaryBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PrimaryBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Padding" Value="4" />
+    </Style>
+</Styles>

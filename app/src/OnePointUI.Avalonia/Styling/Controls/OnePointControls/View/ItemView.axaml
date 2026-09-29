@@ -1,0 +1,34 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:OnePointUI.Avalonia.Styling.Controls.OnePointControls.View">
+    <Design.PreviewWith>
+        <controls:ItemView />
+    </Design.PreviewWith>
+
+    <Style Selector="controls|ItemView">
+        <Setter Property="ItemsPanel">
+            <ItemsPanelTemplate>
+                <WrapPanel Margin="5,0" />
+            </ItemsPanelTemplate>
+        </Setter>
+        <!-- Set Defaults -->
+        <Setter Property="Template">
+            <ControlTemplate>
+                <ScrollViewer Name="PART_ScrollViewer"
+                              Background="{TemplateBinding Background}"
+                              VerticalSnapPointsType="{TemplateBinding (ScrollViewer.VerticalSnapPointsType)}"
+                              HorizontalSnapPointsType="{TemplateBinding (ScrollViewer.HorizontalSnapPointsType)}"
+                              HorizontalScrollBarVisibility="{TemplateBinding (ScrollViewer.HorizontalScrollBarVisibility)}"
+                              VerticalScrollBarVisibility="Disabled"
+                              IsScrollChainingEnabled="{TemplateBinding (ScrollViewer.IsScrollChainingEnabled)}"
+                              IsScrollInertiaEnabled="{TemplateBinding (ScrollViewer.IsScrollInertiaEnabled)}"
+                              IsDeferredScrollingEnabled="{TemplateBinding (ScrollViewer.IsDeferredScrollingEnabled)}"
+                              AllowAutoHide="{TemplateBinding (ScrollViewer.AllowAutoHide)}"
+                              BringIntoViewOnFocusChange="{TemplateBinding (ScrollViewer.BringIntoViewOnFocusChange)}">
+                    <ItemsPresenter Name="PART_ItemsPresenter"
+                                    ItemsPanel="{TemplateBinding ItemsPanel}" />
+                </ScrollViewer>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+</Styles>

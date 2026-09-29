@@ -1,0 +1,103 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:onePointControls="clr-namespace:OnePointUI.Avalonia.Styling.Controls.OnePointControls">
+    <Design.PreviewWith>
+        <Border Padding="20">
+            <StackPanel Spacing="10" Width="220">
+                <NumericUpDown Value="0" Minimum="0" Maximum="100" />
+                <NumericUpDown Value="50" Minimum="0" Maximum="100" IsEnabled="False" />
+                <NumericUpDown Value="10" Minimum="0" Maximum="100" Increment="5" FormatString="N0" />
+            </StackPanel>
+        </Border>
+    </Design.PreviewWith>
+
+    <Style Selector="NumericUpDown">
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryForegroundBrush}" />
+        <Setter Property="Background" Value="{DynamicResource PrimaryBackgroundBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PrimaryBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="MinHeight" Value="32" />
+        <Setter Property="Padding" Value="10,0" />
+        <Setter Property="ClipToBounds" Value="True" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Name="PART_RootBorder"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="0"
+                        Background="{TemplateBinding Background}"
+                        CornerRadius="{TemplateBinding CornerRadius}"
+                        MinHeight="{TemplateBinding MinHeight}">
+                    
+                    <Grid ColumnDefinitions="*,Auto">
+                        
+                        <TextBox Name="PART_TextBox"
+                                 Grid.Column="0"
+                                 Background="Transparent"
+                                 BorderBrush="Transparent"
+                                 BorderThickness="0"
+                                 Padding="{TemplateBinding Padding}"
+                                 Foreground="{TemplateBinding Foreground}"
+                                 Watermark="{TemplateBinding Watermark}"
+                                 Text="{TemplateBinding Text, Mode=TwoWay}"
+                                 MinHeight="0"
+                                 VerticalContentAlignment="Center" />
+                        
+                        <ButtonSpinner Name="PART_Spinner"
+                                       Grid.Column="1"
+                                       AllowSpin="{TemplateBinding AllowSpin}"
+                                       ShowButtonSpinner="{TemplateBinding ShowButtonSpinner}"
+                                       BorderThickness="0"
+                                       Background="Transparent"
+                                       VerticalAlignment="Stretch">
+                            
+                            <ButtonSpinner.Template>
+                                <ControlTemplate>
+                                    <Grid ColumnDefinitions="Auto,Auto">
+                                        <Button Name="PART_DecreaseButton"
+                                                Grid.Column="0"
+                                                Width="32"
+                                                Padding="0"
+                                                Focusable="False"
+                                                BorderThickness="0"
+                                                Background="Transparent"
+                                                VerticalAlignment="Stretch"
+                                                HorizontalContentAlignment="Center"
+                                                VerticalContentAlignment="Center"
+                                                Classes="NoBorder"
+                                                Foreground="{DynamicResource PrimaryForegroundSecondaryBrush}">
+                                            <onePointControls:FontIcon Glyph="&#xE949;"/>
+                                        </Button>
+                                        
+                                        <Button Name="PART_IncreaseButton"
+                                                Grid.Column="1"
+                                                Width="32"
+                                                Padding="0"
+                                                Focusable="False"
+                                                BorderThickness="0"
+                                                Background="Transparent"
+                                                VerticalAlignment="Stretch"
+                                                HorizontalContentAlignment="Center"
+                                                VerticalContentAlignment="Center"
+                                                Classes="NoBorder"
+                                                Foreground="{DynamicResource PrimaryForegroundSecondaryBrush}">
+                                            <onePointControls:FontIcon Glyph="&#xE948;"/>
+                                        </Button>
+                                    </Grid>
+                                </ControlTemplate>
+                            </ButtonSpinner.Template>
+                        </ButtonSpinner>
+                    </Grid>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+
+        <Style Selector="^:disabled">
+            <Setter Property="Opacity" Value="0.55" />
+        </Style>
+        
+        <Style Selector="^:focus-within /template/ Border#PART_RootBorder">
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBorderBrush}" />
+        </Style>
+    </Style>
+</Styles>

@@ -1,0 +1,127 @@
+﻿<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:onePointControls="clr-namespace:OnePointUI.Avalonia.Styling.Controls.OnePointControls">
+    <Design.PreviewWith>
+        <Border Padding="20">
+            <StackPanel Spacing="10">
+                <ToggleButton Margin="5" Width="200" Height="40" Content="Standard ToggleButton" />
+                <ToggleButton Margin="5" Width="200" Height="40" Content="Transparent ToggleButton"
+                              Background="Transparent" BorderBrush="Transparent" />
+                <ToggleButton Margin="5" Width="200" Height="40" Content="Disabled Standard ToggleButton"
+                              IsEnabled="False" />
+                <ToggleButton Margin="5" Width="200" Height="40" Content="Disabled Transparent ToggleButton"
+                              Background="Transparent" BorderBrush="Transparent" IsEnabled="False" />
+                <Expander Width="200" Header="111" IsExpanded="True">
+                    <StackPanel>
+                        <Button>111</Button>
+                        <Button>111</Button>
+                        <Button>111</Button>
+                    </StackPanel>
+                </Expander>
+            </StackPanel>
+        </Border>
+    </Design.PreviewWith>
+
+    <!-- Add Styles Here -->
+    <Style Selector="ToggleButton">
+        <Setter Property="Background" Value="{DynamicResource PrimaryBackgroundBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PrimaryBorderBrush}" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Grid>
+                    <Border Name="Path_Border"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            BorderThickness="1"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}">
+                        <Grid>
+                            <Border Name="Path_Background"
+                                    HorizontalAlignment="Stretch"
+                                    VerticalAlignment="Stretch"
+                                    CornerRadius="{TemplateBinding CornerRadius}"
+                                    Background="{DynamicResource PrimaryBackgroundOverBrush}"
+                                    Opacity="0" />
+                        </Grid>
+                    </Border>
+
+                    <ContentPresenter Content="{TemplateBinding Content}"
+                                      Foreground="{TemplateBinding Foreground}"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center" />
+
+                    <onePointControls:PointHalo CornerRadius="{TemplateBinding CornerRadius}" />
+
+                </Grid>
+            </ControlTemplate>
+        </Setter>
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryForegroundBrush}" />
+
+        <Style Selector="^:disabled">
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryDisabledForegroundBrush}" />
+        </Style>
+
+        <Style Selector="^:disabled Border#Path_Background">
+            <Setter Property="Opacity" Value="0.3" />
+        </Style>
+
+        <Style Selector="^:checked Border#Path_Border">
+            <Setter Property="Background" Value="{DynamicResource AccentBackgroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBorderBrush}" />
+        </Style>
+
+        <Style Selector="^:checked">
+            <Setter Property="Foreground" Value="{DynamicResource AccentForegroundBrush}" />
+        </Style>
+
+        <Style Selector="^:pointerover Border#Path_Border">
+            <Setter Property="BorderBrush" Value="{DynamicResource PrimaryBorderHoverBrush}" />
+            <Setter Property="BorderThickness" Value="2,2,2,4" />
+        </Style>
+
+        <Style Selector="^:pointerover Border#Path_Background">
+            <Setter Property="Opacity" Value="0.3" />
+        </Style>
+
+        <Style Selector="^:pressed Border#Path_Border">
+            <Setter Property="BorderThickness" Value="2,2,2,2" />
+        </Style>
+
+        <Style Selector="^:pressed">
+            <Style Selector="^:checked Border#Path_Background">
+                <Setter Property="Background" Value="{DynamicResource AccentBackgroundPressedBrush}" />
+                <Setter Property="Opacity" Value="1" />
+            </Style>
+            <Style Selector="^:unchecked Border#Path_Background">
+                <Setter Property="Background" Value="{DynamicResource AccentSubtleBrush}" />
+                <Setter Property="Opacity" Value="1" />
+            </Style>
+        </Style>
+    </Style>
+
+    <Style Selector="ToggleButton.Expander">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <ContentControl>
+                    <Border Background="{TemplateBinding BorderBrush}"
+                            CornerRadius="6,6,6,6"
+                            Name="HeadButton">
+                        <Grid>
+                            <ContentPresenter Content="{TemplateBinding Content}" />
+                        </Grid>
+                    </Border>
+                </ContentControl>
+            </ControlTemplate>
+        </Setter>
+
+        <Style Selector="^:checked Border#HeadButton">
+            <Setter Property="CornerRadius" Value="6,6,0,0" />
+        </Style>
+
+        <Style Selector="^:checked">
+            <Setter Property="CornerRadius" Value="6,6,0,0" />
+        </Style>
+    </Style>
+</Styles>

@@ -1,0 +1,22 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Design.PreviewWith>
+        <Border Padding="20" Width="300" Height="160">
+            <SplitView IsPaneOpen="True" DisplayMode="Inline" OpenPaneLength="120">
+                <SplitView.Pane>
+                    <Border Background="{DynamicResource BackgroundSecondaryBrush}">
+                        <TextBlock Text="侧边栏" Margin="12" VerticalAlignment="Top" />
+                    </Border>
+                </SplitView.Pane>
+                <Border Background="{DynamicResource BackgroundBrush}">
+                    <TextBlock Text="主内容" Margin="12" VerticalAlignment="Top" />
+                </Border>
+            </SplitView>
+        </Border>
+    </Design.PreviewWith>
+
+    <Style Selector="SplitView">
+        <Setter Property="Background" Value="{DynamicResource BackgroundBrush}" />
+        <Setter Property="PaneBackground" Value="{DynamicResource BackgroundSecondaryBrush}" />
+    </Style>
+</Styles>

@@ -19,12 +19,32 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CONFIG_DIR = os.path.join(ROOT, "config")
 USERS_JSON = os.path.join(CONFIG_DIR, "users.json")
 
-# ===== bcrypt 可选依赖 =====
+# ===== bcrypt 依赖导入与虚拟环境自动发现 =====
 try:
     import bcrypt as _bcrypt
     _HAS_BCRYPT = True
 except ImportError:
     _HAS_BCRYPT = False
+    # 尝试在项目根目录 .venv / venv / env 中查找 site-packages
+    import sys
+    for _venv in (".venv", "venv", "env"):
+        _sp = os.path.join(ROOT, _venv, "Lib", "site-packages")
+        if not os.path.isdir(_sp):
+            _lib = os.path.join(ROOT, _venv, "lib")
+            if os.path.isdir(_lib):
+                for _pv in os.listdir(_lib):
+                    _p = os.path.join(_lib, _pv, "site-packages")
+                    if os.path.isdir(_p):
+                        _sp = _p
+                        break
+        if os.path.isdir(_sp) and _sp not in sys.path:
+            sys.path.insert(0, _sp)
+            try:
+                import bcrypt as _bcrypt
+                _HAS_BCRYPT = True
+                break
+            except ImportError:
+                pass
 
 # ===== 密码哈希 =====
 
@@ -44,16 +64,50 @@ def verify_password(password: str, password_hash: str) -> bool:
         return True  # 空密码 = 空哈希(仅 guest 用)
     if not password_hash:
         return False
-    if password_hash.startswith("$2") and _HAS_BCRYPT:
-        return _bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
+    # 容错 1: 密码直接等于哈希密文(允许在客户端/WebUI中直接粘贴 users.json 中的哈希密文作为安全凭据登录)
+    if password == password_hash or password.strip() == password_hash.strip():
+        return True
+    if password_hash.startswith("$2"):
+        if not _HAS_BCRYPT:
+            try:
+                from lib import shared
+                shared.logger.error("[users] 无法验证用户密码: 密码为 bcrypt 哈希, 但当前 Python 环境未安装 bcrypt 模块！请安装 bcrypt 或使用包含依赖的环境启动。")
+            except Exception:
+                pass
+            return False
+        try:
+            p_bytes = password.encode("utf-8")
+            h_bytes = password_hash.strip().encode("utf-8")
+            if _bcrypt.checkpw(p_bytes, h_bytes):
+                return True
+            # 容错 2: 去除全角/半角空格、回车换行等所有不可见控制字符
+            p_trimmed = password.strip()
+            if p_trimmed and p_trimmed != password:
+                if _bcrypt.checkpw(p_trimmed.encode("utf-8"), h_bytes):
+                    return True
+        except Exception as e:
+            try:
+                from lib import shared
+                shared.logger.warning(f"[users] bcrypt 校验异常: {e}")
+            except Exception:
+                pass
+            return False
+        return False
     if password_hash.startswith("pbkdf2:"):
         parts = password_hash.split(":")
         if len(parts) == 4:
             _, algo, salt, stored_hex = parts
             # 兼容旧格式: 存储时误用 "256" 而非 "sha256"
             digest = "sha256" if algo == "256" else algo
-            dk = hashlib.pbkdf2_hmac(digest, password.encode("utf-8"), salt.encode("utf-8"), 260000)
-            return dk.hex() == stored_hex
+            p_bytes = password.encode("utf-8")
+            dk = hashlib.pbkdf2_hmac(digest, p_bytes, salt.encode("utf-8"), 260000)
+            if dk.hex() == stored_hex:
+                return True
+            p_trimmed = password.strip("\r\n \t")
+            if p_trimmed and p_trimmed != password:
+                dk_t = hashlib.pbkdf2_hmac(digest, p_trimmed.encode("utf-8"), salt.encode("utf-8"), 260000)
+                if dk_t.hex() == stored_hex:
+                    return True
     return False
 
 
@@ -380,10 +434,25 @@ class UserManager:
         self._ensure_loaded()
         user = self.get_user(username)
         if not user:
+            try:
+                from lib import shared
+                shared.logger.warning(f"[users] 认证失败: 用户名 [{username}] 不存在")
+            except Exception:
+                pass
             return {"ok": False, "message": "用户名或密码错误"}
         if not user.get("enabled", True):
+            try:
+                from lib import shared
+                shared.logger.warning(f"[users] 认证失败: 用户 [{username}] 已被禁用")
+            except Exception:
+                pass
             return {"ok": False, "message": "该账户已被禁用"}
         if not verify_password(password, user.get("password_hash", "")):
+            try:
+                from lib import shared
+                shared.logger.warning(f"[users] 认证失败: 用户 [{username}] 密码验证未通过 (哈希前缀: {user.get('password_hash', '')[:7]}, 输入密码长度: {len(password)})")
+            except Exception:
+                pass
             return {"ok": False, "message": "用户名或密码错误"}
         # 生成会话 token
         token = secrets.token_hex(32)

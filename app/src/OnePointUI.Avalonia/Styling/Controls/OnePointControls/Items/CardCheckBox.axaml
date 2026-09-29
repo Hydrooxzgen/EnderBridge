@@ -1,0 +1,88 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:OnePointUI.Avalonia.Styling.Controls.OnePointControls.Items"
+        xmlns:onePointControls="clr-namespace:OnePointUI.Avalonia.Styling.Controls.OnePointControls">
+    <Design.PreviewWith>
+        <controls:CardCheckBox Header="Fabric"
+                               Description="0.14.1"
+                               IsChecked="True"
+                               Info="点击选择版本" />
+    </Design.PreviewWith>
+
+    <Style Selector="controls|CardCheckBox">
+        <Setter Property="Foreground"
+                Value="{DynamicResource PrimaryForegroundBrush}" />
+        <!-- Set Defaults -->
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Panel>
+                    <controls:BorderCard Width="200"
+                                         Height="120" />
+
+                    <Grid>
+                        <onePointControls:FontIcon VerticalAlignment="Center"
+                                                   HorizontalAlignment="Right"
+                                                   Margin="10,10,10,10"
+                                                   FontSize="16"
+                                                   Glyph="&#xE76C;"
+                                                   Foreground="{TemplateBinding Foreground}" />
+
+                        <Border Height="26"
+                                Padding="6,0"
+                                Opacity="0"
+                                CornerRadius="4"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Top"
+                                Name="PART_Info"
+                                Margin="10"
+                                BoxShadow="0 0 5 0 Gray"
+                                Background="{DynamicResource PrimaryBorderBrush}">
+                            <Border.Transitions>
+                                <Transitions>
+                                    <DoubleTransition Property="Opacity"
+                                                      Duration="0:0:0.18" />
+                                </Transitions>
+                            </Border.Transitions>
+                            <TextBlock HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       Text="{TemplateBinding Info}" />
+                        </Border>
+
+                        <Image Width="36"
+                               Height="36"
+                               HorizontalAlignment="Left"
+                               VerticalAlignment="Top"
+                               Source="{TemplateBinding ImageIcon}"
+                               Stretch="UniformToFill"
+                               Margin="10,20,10,10" />
+
+                        <Panel VerticalAlignment="Bottom">
+                            <StackPanel HorizontalAlignment="Left"
+                                        VerticalAlignment="Center"
+                                        Margin="10">
+                                <TextBlock Text="{TemplateBinding Header}"
+                                           FontSize="18" />
+
+                                <TextBlock Text="{TemplateBinding Description}"
+                                           FontSize="11" />
+                            </StackPanel>
+
+                            <ToggleSwitch HorizontalAlignment="Right"
+                                          VerticalAlignment="Center"
+                                          IsChecked="{TemplateBinding IsChecked}"
+                                          Margin="15,15,15,10" />
+                        </Panel>
+                    </Grid>
+                </Panel>
+            </ControlTemplate>
+        </Setter>
+
+        <Style Selector="^:pointerover /template/ Border#PART_Info">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+
+        <Style Selector="^:pressed /template/ Border#PART_Info">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+    </Style>
+</Styles>

@@ -1,0 +1,153 @@
+﻿<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Design.PreviewWith>
+        <Border Padding="20">
+            <StackPanel>
+                <Slider Width="200" Minimum="0" Maximum="100" Value="50" Margin="5" />
+                <Slider Width="200" Minimum="0" Maximum="100" Value="50" Margin="5" Classes="Number" />
+                <Slider Width="200" Minimum="0" Maximum="100" Value="50" IsEnabled="False" Margin="5" />
+            </StackPanel>
+        </Border>
+    </Design.PreviewWith>
+
+    <Style Selector="Slider">
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Grid>
+                    <Track Name="PART_Track"
+                           Minimum="{TemplateBinding Minimum}"
+                           Maximum="{TemplateBinding Maximum}"
+                           Value="{TemplateBinding Value}"
+                           Orientation="Horizontal">
+                        <Track.DecreaseButton>
+                            <RepeatButton
+                                Height="8"
+                                Name="PART_DecreaseButton"
+                                Focusable="False" />
+                        </Track.DecreaseButton>
+                        <Track.IncreaseButton>
+                            <RepeatButton
+                                Height="8"
+                                Name="PART_IncreaseButton"
+                                Focusable="False" />
+                        </Track.IncreaseButton>
+                        <!-- 已填充部分 -->
+                        <Track.Thumb>
+                            <Thumb Name="PART_Thumb">
+                                <Thumb.Template>
+                                    <ControlTemplate>
+                                        <Border Height="22" Width="22"
+                                                BorderThickness="4"
+                                                BorderBrush="{DynamicResource PrimaryBorderBrush}"
+                                                Background="{DynamicResource AccentBackgroundBrush}"
+                                                CornerRadius="11" Name="PART_Thumb_Border" />
+                                    </ControlTemplate>
+                                </Thumb.Template>
+                            </Thumb>
+                        </Track.Thumb>
+                    </Track>
+                </Grid>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+
+    <Style Selector="Slider.Number">
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Grid ColumnDefinitions="Auto,*">
+                    <Grid Grid.Column="0"
+                          MinWidth="32"
+                          Margin="0,0,5,0">
+                        <TextBlock VerticalAlignment="Center"
+                                   HorizontalAlignment="Center"
+                                   Foreground="Gray">
+                            <TextBlock.Text>
+                                <MultiBinding StringFormat='{}{0:0}'>
+                                    <Binding Path="Value" RelativeSource="{RelativeSource TemplatedParent}" />
+                                </MultiBinding>
+                            </TextBlock.Text>
+                        </TextBlock>
+                    </Grid>
+
+                    <Track Grid.Column="1" Name="PART_Track"
+                           Minimum="{TemplateBinding Minimum}"
+                           Maximum="{TemplateBinding Maximum}"
+                           Value="{TemplateBinding Value}"
+                           Orientation="Horizontal">
+                        <Track.DecreaseButton>
+                            <RepeatButton
+                                Height="8"
+                                Name="PART_DecreaseButton"
+                                Focusable="False" />
+                        </Track.DecreaseButton>
+                        <Track.IncreaseButton>
+                            <RepeatButton
+                                Height="8"
+                                Name="PART_IncreaseButton"
+                                Focusable="False" />
+                        </Track.IncreaseButton>
+                        <!-- 已填充部分 -->
+                        <Track.Thumb>
+                            <Thumb Name="PART_Thumb">
+                                <Thumb.Template>
+                                    <ControlTemplate>
+                                        <Border Height="22" Width="22"
+                                                BorderThickness="4"
+                                                BorderBrush="{DynamicResource PrimaryBorderBrush}"
+                                                Background="{DynamicResource AccentBackgroundBrush}"
+                                                CornerRadius="11" Name="PART_Thumb_Border" />
+                                    </ControlTemplate>
+                                </Thumb.Template>
+                            </Thumb>
+                        </Track.Thumb>
+                    </Track>
+                </Grid>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+
+    <Style Selector="Slider Border#PART_Thumb_Border">
+        <Setter Property="Transitions">
+            <Transitions>
+                <ThicknessTransition Property="BorderThickness"
+                                     Easing="BackEaseOut"
+                                     Duration="0:0:0.2" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Slider:disabled Border#PART_DecreaseButton_Border">
+        <Setter Property="Background" Value="{DynamicResource PrimaryDisabled2ForegroundBrush}" />
+    </Style>
+    <Style Selector="Slider:disabled Border#PART_Thumb_Border">
+        <Setter Property="Background" Value="{DynamicResource PrimaryDisabled2ForegroundBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PrimaryDisabledBorderBrush}" />
+    </Style>
+    <Style Selector="Slider:pointerover Border#PART_Thumb_Border">
+        <Setter Property="BorderThickness" Value="3" />
+    </Style>
+    <Style Selector="Slider:pressed Border#PART_Thumb_Border">
+        <Setter Property="BorderThickness" Value="6" />
+    </Style>
+
+    <Style Selector="RepeatButton#PART_DecreaseButton">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Height="5" Width="{TemplateBinding Width}" CornerRadius="6"
+                        Margin="0,5,-5,5" Name="PART_DecreaseButton_Border"
+                        Background="{DynamicResource AccentBackgroundBrush}" />
+            </ControlTemplate>
+        </Setter>
+    </Style>
+
+    <Style Selector="RepeatButton#PART_IncreaseButton">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Height="5" Width="{TemplateBinding Width}" CornerRadius="6"
+                        Margin="-5,5,0,5"
+                        Background="{DynamicResource PrimaryBorderBrush}" />
+            </ControlTemplate>
+        </Setter>
+    </Style>
+</Styles>

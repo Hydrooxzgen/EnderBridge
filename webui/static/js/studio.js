@@ -5,6 +5,9 @@ var _allAssets = { midi: [], image: [], ezmatic: [], mcfunc: [] };
 var _searchKeyword = "";
 var _blockPalette = []; // mod/image/blocks.json 方块调色板
 var _selectedImageName = "";
+var _pixelViewMode = "sim"; // "sim" | "orig" | "split"
+var _pixelZoom = "fit"; // "fit" | "1" | "2" | "4"
+var _pixelCurrentBlobUrl = null;
 var _currentMcfuncFile = "";
 var _activeHoloFile = null;
 
@@ -441,48 +444,168 @@ function startPlayerTimeTicker() {
 
 // ===== 4. ImageMod 像素画工坊与 Canvas 方块调色仿真 =====
 
+function getStudioAssetUrl(category, filename) {
+  var url = "/api/studio/asset-file?category=" + encodeURIComponent(category) + "&file=" + encodeURIComponent(filename);
+  var token = sessionStorage.getItem(TOKEN_KEY) || "";
+  var role = sessionStorage.getItem(ROLE_KEY) || "";
+  if (token) {
+    url += "&token=" + encodeURIComponent(token);
+  } else if (role === "guest") {
+    url += "&guest=1";
+  }
+  var params = new URLSearchParams(window.location.search);
+  if (params.get("gui") === "1" || params.get("eb_gui") === "1") {
+    url += "&gui=1";
+  }
+  return url;
+}
+
+function loadStudioImageBlob(filename) {
+  var token = sessionStorage.getItem(TOKEN_KEY) || "";
+  var role = sessionStorage.getItem(ROLE_KEY) || "";
+  var headers = {};
+  if (token) headers["X-Auth-Token"] = token;
+  if (role === "guest") headers["X-Auth-Guest"] = "1";
+
+  var directUrl = getStudioAssetUrl("image", filename);
+
+  return fetch(directUrl, { headers: headers })
+    .then(function (res) {
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      return res.blob();
+    })
+    .then(function (blob) {
+      var blobUrl = URL.createObjectURL(blob);
+      return new Promise(function (resolve, reject) {
+        var img = new Image();
+        img.onload = function () { resolve({ img: img, blobUrl: blobUrl, url: directUrl }); };
+        img.onerror = function (e) {
+          URL.revokeObjectURL(blobUrl);
+          reject(e);
+        };
+        img.src = blobUrl;
+      });
+    })
+    .catch(function () {
+      return new Promise(function (resolve, reject) {
+        var img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = function () { resolve({ img: img, blobUrl: null, url: directUrl }); };
+        img.onerror = function () { reject(new Error("无法读取图片: 401 未授权或文件不存在")); };
+        img.src = directUrl;
+      });
+    });
+}
+
 function loadBlockPalette() {
   api("/studio/palette").then(function (res) {
     if (res.ok && res.blocks) {
       _blockPalette = res.blocks;
+      if (_selectedImageName) {
+        runPixelArtSimulation();
+      }
     }
-  }).catch(function () {});
+  }).catch(function (err) {
+    console.warn("加载方块调色板失败:", err);
+  });
 }
 
 function renderImageTab(list) {
   var container = $("imageAssetList");
+  var countBadge = $("imageAssetCountBadge");
+  if (countBadge) countBadge.textContent = list.length + " 张";
   if (!container) return;
   if (!list.length) {
     container.innerHTML = '<div class="td-faint" style="padding:16px;text-align:center;">' + (t("studio.noAssets") || "暂无图片资产") + '</div>';
+    _selectedImageName = "";
+    var infoBadge = $("pixelImageInfoBadge");
+    if (infoBadge) infoBadge.textContent = "未选择图片";
     return;
   }
 
   container.innerHTML = list.map(function (img) {
     var meta = img.metadata || {};
     var dimStr = meta.width ? meta.width + "×" + meta.height : "";
-    return '<div class="card image-select-item" data-name="' + escapeHtml(img.name) + '" style="padding:10px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:all 0.15s ease;">'
-      + '<div>'
-      + '  <div style="font-weight:600;font-size:13px;word-break:break-all;">' + escapeHtml(img.name) + '</div>'
-      + '  <div style="font-size:11px;color:var(--text-dim);">' + dimStr + ' | ' + (img.size_formatted || "") + '</div>'
+    var thumbUrl = getStudioAssetUrl("image", img.name);
+    var isSel = _selectedImageName === img.name;
+    var activeClass = isSel ? " active" : "";
+    var activeBorder = isSel ? "border:1px solid var(--primary, #3b82f6);" : "";
+    return '<div class="card image-select-item' + activeClass + '" data-name="' + escapeHtml(img.name) + '" style="' + activeBorder + '">'
+      + '<div style="display:flex;align-items:center;gap:10px;overflow:hidden;flex:1;">'
+      + '  <img src="' + thumbUrl + '" class="image-thumb-img" alt="" loading="lazy" onerror="this.style.opacity=0.3;" />'
+      + '  <div style="overflow:hidden;flex:1;">'
+      + '    <div style="font-weight:600;font-size:13px;word-break:break-all;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="' + escapeHtml(img.name) + '">' + escapeHtml(img.name) + '</div>'
+      + '    <div style="font-size:11px;color:var(--text-dim);">' + dimStr + (dimStr ? ' | ' : '') + (img.size_formatted || "") + '</div>'
+      + '  </div>'
       + '</div>'
-      + '<button class="btn btn-sm btn-danger studio-delete-btn" data-cat="image" data-name="' + escapeHtml(img.name) + '" title="删除">🗑️</button>'
+      + '<button class="btn btn-sm btn-danger studio-delete-btn" data-cat="image" data-name="' + escapeHtml(img.name) + '" title="删除" style="flex-shrink:0;">🗑️</button>'
       + '</div>';
   }).join("");
 
-  // 默认选中第一张图片进行仿真
-  if (!_selectedImageName && list.length) {
+  var exists = list.some(function (it) { return it.name === _selectedImageName; });
+  if (!exists && list.length) {
     selectImageForPixelArt(list[0].name);
+  } else if (exists && _selectedImageName) {
+    highlightSelectedImage(_selectedImageName);
+    runPixelArtSimulation();
   }
+}
+
+function highlightSelectedImage(filename) {
+  document.querySelectorAll(".image-select-item").forEach(function (el) {
+    var match = el.dataset.name === filename;
+    el.classList.toggle("active", match);
+    el.style.border = match ? "1px solid var(--primary, #3b82f6)" : "1px solid var(--card-border)";
+  });
 }
 
 function selectImageForPixelArt(filename) {
   _selectedImageName = filename;
-  document.querySelectorAll(".image-select-item").forEach(function (el) {
-    el.classList.toggle("active", el.dataset.name === filename);
-    if (el.dataset.name === filename) el.style.border = "1px solid var(--primary, #3b82f6)";
-    else el.style.border = "1px solid var(--card-border)";
-  });
+  highlightSelectedImage(filename);
   runPixelArtSimulation();
+}
+
+function applyPixelZoomAndMode() {
+  var canvas = $("pixelArtCanvas");
+  var origImg = $("pixelOriginalImg");
+  var simBox = $("pixelSimBox");
+  var origBox = $("pixelOrigBox");
+
+  if (!simBox || !origBox) return;
+
+  // 1. 模式展示切换
+  if (_pixelViewMode === "sim") {
+    simBox.style.display = "flex";
+    origBox.style.display = "none";
+  } else if (_pixelViewMode === "orig") {
+    simBox.style.display = "none";
+    origBox.style.display = "flex";
+  } else if (_pixelViewMode === "split") {
+    simBox.style.display = "flex";
+    origBox.style.display = "flex";
+  }
+
+  // 2. 缩放尺寸适配
+  var targetWidth = parseInt($("pixelTargetWidth") ? $("pixelTargetWidth").value : 64, 10) || 64;
+  var displayWidth = "auto";
+  if (_pixelZoom === "fit") {
+    displayWidth = _pixelViewMode === "split" ? "min(100%, 320px)" : "min(100%, 420px)";
+  } else if (_pixelZoom === "1") {
+    displayWidth = targetWidth + "px";
+  } else if (_pixelZoom === "2") {
+    displayWidth = (targetWidth * 2) + "px";
+  } else if (_pixelZoom === "4") {
+    displayWidth = (targetWidth * 4) + "px";
+  }
+
+  if (canvas) {
+    canvas.style.width = displayWidth;
+    canvas.style.height = "auto";
+  }
+  if (origImg) {
+    origImg.style.width = displayWidth;
+    origImg.style.height = "auto";
+  }
 }
 
 function initPixelArtControls() {
@@ -492,6 +615,28 @@ function initPixelArtControls() {
   });
   var wInput = $("pixelTargetWidth");
   if (wInput) wInput.addEventListener("input", runPixelArtSimulation);
+
+  // 模式切换: 仿真 / 原图 / 对比
+  var modeBar = $("pixelViewModeBar");
+  if (modeBar) {
+    modeBar.addEventListener("click", function (e) {
+      var tab = e.target.closest(".chip-tab");
+      if (!tab) return;
+      modeBar.querySelectorAll(".chip-tab").forEach(function (el) { el.classList.remove("active"); });
+      tab.classList.add("active");
+      _pixelViewMode = tab.dataset.mode || "sim";
+      applyPixelZoomAndMode();
+    });
+  }
+
+  // 缩放选择
+  var zoomSelect = $("pixelZoomSelect");
+  if (zoomSelect) {
+    zoomSelect.addEventListener("change", function () {
+      _pixelZoom = zoomSelect.value || "fit";
+      applyPixelZoomAndMode();
+    });
+  }
 
   var drawBtn = $("imgDrawInGameBtn");
   if (drawBtn) {
@@ -534,81 +679,129 @@ function initPixelArtControls() {
 }
 
 function runPixelArtSimulation() {
-  if (!_selectedImageName) return;
+  if (!_selectedImageName) {
+    var infoBadge = $("pixelImageInfoBadge");
+    if (infoBadge) infoBadge.textContent = "未选择图片";
+    return;
+  }
   var canvas = $("pixelArtCanvas");
+  var origImg = $("pixelOriginalImg");
+  var loadingEl = $("pixelPreviewLoading");
+  var errEl = $("pixelPreviewError");
+  var infoBadge = $("pixelImageInfoBadge");
+
   if (!canvas) return;
   var ctx = canvas.getContext("2d");
 
-  var targetWidth = parseInt($("pixelTargetWidth").value, 10) || 64;
+  var targetWidth = parseInt($("pixelTargetWidth") ? $("pixelTargetWidth").value : 64, 10) || 64;
   targetWidth = Math.max(16, Math.min(256, targetWidth));
-  var dither = $("pixelDitherAlgo").value;
+  var dither = $("pixelDitherAlgo") ? $("pixelDitherAlgo").value : "none";
 
-  var img = new Image();
-  img.crossOrigin = "anonymous";
-  img.src = "/api/studio/asset-file?category=image&file=" + encodeURIComponent(_selectedImageName);
-  img.onload = function () {
-    var ratio = img.height / img.width;
-    var targetHeight = Math.max(1, Math.round(targetWidth * ratio));
+  if (loadingEl) loadingEl.style.display = "flex";
+  if (errEl) errEl.style.display = "none";
+  if (infoBadge) infoBadge.textContent = _selectedImageName + " (加载中...)";
 
-    canvas.width = targetWidth;
-    canvas.height = targetHeight;
-    ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+  var thisImageName = _selectedImageName;
 
-    var imgData = ctx.getImageData(0, 0, targetWidth, targetHeight);
-    var pixels = imgData.data;
-    var blockCounts = {};
-
-    if (!_blockPalette || !_blockPalette.length) {
-      return;
-    }
-
-    // 方块调色板匹配 (含最近邻与 Floyd-Steinberg 误差扩散)
-    if (dither === "floyd") {
-      // Floyd-Steinberg
-      var fData = [];
-      for (var p = 0; p < pixels.length; p += 4) {
-        fData.push([pixels[p], pixels[p + 1], pixels[p + 2]]);
+  loadStudioImageBlob(thisImageName)
+    .then(function (result) {
+      if (_selectedImageName !== thisImageName) {
+        if (result.blobUrl) URL.revokeObjectURL(result.blobUrl);
+        return;
       }
-      for (var y = 0; y < targetHeight; y++) {
-        for (var x = 0; x < targetWidth; x++) {
-          var idx = y * targetWidth + x;
-          var curR = fData[idx][0], curG = fData[idx][1], curB = fData[idx][2];
-          var closest = findClosestBlock(curR, curG, curB);
-          var matchR = closest.rgb[0], matchG = closest.rgb[1], matchB = closest.rgb[2];
 
-          var errR = curR - matchR;
-          var errG = curG - matchG;
-          var errB = curB - matchB;
+      if (_pixelCurrentBlobUrl && _pixelCurrentBlobUrl !== result.blobUrl) {
+        URL.revokeObjectURL(_pixelCurrentBlobUrl);
+      }
+      _pixelCurrentBlobUrl = result.blobUrl;
 
-          // 记录方块用量
-          blockCounts[closest.id] = (blockCounts[closest.id] || 0) + 1;
+      var img = result.img;
+      var ratio = img.height / (img.width || 1);
+      var targetHeight = Math.max(1, Math.round(targetWidth * ratio));
 
-          var pIdx = idx * 4;
-          pixels[pIdx] = matchR;
-          pixels[pIdx + 1] = matchG;
-          pixels[pIdx + 2] = matchB;
+      // 原图展示
+      if (origImg) {
+        origImg.src = result.blobUrl || result.url;
+      }
 
-          // 扩散误差
-          distributeErr(fData, targetWidth, targetHeight, x + 1, y, errR, errG, errB, 7 / 16);
-          distributeErr(fData, targetWidth, targetHeight, x - 1, y + 1, errR, errG, errB, 3 / 16);
-          distributeErr(fData, targetWidth, targetHeight, x, y + 1, errR, errG, errB, 5 / 16);
-          distributeErr(fData, targetWidth, targetHeight, x + 1, y + 1, errR, errG, errB, 1 / 16);
+      if (infoBadge) {
+        infoBadge.textContent = thisImageName + " | 原始分辨率: " + img.naturalWidth + "×" + img.naturalHeight + " | 仿真: " + targetWidth + "×" + targetHeight + " 方块";
+      }
+
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+      ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+
+      var imgData = ctx.getImageData(0, 0, targetWidth, targetHeight);
+      var pixels = imgData.data;
+      var blockCounts = {};
+
+      if (!_blockPalette || !_blockPalette.length) {
+        var bomContainer = $("pixelBOMContainer");
+        if (bomContainer) {
+          bomContainer.innerHTML = '<div class="td-faint" style="font-size:12px;">⏳ 正在从服务端载入方块调色板数据 (mod/image/blocks.json)...</div>';
+        }
+        applyPixelZoomAndMode();
+        if (loadingEl) loadingEl.style.display = "none";
+        return;
+      }
+
+      // 方块调色板匹配 (含最近邻与 Floyd-Steinberg 误差扩散)
+      if (dither === "floyd") {
+        var fData = [];
+        for (var p = 0; p < pixels.length; p += 4) {
+          fData.push([pixels[p], pixels[p + 1], pixels[p + 2]]);
+        }
+        for (var y = 0; y < targetHeight; y++) {
+          for (var x = 0; x < targetWidth; x++) {
+            var idx = y * targetWidth + x;
+            var curR = fData[idx][0], curG = fData[idx][1], curB = fData[idx][2];
+            var closest = findClosestBlock(curR, curG, curB);
+            var matchR = closest.rgb[0], matchG = closest.rgb[1], matchB = closest.rgb[2];
+
+            var errR = curR - matchR;
+            var errG = curG - matchG;
+            var errB = curB - matchB;
+
+            blockCounts[closest.id] = (blockCounts[closest.id] || 0) + 1;
+
+            var pIdx = idx * 4;
+            pixels[pIdx] = matchR;
+            pixels[pIdx + 1] = matchG;
+            pixels[pIdx + 2] = matchB;
+
+            distributeErr(fData, targetWidth, targetHeight, x + 1, y, errR, errG, errB, 7 / 16);
+            distributeErr(fData, targetWidth, targetHeight, x - 1, y + 1, errR, errG, errB, 3 / 16);
+            distributeErr(fData, targetWidth, targetHeight, x, y + 1, errR, errG, errB, 5 / 16);
+            distributeErr(fData, targetWidth, targetHeight, x + 1, y + 1, errR, errG, errB, 1 / 16);
+          }
+        }
+      } else {
+        for (var i = 0; i < pixels.length; i += 4) {
+          var c = findClosestBlock(pixels[i], pixels[i + 1], pixels[i + 2]);
+          pixels[i] = c.rgb[0];
+          pixels[i + 1] = c.rgb[1];
+          pixels[i + 2] = c.rgb[2];
+          blockCounts[c.id] = (blockCounts[c.id] || 0) + 1;
         }
       }
-    } else {
-      // 最近邻采样
-      for (var i = 0; i < pixels.length; i += 4) {
-        var c = findClosestBlock(pixels[i], pixels[i + 1], pixels[i + 2]);
-        pixels[i] = c.rgb[0];
-        pixels[i + 1] = c.rgb[1];
-        pixels[i + 2] = c.rgb[2];
-        blockCounts[c.id] = (blockCounts[c.id] || 0) + 1;
-      }
-    }
 
-    ctx.putImageData(imgData, 0, 0);
-    renderBlockBOM(blockCounts, targetWidth * targetHeight);
-  };
+      ctx.putImageData(imgData, 0, 0);
+      renderBlockBOM(blockCounts, targetWidth * targetHeight);
+      applyPixelZoomAndMode();
+      if (loadingEl) loadingEl.style.display = "none";
+    })
+    .catch(function (err) {
+      if (_selectedImageName !== thisImageName) return;
+      if (loadingEl) loadingEl.style.display = "none";
+      if (errEl) {
+        errEl.style.display = "block";
+        errEl.innerHTML = '<div>❌ 图片加载失败: ' + escapeHtml(err.message || "未能读取图片") + '</div>'
+          + '<button class="btn btn-sm btn-primary" onclick="runPixelArtSimulation()" style="margin-top:8px;">🔄 重试加载</button>';
+      }
+      if (infoBadge) infoBadge.textContent = thisImageName + " (加载失败)";
+      toast("加载图片失败: " + (err.message || "网络或权限错误"), "err");
+    });
 }
 
 function distributeErr(fData, w, h, x, y, er, eg, eb, factor) {
