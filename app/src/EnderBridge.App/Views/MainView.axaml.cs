@@ -13,6 +13,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using System.Text.Json.Nodes;
 using OnePointUI.Avalonia.Styling.Controls.OnePointControls;
@@ -178,20 +179,10 @@ public partial class MainView : UserControl
             AppendLog($"[GUI] 发现主入口: {_localCore.MainPyPath} (版本: {_localCore.Version})");
         }
 
-        // 首次运行检查: 自动在 App 内拉起服务并打开内置浏览器向导
+        // 首次运行检查
         if (isFirstRun)
         {
-            AppendLog("[GUI 首次运行] 检测到 EnderBridge 处于首次运行状态。");
-            if (_localCore.Exists)
-            {
-                AppendLog("[GUI 首次运行] 正在为您自动拉起服务并在应用内直接打开配置向导...");
-                StartServer_Click(this, new RoutedEventArgs());
-                EnsureServerRunningAndShowUrl(_backendUrl);
-            }
-            else
-            {
-                AppendLog("[GUI 首次运行] 本地未找到服务端，建议点击上方 [📥 立即自动下载最新版]。");
-            }
+            AppendLog("[GUI 首次运行] 检测到 EnderBridge 尚未配置。点击主界面 [▶ 启动服务端] 或前往 [⚙️ 系统配置] 即可开始设置。");
         }
 
         _pollTimer.Interval = TimeSpan.FromSeconds(2);
@@ -224,23 +215,27 @@ public partial class MainView : UserControl
     {
         try
         {
-            if (_localCore.Exists && !string.IsNullOrEmpty(_localCore.RootDirectory))
+            if (!_localCore.Exists || string.IsNullOrEmpty(_localCore.RootDirectory))
             {
-                var cfgPath = Path.Combine(_localCore.RootDirectory, "config", "config.json");
-                if (!File.Exists(cfgPath))
-                {
-                    return true;
-                }
-                var text = File.ReadAllText(cfgPath);
-                using var doc = JsonDocument.Parse(text);
-                if (doc.RootElement.TryGetProperty("is_first_run", out var prop) && prop.GetBoolean())
-                {
-                    return true;
-                }
+                return false;
             }
-            else
+
+            var cfgPath = Path.Combine(_localCore.RootDirectory, "config", "config.json");
+            if (!File.Exists(cfgPath))
+            {
+                cfgPath = Path.Combine(_localCore.RootDirectory, "config.json");
+            }
+
+            if (!File.Exists(cfgPath))
             {
                 return true;
+            }
+
+            var text = File.ReadAllText(cfgPath);
+            using var doc = JsonDocument.Parse(text);
+            if (doc.RootElement.TryGetProperty("is_first_run", out var prop))
+            {
+                return prop.ValueKind == JsonValueKind.True;
             }
         }
         catch {}
@@ -250,19 +245,28 @@ public partial class MainView : UserControl
     private void RefreshLocalCoreStatus()
     {
         _localCore = _versionService.CheckLocalCore();
+        if (CustomCorePathTextBox != null)
+        {
+            CustomCorePathTextBox.Text = _versionService.GetCustomCorePath() ?? "";
+        }
+
         if (_localCore.Exists)
         {
             VerLocalStatusText.Text = $"● 核心已就绪 (当前版本: {_localCore.Version})";
             VerLocalStatusText.Foreground = BrushOk;
             VerLocalPathText.Text = $"主入口路径: {_localCore.MainPyPath}";
             CoreMissingBanner.IsVisible = false;
+            BottomVerText.Text = $"EnderBridge {_localCore.Version}";
         }
         else
         {
-            VerLocalStatusText.Text = "○ 未安装 / 核心文件缺失 (未找到 main.py)";
+            VerLocalStatusText.Text = "○ 未安装 / 核心文件缺失 (未找到 main.py 或 app.py)";
             VerLocalStatusText.Foreground = BrushDanger;
-            VerLocalPathText.Text = "建议点击下方 [下载最新版] 自动部署到当前运行目录。";
+            VerLocalPathText.Text = !string.IsNullOrEmpty(_localCore.RootDirectory)
+                ? $"目标工作/安装目录: {_localCore.RootDirectory}"
+                : "建议点击下方 [下载最新版] 自动部署到当前运行目录。";
             CoreMissingBanner.IsVisible = true;
+            BottomVerText.Text = "EnderBridge (核心未就绪)";
         }
     }
 
@@ -515,9 +519,16 @@ public partial class MainView : UserControl
         }
 
         // 2. 离线/未启动时的本地下载解压
+        var customPath = _versionService.GetCustomCorePath();
         var targetDir = _localCore.Exists && !string.IsNullOrEmpty(_localCore.RootDirectory)
             ? _localCore.RootDirectory
-            : AppContext.BaseDirectory;
+            : (!string.IsNullOrWhiteSpace(customPath) && Directory.Exists(customPath)
+                ? customPath
+                : (!string.IsNullOrWhiteSpace(customPath) && File.Exists(customPath)
+                    ? (Path.GetDirectoryName(customPath) ?? Environment.CurrentDirectory)
+                    : (!AppContext.BaseDirectory.Contains(".net", StringComparison.OrdinalIgnoreCase) && !AppContext.BaseDirectory.Contains("temp", StringComparison.OrdinalIgnoreCase)
+                        ? AppContext.BaseDirectory
+                        : Environment.CurrentDirectory)));
 
         // 本地磁盘写入权限探测检查
         try
@@ -563,9 +574,7 @@ public partial class MainView : UserControl
 
                 if (CheckIsFirstRun())
                 {
-                    AppendLog("[GUI 首次运行] 检测到首次配置，正在自动启动服务并在应用内开启向导...");
-                    StartServer_Click(this, new RoutedEventArgs());
-                    EnsureServerRunningAndShowUrl(_backendUrl);
+                    AppendLog("[GUI 首次运行] 检测到 EnderBridge 处于未配置状态，点击主界面 [▶ 启动] 即可拉起并开启配置向导。");
                 }
             }
             else
@@ -628,7 +637,103 @@ public partial class MainView : UserControl
     private void VerScanLocal_Click(object? sender, RoutedEventArgs e)
     {
         RefreshLocalCoreStatus();
-        AppendLog("[GUI] 本地扫描完成: " + (_localCore.Exists ? $"已就绪 (版本: {_localCore.Version})" : "未找到 main.py"));
+        AppendLog("[GUI] 本地扫描完成: " + (_localCore.Exists ? $"已就绪 (入口: {_localCore.MainPyPath}, 版本: {_localCore.Version})" : "未找到 main.py 或 app.py"));
+    }
+
+    private async void BrowseCustomCoreFile_Click(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var topLevel = TopLevel.GetTopLevel(this);
+            if (topLevel?.StorageProvider == null) return;
+
+            var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = "选择 EnderBridge 服务端主入口 (main.py 或 app.py)",
+                AllowMultiple = false,
+                FileTypeFilter = new[]
+                {
+                    new FilePickerFileType("Python Files (*.py)") { Patterns = new[] { "*.py" } },
+                    new FilePickerFileType("All Files (*.*)") { Patterns = new[] { "*.*" } }
+                }
+            });
+
+            if (files.Count > 0)
+            {
+                var localPath = files[0].Path.LocalPath;
+                if (!string.IsNullOrEmpty(localPath))
+                {
+                    CustomCorePathTextBox.Text = localPath;
+                    _versionService.SetCustomCorePath(localPath);
+                    RefreshLocalCoreStatus();
+                    AppendLog($"[GUI 核心路径] 已手动指定服务端主文件: {localPath}");
+                    ShowToast("✅ 已成功设置服务端文件路径", ToastType.Success);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            AppendLog($"[GUI 核心路径] 选择文件异常: {ex.Message}");
+        }
+    }
+
+    private async void BrowseCustomCoreDir_Click(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var topLevel = TopLevel.GetTopLevel(this);
+            if (topLevel?.StorageProvider == null) return;
+
+            var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+            {
+                Title = "选择 EnderBridge 服务端项目根目录"
+            });
+
+            if (folders.Count > 0)
+            {
+                var localPath = folders[0].Path.LocalPath;
+                if (!string.IsNullOrEmpty(localPath))
+                {
+                    CustomCorePathTextBox.Text = localPath;
+                    _versionService.SetCustomCorePath(localPath);
+                    RefreshLocalCoreStatus();
+                    AppendLog($"[GUI 核心路径] 已手动指定服务端工作目录: {localPath}");
+                    ShowToast("✅ 已成功设置服务端根目录", ToastType.Success);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            AppendLog($"[GUI 核心路径] 选择目录异常: {ex.Message}");
+        }
+    }
+
+    private void SaveCustomCorePath_Click(object? sender, RoutedEventArgs e)
+    {
+        var path = CustomCorePathTextBox.Text?.Trim();
+        if (string.IsNullOrEmpty(path))
+        {
+            _versionService.SetCustomCorePath(null);
+            RefreshLocalCoreStatus();
+            AppendLog("[GUI 核心路径] 已清空自定义路径，恢复默认自动探测。");
+            ShowToast("已恢复为默认自动探测", ToastType.Info);
+        }
+        else
+        {
+            _versionService.SetCustomCorePath(path);
+            RefreshLocalCoreStatus();
+            AppendLog($"[GUI 核心路径] 已保存自定义路径: {path}");
+            ShowToast("✅ 服务端路径已更新并保存", ToastType.Success);
+        }
+    }
+
+    private void ResetCustomCorePath_Click(object? sender, RoutedEventArgs e)
+    {
+        if (CustomCorePathTextBox != null) CustomCorePathTextBox.Text = "";
+        _versionService.SetCustomCorePath(null);
+        RefreshLocalCoreStatus();
+        AppendLog("[GUI 核心路径] 已恢复默认自动探测模式。");
+        ShowToast("已恢复为默认自动探测模式", ToastType.Info);
     }
 
     private async void VerRefreshReleases_Click(object? sender, RoutedEventArgs e)
@@ -1373,22 +1478,47 @@ public partial class MainView : UserControl
 
     private async void ConfigSave_Click(object? sender, RoutedEventArgs e)
     {
-        _currentConfigNode ??= new JsonObject();
-        var ws = _currentConfigNode["wsConfig"] as JsonObject ?? new JsonObject();
+        var rootDir = _localCore.RootDirectory ?? AppContext.BaseDirectory;
+        var configDir = Path.Combine(rootDir, "config");
+        if (!Directory.Exists(configDir)) Directory.CreateDirectory(configDir);
+        var cfgPath = Path.Combine(configDir, "config.json");
+
+        JsonObject targetConfig;
+        if (File.Exists(cfgPath))
+        {
+            try
+            {
+                var existingText = await File.ReadAllTextAsync(cfgPath);
+                var node = JsonNode.Parse(existingText);
+                targetConfig = node as JsonObject ?? new JsonObject();
+            }
+            catch
+            {
+                targetConfig = (_currentConfigNode as JsonObject)?.DeepClone() as JsonObject ?? new JsonObject();
+            }
+        }
+        else
+        {
+            targetConfig = (_currentConfigNode as JsonObject)?.DeepClone() as JsonObject ?? new JsonObject();
+        }
+
+        // 更新 wsConfig
+        var ws = targetConfig["wsConfig"] as JsonObject ?? new JsonObject();
         ws["name"] = CfgServerNameBox.Text ?? "EnderBridge";
         if (int.TryParse(CfgWsPortBox.Text, out var wsP)) ws["port"] = wsP;
-        _currentConfigNode["wsConfig"] = ws;
+        targetConfig["wsConfig"] = ws;
 
-        var web = _currentConfigNode["webuiConfig"] as JsonObject ?? new JsonObject();
+        // 更新 webuiConfig
+        var web = targetConfig["webuiConfig"] as JsonObject ?? new JsonObject();
         if (int.TryParse(CfgWebPortBox.Text, out var webP)) web["port"] = webP;
         web["localOnly"] = CfgLocalOnlyToggle.IsChecked ?? false;
-        _currentConfigNode["webuiConfig"] = web;
+        targetConfig["webuiConfig"] = web;
 
-        // features.qq 同步
-        if (_currentConfigNode["features"] is not JsonObject features)
+        // 更新 features.qq
+        if (targetConfig["features"] is not JsonObject features)
         {
             features = new JsonObject();
-            _currentConfigNode["features"] = features;
+            targetConfig["features"] = features;
         }
         var qq = features["qq"] as JsonObject ?? new JsonObject();
         var rawUrl = CfgOneBotUrlBox.Text?.Trim() ?? "";
@@ -1407,18 +1537,31 @@ public partial class MainView : UserControl
         qq["enabled"] = true;
         features["qq"] = qq;
 
-        var dog = _currentConfigNode["watchdog"] as JsonObject ?? new JsonObject();
+        // 更新 watchdog
+        var dog = targetConfig["watchdog"] as JsonObject ?? new JsonObject();
         dog["auto_restart"] = CfgWatchdogToggle.IsChecked ?? true;
-        _currentConfigNode["watchdog"] = dog;
+        targetConfig["watchdog"] = dog;
 
-        // 1. 双重落盘保险：无论服务端运行与否，先安全保存本地 config/config.json
-        var rootDir = _localCore.RootDirectory ?? AppContext.BaseDirectory;
-        var configDir = Path.Combine(rootDir, "config");
-        if (!Directory.Exists(configDir)) Directory.CreateDirectory(configDir);
-        var cfgPath = Path.Combine(configDir, "config.json");
+        // 明确复位首次运行状态
+        targetConfig["is_first_run"] = false;
+
+        // 同步顶层兼容字段
+        targetConfig["name"] = ws["name"]?.ToString();
+        targetConfig["port"] = ws["port"]?.GetValue<int>() ?? 8800;
+        targetConfig["webui"] = new JsonObject
+        {
+            ["port"] = web["port"]?.GetValue<int>() ?? 18888,
+            ["localOnly"] = web["localOnly"]?.GetValue<bool>() ?? false
+        };
+
+        // 1. 双重落盘保险：原子写入本地 config/config.json
         try
         {
-            await File.WriteAllTextAsync(cfgPath, _currentConfigNode.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+            var jsonStr = targetConfig.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+            var tempFile = Path.Combine(configDir, $"config.json.tmp_{Guid.NewGuid():N}");
+            await File.WriteAllTextAsync(tempFile, jsonStr);
+            File.Move(tempFile, cfgPath, overwrite: true);
+            _currentConfigNode = targetConfig;
             AppendLog("[GUI 配置] ✅ 本地 config/config.json 已保存！");
         }
         catch (Exception ex)
@@ -1432,7 +1575,7 @@ public partial class MainView : UserControl
         try
         {
             AppendLog("[GUI 配置 API] 正在向后端提交配置热更新 (PUT /api/config) ...");
-            var (ok, msg) = await _apiClient.SaveConfigAsync(_currentConfigNode);
+            var (ok, msg) = await _apiClient.SaveConfigAsync(targetConfig);
             if (ok)
             {
                 AppendLog($"[GUI 配置 API] ✅ 后端运行时已热重载: {msg}");
@@ -1949,6 +2092,13 @@ public partial class MainView : UserControl
             return;
         }
 
+        // 启动前先确保旧残留进程与目标端口释放
+        int wsP = 8800;
+        int webP = 18888;
+        if (CfgWsPortBox != null && int.TryParse(CfgWsPortBox.Text, out var parsedWs)) wsP = parsedWs;
+        if (CfgWebPortBox != null && int.TryParse(CfgWebPortBox.Text, out var parsedWeb)) webP = parsedWeb;
+        CleanupLingeringServerProcesses(wsP, webP);
+
         try
         {
             var mainPyPath = _localCore.MainPyPath!;
@@ -1960,7 +2110,7 @@ public partial class MainView : UserControl
             var psi = new ProcessStartInfo
             {
                 FileName = pythonExe,
-                Arguments = "main.py",
+                Arguments = "main.py --no-supervisor",
                 WorkingDirectory = rootDir,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -1984,7 +2134,8 @@ public partial class MainView : UserControl
                 }
             }
 
-            // 禁用 ANSI 颜色转义与控制码，防止输出方块字符
+            // 禁用 supervisor 守护(由 GUI 进程树接管), 禁用 ANSI 颜色转义与控制码
+            psi.EnvironmentVariables["EB_NO_SUPERVISOR"] = "1";
             psi.EnvironmentVariables["NO_COLOR"] = "1";
             psi.EnvironmentVariables["EB_GUI"] = "1";
             psi.EnvironmentVariables["PYTHONIOENCODING"] = "utf-8";
@@ -2031,16 +2182,102 @@ public partial class MainView : UserControl
 
     public void KillServer()
     {
-        if (_serverProcess != null && !_serverProcess.HasExited)
+        if (_serverProcess != null)
         {
             try
             {
-                _serverProcess.Kill(entireProcessTree: true);
-                _serverProcess.WaitForExit(1000);
+                if (!_serverProcess.HasExited)
+                {
+                    try
+                    {
+                        _serverProcess.StandardInput.WriteLine("stop");
+                        _serverProcess.StandardInput.Flush();
+                    }
+                    catch {}
+
+                    if (!_serverProcess.WaitForExit(1500))
+                    {
+                        _serverProcess.Kill(entireProcessTree: true);
+                        _serverProcess.WaitForExit(1000);
+                    }
+                }
             }
             catch {}
-            _serverProcess = null;
+            finally
+            {
+                _serverProcess = null;
+            }
         }
+
+        // 端口安全网兜底清理
+        int wsP = 8800;
+        int webP = 18888;
+        if (CfgWsPortBox != null && int.TryParse(CfgWsPortBox.Text, out var parsedWs)) wsP = parsedWs;
+        if (CfgWebPortBox != null && int.TryParse(CfgWebPortBox.Text, out var parsedWeb)) webP = parsedWeb;
+        CleanupLingeringServerProcesses(wsP, webP);
+    }
+
+    private void CleanupLingeringServerProcesses(int wsPort, int webPort)
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        try
+        {
+            var ports = new[] { wsPort, webPort };
+            var currentPid = Process.GetCurrentProcess().Id;
+            var pidsToKill = new HashSet<int>();
+
+            var psi = new ProcessStartInfo
+            {
+                FileName = "cmd.exe",
+                Arguments = "/c netstat -ano -p tcp",
+                CreateNoWindow = true,
+                UseShellExecute = false,
+                RedirectStandardOutput = true
+            };
+            using var proc = Process.Start(psi);
+            if (proc != null)
+            {
+                var output = proc.StandardOutput.ReadToEnd();
+                proc.WaitForExit(1000);
+
+                var lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                foreach (var line in lines)
+                {
+                    if (!line.Contains("LISTENING", StringComparison.OrdinalIgnoreCase)) continue;
+                    foreach (var port in ports)
+                    {
+                        if (port > 0 && line.Contains($":{port} "))
+                        {
+                            var parts = line.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                            if (parts.Length >= 5 && int.TryParse(parts[^1], out var pid))
+                            {
+                                if (pid > 0 && pid != currentPid && pid != 4)
+                                {
+                                    pidsToKill.Add(pid);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            foreach (var pid in pidsToKill)
+            {
+                try
+                {
+                    var target = Process.GetProcessById(pid);
+                    var pName = target.ProcessName.ToLowerInvariant();
+                    if (pName.Contains("python") || pName.Contains("main"))
+                    {
+                        AppendLog($"[GUI 端口清理] 释放被残留 Python 进程占用的端口 (PID: {pid})...");
+                        target.Kill(entireProcessTree: true);
+                        target.WaitForExit(1000);
+                    }
+                }
+                catch {}
+            }
+        }
+        catch {}
     }
 
     private void StopServer_Click(object? sender, RoutedEventArgs e)
@@ -2088,6 +2325,15 @@ public partial class MainView : UserControl
                 if (root.TryGetProperty("loop_latency_ms", out var latProp))
                 {
                     WatchdogLatencyText.Text = $"{latProp.GetDouble():F1} ms";
+                }
+
+                if (root.TryGetProperty("version", out var vProp) && vProp.GetString() is string sVer && !string.IsNullOrWhiteSpace(sVer))
+                {
+                    BottomVerText.Text = $"EnderBridge {sVer}";
+                }
+                else if (_localCore.Exists && !string.IsNullOrWhiteSpace(_localCore.Version))
+                {
+                    BottomVerText.Text = $"EnderBridge {_localCore.Version}";
                 }
             }
         }

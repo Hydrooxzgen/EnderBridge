@@ -41,6 +41,11 @@ DESCRIPTION = """
 feature1: App管理界面(beta)
 fix1: 修复无法在webui预览像素画源文件的问题
 app_fix2: 修复app web访问无法刷新、地址栏无法正确同步的问题
+app_fix3: 修复config只读不可写的bug
+app_fix4: 停止服务器按钮无效
+app_fix5: 通过app启动服务端时丢失所有配置
+app_feat1: 可以手动指定服务端路径
+app_fix6: 修复右下角版本号不跟随实际服务端版本号显示的bug
 """
 MINIMIUM_ALLOWED_VERSION = "v1.0.0" # 因为v1.0.0版本新增了重要安全改进，大大降低了被第三方恶意mod入侵的风险，所以限制了降级
                                     # 但是如果你需要降级低于v1.0.0的版本，请更改这里的值为b0.0.0以删除限制
@@ -1074,21 +1079,6 @@ if "--downgrade-config" in sys.argv:
         print("降级失败: 未找到 config.json 或降级出错")
     sys.exit(0)
 
-# ===== 终极兜底:若 users.json 不存在,强制视为首次运行(向导会创建用户系统) =====
-# (USERS_JSON 路径常量见顶部)
-if not is_first_run and not os.path.exists(USERS_JSON):
-    is_first_run = True
-    # 同步写回 config.json,避免下次启动再次误判
-    if os.path.exists(CONFIG_JSON):
-        try:
-            with open(CONFIG_JSON, "r", encoding="utf-8") as f:
-                _j = json.load(f)
-            if not _j.get("is_first_run", False):
-                _j["is_first_run"] = True
-                with open(CONFIG_JSON, "w", encoding="utf-8") as f:
-                    json.dump(_j, f, ensure_ascii=False, indent=2)
-        except Exception:
-            pass
 
 # ===== WebSocket 服务器 =====
 import websockets

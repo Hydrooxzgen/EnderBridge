@@ -267,6 +267,20 @@ class UserManager:
         ]
         self.save()
 
+        # 立即在终端和日志输出凭据，防止因运行在任何子流程/守护模式下导致初次密码遗漏
+        try:
+            from lib import shared
+            shared.logger.info(f"[EnderBridge] WebUI 用户系统已初始化，初始管理员: admin，初始密码: {admin_password}")
+        except Exception:
+            pass
+        print("=" * 48, flush=True)
+        print("  [EnderBridge] WebUI 用户系统已初始化", flush=True)
+        print(f"  用户名: admin", flush=True)
+        print(f"  密  码: {admin_password}", flush=True)
+        print(f"  访客:   guest (无需密码)", flush=True)
+        print("  请牢记密码,可在 WebUI 用户管理中修改。", flush=True)
+        print("=" * 48, flush=True)
+
     def _read_old_token(self) -> str:
         """尝试从旧配置读取 webuiConfig.token"""
         try:

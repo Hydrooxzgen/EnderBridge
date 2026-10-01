@@ -24,20 +24,113 @@ public class VersionManagerService
         _http.Timeout = TimeSpan.FromSeconds(30);
     }
 
+    private static readonly string SettingsFilePath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "EnderBridge",
+        "app_settings.json"
+    );
+
+    public string? GetCustomCorePath()
+    {
+        try
+        {
+            if (File.Exists(SettingsFilePath))
+            {
+                var text = File.ReadAllText(SettingsFilePath);
+                using var doc = JsonDocument.Parse(text);
+                if (doc.RootElement.TryGetProperty("custom_core_path", out var p))
+                {
+                    var val = p.GetString();
+                    if (!string.IsNullOrWhiteSpace(val)) return val.Trim();
+                }
+            }
+        }
+        catch {}
+        return null;
+    }
+
+    public void SetCustomCorePath(string? path)
+    {
+        try
+        {
+            var dir = Path.GetDirectoryName(SettingsFilePath);
+            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+            var dict = new Dictionary<string, object>();
+            if (File.Exists(SettingsFilePath))
+            {
+                try
+                {
+                    var oldText = File.ReadAllText(SettingsFilePath);
+                    dict = JsonSerializer.Deserialize<Dictionary<string, object>>(oldText) ?? new();
+                }
+                catch {}
+            }
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                dict.Remove("custom_core_path");
+            }
+            else
+            {
+                dict["custom_core_path"] = path.Trim();
+            }
+            File.WriteAllText(SettingsFilePath, JsonSerializer.Serialize(dict, new JsonSerializerOptions { WriteIndented = true }));
+        }
+        catch {}
+    }
+
     /// <summary>
-    /// 检测本地当前 main.py 与版本
+    /// 检测本地当前 main.py / app.py 与版本
     /// </summary>
     public LocalCoreInfo CheckLocalCore()
     {
         var info = new LocalCoreInfo { Exists = false };
 
+        // 1. 优先使用用户手动指定的自定义核心路径 (支持 main.py / app.py 文件或所在根目录)
+        var customPath = GetCustomCorePath();
+        if (!string.IsNullOrWhiteSpace(customPath))
+        {
+            if (File.Exists(customPath))
+            {
+                info.Exists = true;
+                info.MainPyPath = Path.GetFullPath(customPath);
+                info.RootDirectory = Path.GetDirectoryName(info.MainPyPath) ?? customPath;
+                info.Version = ReadVersionFromMainPy(info.MainPyPath);
+                return info;
+            }
+            else if (Directory.Exists(customPath))
+            {
+                var fullDir = Path.GetFullPath(customPath);
+                info.RootDirectory = fullDir;
+                var mPy = Path.Combine(fullDir, "main.py");
+                var aPy = Path.Combine(fullDir, "app.py");
+                var candidate = File.Exists(mPy) ? mPy : (File.Exists(aPy) ? aPy : null);
+                if (candidate != null)
+                {
+                    info.Exists = true;
+                    info.MainPyPath = candidate;
+                    info.Version = ReadVersionFromMainPy(candidate);
+                    return info;
+                }
+            }
+        }
+
+        // 2. 自动启发式探测 (过滤 .net 临时解压目录)
         var candidates = new List<string>();
         if (!string.IsNullOrEmpty(Environment.ProcessPath))
         {
             var pDir = Path.GetDirectoryName(Environment.ProcessPath);
-            if (!string.IsNullOrEmpty(pDir)) candidates.Add(pDir);
+            if (!string.IsNullOrEmpty(pDir) && !pDir.Contains(".net", StringComparison.OrdinalIgnoreCase))
+            {
+                candidates.Add(pDir);
+            }
         }
-        candidates.Add(AppContext.BaseDirectory);
+        if (!AppContext.BaseDirectory.Contains(".net", StringComparison.OrdinalIgnoreCase))
+        {
+            candidates.Add(AppContext.BaseDirectory);
+        }
         candidates.Add(Environment.CurrentDirectory);
 
         foreach (var startDir in candidates)
@@ -45,17 +138,29 @@ public class VersionManagerService
             var cur = new DirectoryInfo(startDir);
             for (int i = 0; i < 6 && cur != null; i++)
             {
-                var mainPy = Path.Combine(cur.FullName, "main.py");
-                if (File.Exists(mainPy))
+                var mPy = Path.Combine(cur.FullName, "main.py");
+                var aPy = Path.Combine(cur.FullName, "app.py");
+                var targetPy = File.Exists(mPy) ? mPy : (File.Exists(aPy) ? aPy : null);
+                if (targetPy != null)
                 {
                     info.Exists = true;
-                    info.MainPyPath = mainPy;
+                    info.MainPyPath = targetPy;
                     info.RootDirectory = cur.FullName;
-                    info.Version = ReadVersionFromMainPy(mainPy);
+                    info.Version = ReadVersionFromMainPy(targetPy);
                     return info;
                 }
                 cur = cur.Parent;
             }
+        }
+
+        // 兜底 RootDirectory: 绝不指向 Temp 目录
+        if (!string.IsNullOrWhiteSpace(customPath) && Directory.Exists(customPath))
+        {
+            info.RootDirectory = Path.GetFullPath(customPath);
+        }
+        else
+        {
+            info.RootDirectory = Environment.CurrentDirectory;
         }
 
         return info;
@@ -66,7 +171,7 @@ public class VersionManagerService
         try
         {
             var text = File.ReadAllText(mainPyPath);
-            var m = Regex.Match(text, @"VERSION\s*=\s*[""']([^""']+)[""']");
+            var m = Regex.Match(text, @"(?:VERSION|__version__)\s*=\s*[""']([^""']+)[""']");
             if (m.Success)
             {
                 return m.Groups[1].Value;
