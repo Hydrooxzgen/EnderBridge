@@ -40,6 +40,7 @@ VERSION = "v1.1.0 dev"
 DESCRIPTION = """
 feature1: App管理界面(beta)
 fix1: 修复无法在webui预览像素画源文件的问题
+app_fix2: 修复app web访问无法刷新、地址栏无法正确同步的问题
 """
 MINIMIUM_ALLOWED_VERSION = "v1.0.0" # 因为v1.0.0版本新增了重要安全改进，大大降低了被第三方恶意mod入侵的风险，所以限制了降级
                                     # 但是如果你需要降级低于v1.0.0的版本，请更改这里的值为b0.0.0以删除限制

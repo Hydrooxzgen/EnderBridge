@@ -200,10 +200,22 @@ public partial class MainView : UserControl
             try
             {
                 await CheckHealthAsync();
+
+                // 实时同步内置浏览器地址栏 (当用户未聚焦输入框且网页已加载时)
+                if (BrowserContainer.IsVisible && !BrowserUrlTextBox.IsFocused && InAppWebView.Source != null)
+                {
+                    var cur = InAppWebView.Source.ToString();
+                    if (!string.IsNullOrEmpty(cur) && BrowserUrlTextBox.Text != cur)
+                    {
+                        BrowserUrlTextBox.Text = cur;
+                    }
+                }
             }
             catch {}
         };
         _pollTimer.Start();
+
+        InitInAppBrowser();
 
         AppDomain.CurrentDomain.ProcessExit += (s, e) => KillServer();
     }
@@ -657,11 +669,75 @@ public partial class MainView : UserControl
         NavigateWebView(url);
     }
 
+    private void InitInAppBrowser()
+    {
+        try
+        {
+            // 1. 监听导航开始事件: 实时同步目标地址到地址栏
+            InAppWebView.NavigationStarted += (s, e) =>
+            {
+                if (e.Request != null)
+                {
+                    UpdateBrowserUrlBar(e.Request.ToString());
+                }
+            };
+
+            // 2. 监听导航完成事件: 更新地址栏并尝试获取最终真实页面 URL (如经过重定向或前端 SPA 路由)
+            InAppWebView.NavigationCompleted += async (s, e) =>
+            {
+                if (e.Request != null)
+                {
+                    UpdateBrowserUrlBar(e.Request.ToString());
+                }
+
+                // 针对 SPA 单页路由或重定向，尝试从 JS 获取 window.location.href
+                try
+                {
+                    var realUrl = await InAppWebView.InvokeScript("window.location.href");
+                    if (!string.IsNullOrWhiteSpace(realUrl) && realUrl != "null" && realUrl != "undefined")
+                    {
+                        realUrl = realUrl.Trim('"', '\'', ' ');
+                        UpdateBrowserUrlBar(realUrl);
+                    }
+                }
+                catch {}
+            };
+
+            // 3. 监听 Source 依赖属性变化
+            InAppWebView.PropertyChanged += (s, e) =>
+            {
+                if (e.Property == Avalonia.Controls.NativeWebView.SourceProperty && InAppWebView.Source != null)
+                {
+                    UpdateBrowserUrlBar(InAppWebView.Source.ToString());
+                }
+            };
+        }
+        catch (Exception ex)
+        {
+            AppendLog($"[GUI 内置浏览器] 初始化事件监听异常: {ex.Message}");
+        }
+    }
+
+    private void UpdateBrowserUrlBar(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return;
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (!BrowserUrlTextBox.IsFocused)
+            {
+                BrowserUrlTextBox.Text = url;
+            }
+        });
+    }
+
     private void NavigateWebView(string url)
     {
         try
         {
-            InAppWebView.Source = new Uri(url);
+            var uri = new Uri(url);
+            InAppWebView.Navigate(uri);
+            InAppWebView.Source = uri;
+            UpdateBrowserUrlBar(url);
         }
         catch (Exception ex)
         {
@@ -676,9 +752,57 @@ public partial class MainView : UserControl
         SelectTab(_browserReturnTag ?? "Dashboard");
     }
 
+    private void BrowserGoBack_Click(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (InAppWebView.CanGoBack)
+            {
+                InAppWebView.GoBack();
+            }
+        }
+        catch {}
+    }
+
+    private void BrowserGoForward_Click(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (InAppWebView.CanGoForward)
+            {
+                InAppWebView.GoForward();
+            }
+        }
+        catch {}
+    }
+
     private void BrowserRefresh_Click(object? sender, RoutedEventArgs e)
     {
-        NavigateWebView(BrowserUrlTextBox.Text ?? _backendUrl);
+        try
+        {
+            if (InAppWebView.Source != null)
+            {
+                InAppWebView.Refresh();
+                AppendLog("[GUI 内置浏览器] 正在刷新网页...");
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            AppendLog($"[GUI 内置浏览器] 原生刷新失败: {ex.Message}，尝试使用当前地址重新载入");
+        }
+
+        var url = BrowserUrlTextBox.Text?.Trim();
+        if (string.IsNullOrEmpty(url)) url = _backendUrl;
+        NavigateWebView(url);
+    }
+
+    private void BrowserUrl_KeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            BrowserNavigate_Click(sender, e);
+        }
     }
 
     private void BrowserNavigate_Click(object? sender, RoutedEventArgs e)
@@ -686,6 +810,13 @@ public partial class MainView : UserControl
         var url = BrowserUrlTextBox.Text?.Trim();
         if (!string.IsNullOrEmpty(url))
         {
+            if (!url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+                !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase) &&
+                !url.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
+            {
+                url = "http://" + url;
+                BrowserUrlTextBox.Text = url;
+            }
             NavigateWebView(url);
         }
     }
@@ -2098,6 +2229,11 @@ public partial class MainView : UserControl
     private void OpenWebUI_Click(object? sender, RoutedEventArgs e)
     {
         SelectTab("WebUI");
+    }
+
+    private void CloseBetaNotice_Click(object? sender, RoutedEventArgs e)
+    {
+        BetaNoticeBanner.IsVisible = false;
     }
 
     private void QuickAction_Mods(object? sender, RoutedEventArgs e) => SelectTab("Mods");

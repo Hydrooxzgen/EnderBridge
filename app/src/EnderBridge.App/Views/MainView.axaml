@@ -53,9 +53,42 @@
         </Style>
     </UserControl.Styles>
 
-    <Grid RowDefinitions="Auto,*,Auto">
-        <!-- Top Modern Header -->
+    <Grid RowDefinitions="Auto,Auto,*,Auto">
+        <!-- 0. Top Beta Notice Bar -->
         <Border Grid.Row="0"
+                Name="BetaNoticeBanner"
+                Background="#201708"
+                BorderBrush="#78470E"
+                BorderThickness="0,0,0,1"
+                Padding="20,7">
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <Border Background="#B45309" CornerRadius="4" Padding="6,2" VerticalAlignment="Center">
+                        <TextBlock Text="BETA" FontSize="10" FontWeight="Bold" Foreground="White" />
+                    </Border>
+                    <TextBlock Text="Beta 提示:" FontSize="12" FontWeight="SemiBold" Foreground="#F59E0B" VerticalAlignment="Center" />
+                </StackPanel>
+
+                <TextBlock Grid.Column="1"
+                           Text="Beta测试阶段, 不稳定, 仍推荐使用WebUI进行管理。"
+                           FontSize="12" Foreground="#D1D5DB" VerticalAlignment="Center" Margin="10,0,12,0"
+                           TextTrimming="CharacterEllipsis" />
+
+                <Button Grid.Column="2" Content="打开 WebUI" Classes="NoBorder"
+                        Background="#352207" Foreground="#FBBF24"
+                        BorderBrush="#B45309" BorderThickness="1" CornerRadius="6"
+                        Padding="10,4" FontSize="11" Margin="0,0,8,0"
+                        Click="OpenWebUI_Click" Cursor="Hand" />
+
+                <Button Grid.Column="3" Content="✕" Classes="NoBorder"
+                        Background="Transparent" Foreground="#9CA3AF"
+                        Padding="6,3" FontSize="12" Cursor="Hand"
+                        ToolTip.Tip="隐藏此提示" Click="CloseBetaNotice_Click" />
+            </Grid>
+        </Border>
+
+        <!-- Top Modern Header -->
+        <Border Grid.Row="1"
                 Height="60"
                 Padding="24,0"
                 Background="{DynamicResource BackgroundBrush}"
@@ -98,7 +131,7 @@
         </Border>
 
         <!-- Center Dynamic Page View Area -->
-        <Border Grid.Row="1" Margin="20,12" Name="PageContainer">
+        <Border Grid.Row="2" Margin="20,12" Name="PageContainer">
             <Grid>
                 <!-- 1. Dashboard View (Default) -->
                 <ScrollViewer Name="DashboardScrollViewer" Classes="EBPage">
@@ -469,17 +502,26 @@
                 <Grid Name="BrowserContainer" Classes="EBPage" RowDefinitions="Auto,*" IsVisible="False">
                     <!-- Browser Control Bar -->
                     <items:BorderCard Grid.Row="0" Padding="10,8" Margin="0,0,0,10">
-                        <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
-                            <Button Grid.Column="0" Content="◀ 返回仪表盘" Background="#1F2937" Foreground="#E5E7EB"
-                                    CornerRadius="6" Padding="10,5" Margin="0,0,8,0" Click="BrowserBackToDashboard_Click" />
-                            <Button Grid.Column="1" Content="🔄 刷新" Background="#1F2937" Foreground="#E5E7EB"
-                                    CornerRadius="6" Padding="10,5" Margin="0,0,8,0" Click="BrowserRefresh_Click" />
-                            <TextBox Grid.Column="2" Name="BrowserUrlTextBox" Text="http://127.0.0.1:18888/"
-                                     VerticalAlignment="Center" IsReadOnly="True" CornerRadius="6"
-                                     Background="#111318" Foreground="#A0AEC0" Padding="10,6" />
-                            <Button Grid.Column="3" Content="🚀 载入" Background="{DynamicResource AccentBackgroundBrush}" Foreground="White"
+                        <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto">
+                            <Button Grid.Column="0" Content="◀ 返回" Background="#1F2937" Foreground="#E5E7EB"
+                                    CornerRadius="6" Padding="10,5" Margin="0,0,8,0" Click="BrowserBackToDashboard_Click"
+                                    ToolTip.Tip="返回仪表盘" />
+                            <Button Grid.Column="1" Content="◀" Background="#1F2937" Foreground="#E5E7EB"
+                                    CornerRadius="6" Padding="10,5" Margin="0,0,4,0" Click="BrowserGoBack_Click"
+                                    ToolTip.Tip="后退" />
+                            <Button Grid.Column="2" Content="▶" Background="#1F2937" Foreground="#E5E7EB"
+                                    CornerRadius="6" Padding="10,5" Margin="0,0,6,0" Click="BrowserGoForward_Click"
+                                    ToolTip.Tip="前进" />
+                            <Button Grid.Column="3" Content="🔄 刷新" Background="#1F2937" Foreground="#E5E7EB"
+                                    CornerRadius="6" Padding="10,5" Margin="0,0,8,0" Click="BrowserRefresh_Click"
+                                    ToolTip.Tip="重新加载当前页面" />
+                            <TextBox Grid.Column="4" Name="BrowserUrlTextBox" Text="http://127.0.0.1:18888/"
+                                     VerticalAlignment="Center" CornerRadius="6"
+                                     Background="#111318" Foreground="#E5E7EB" Padding="10,6"
+                                     KeyDown="BrowserUrl_KeyDown" />
+                            <Button Grid.Column="5" Content="🚀 载入" Background="{DynamicResource AccentBackgroundBrush}" Foreground="White"
                                     CornerRadius="6" Padding="12,5" Margin="8,0,8,0" Click="BrowserNavigate_Click" />
-                            <Button Grid.Column="4" Content="🌐 外部浏览器" Background="#1F2937" Foreground="#9CA3AF"
+                            <Button Grid.Column="6" Content="🌐 外部浏览器" Background="#1F2937" Foreground="#9CA3AF"
                                     CornerRadius="6" Padding="10,5" Click="OpenExternalBrowser_Click" />
                         </Grid>
                     </items:BorderCard>
@@ -550,7 +592,7 @@
         </Border>
 
         <!-- Bottom Bar (BedrockBoot Exact Navigation Architecture) -->
-        <Border Grid.Row="2"
+        <Border Grid.Row="3"
                 Height="62"
                 Padding="16,0"
                 Background="{DynamicResource BackgroundBrush}"
