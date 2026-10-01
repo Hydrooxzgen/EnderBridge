@@ -1,6 +1,41 @@
+# EnderBridge redundant files and directories (.noneeds)
+# 在更新完成后自动检测并清理以下冗余文件与文件夹
+
+# 文档与开发测试配置
 wiki/
 tests/
 .github/
 CODE_OF_CONDUCT.md
 CONTRIBUTING.md
+LICENSE
+LICENSE*
+/security_audit.py
+importtime.log
+
+# 客户端应用临时产物与中间构建目录
+app/**/bin/
+app/**/obj/
+app/**/publish/
+app/**/TestResults/
+app/**/packages/
+app/**/Generated Files/
+app/**/AppBundle/
+app/**/.vs/
+app/**/.idea/
+app/**/.vscode/
+app/**/*.user
+app/**/*.userosscache
+app/**/*.suo
+app/**/*.sln.docstates
+app/**/*.DotSettings.user
+app/**/_ReSharper*/
+
+# 桌面端运行时缓存与日志
+*.WebView2/
+*.WebView2
+EnderBridge.exe.WebView2/
+app_error.log
+dist/
+build/
+.pytest_cache/
 LICENSE

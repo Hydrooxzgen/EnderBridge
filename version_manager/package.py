@@ -189,24 +189,23 @@ def overlay_dir(src_dir, root, keep=UPDATE_KEEP, allow=CONFIG_TEMPLATE_ALLOW) ->
     return copied
 
 
-def clean_noneeds(root: str) -> list:
+def clean_noneeds(root: str, _is_sub: bool = False) -> list:
     """更新后检测并删除 .noneeds 中指定的冗余文件与文件夹
 
     返回被成功删除的相对路径列表。
     """
     noneeds_path = os.path.join(root, NONEEDS_FILE)
-    if not os.path.isfile(noneeds_path):
-        return []
-
-    try:
-        with open(noneeds_path, "r", encoding="utf-8", errors="replace") as f:
-            lines = f.readlines()
-    except Exception:
-        return []
-
     deleted = []
+    lines = []
+    if os.path.isfile(noneeds_path):
+        try:
+            with open(noneeds_path, "r", encoding="utf-8", errors="replace") as f:
+                lines = f.readlines()
+        except Exception:
+            lines = []
+
     # 核心保护名单: 严禁删除的项目关键文件与配置
-    PROTECTED = {"", ".", "main.py", NONEEDS_FILE, "config", "config/config.json"}
+    PROTECTED = {"", ".", "main.py", NONEEDS_FILE, ".exportignore", ".gitignore", "config", "config/config.json"}
 
     for raw in lines:
         line = raw.strip()
@@ -223,10 +222,10 @@ def clean_noneeds(root: str) -> list:
         if os.path.isabs(clean_line) or clean_line.startswith(("/", "\\")):
             continue
 
-        # 支持通配符匹配 (如 *.tmp, docs/*.draft 等)
+        # 支持通配符匹配 (如 *.tmp, docs/*.draft, app/**/bin 等)
         if any(char in line for char in ("*", "?", "[")):
             import glob
-            full_pattern = os.path.join(root, line.replace("/", os.sep))
+            full_pattern = os.path.join(root, clean_line.replace("/", os.sep))
             matches = glob.glob(full_pattern, recursive=True)
             for m in matches:
                 rel = os.path.relpath(m, root).replace(os.sep, "/")
@@ -255,6 +254,14 @@ def clean_noneeds(root: str) -> list:
                     deleted.append(clean_line)
             except Exception:
                 pass
+
+    # 若未处于子目录清理中且存在 app/.noneeds，同步递归执行 app 子工程清理
+    if not _is_sub:
+        app_dir = os.path.join(root, "app")
+        if os.path.isdir(app_dir) and os.path.isfile(os.path.join(app_dir, NONEEDS_FILE)):
+            sub_deleted = clean_noneeds(app_dir, _is_sub=True)
+            for item in sub_deleted:
+                deleted.append(f"app/{item}")
 
     return deleted
 

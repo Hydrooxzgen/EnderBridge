@@ -589,5 +589,52 @@ class TestNoneeds:
         assert (project / "essential.py").exists()
         assert (project / "main.py").exists()
 
+    def test_clean_noneeds_handles_app_subproject(self, tmp_path):
+        project = tmp_path / "project"
+        project.mkdir()
+        (project / "main.py").write_text("# main")
+        (project / NONEEDS_FILE).write_text("old_root.txt\n")
+        (project / "old_root.txt").write_text("old")
 
+        # 子工程 app 目录
+        app = project / "app"
+        app.mkdir()
+        (app / "src").mkdir()
+        (app / "src" / "Main.cs").write_text("// C#")
+        (app / "bin").mkdir()
+        (app / "bin" / "output.dll").write_text("dll")
+        (app / NONEEDS_FILE).write_text("bin/\n*.log\n")
+        (app / "app_error.log").write_text("error")
 
+        deleted = clean_noneeds(str(project))
+        assert "old_root.txt" in deleted
+        assert "app/bin/" in deleted
+        assert "app/app_error.log" in deleted
+        assert not (project / "old_root.txt").exists()
+        assert not (app / "bin").exists()
+        assert not (app / "app_error.log").exists()
+        assert (app / "src" / "Main.cs").exists()
+        assert (app / NONEEDS_FILE).exists()
+
+    def test_clean_noneeds_matches_license_and_anchored_files(self, tmp_path):
+        project = tmp_path / "project"
+        project.mkdir()
+        (project / "main.py").write_text("# main")
+        (project / "LICENSE").write_text("MIT License")
+        (project / "LICENSE.txt").write_text("BSD License")
+        (project / "security_audit.py").write_text("# audit")
+        (project / "tests").mkdir()
+        (project / "tests" / "test_dummy.py").write_text("# test")
+        (project / NONEEDS_FILE).write_text("LICENSE*\n/security_audit.py\ntests/\n")
+
+        deleted = clean_noneeds(str(project))
+        assert "LICENSE" in deleted
+        assert "LICENSE.txt" in deleted
+        assert "security_audit.py" in deleted
+        assert "tests/" in deleted
+        assert not (project / "LICENSE").exists()
+        assert not (project / "LICENSE.txt").exists()
+        assert not (project / "security_audit.py").exists()
+        assert not (project / "tests").exists()
+        assert (project / "main.py").exists()
+        assert (project / NONEEDS_FILE).exists()
