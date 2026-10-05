@@ -499,16 +499,11 @@ class XboxLoginManager:
             pass
 
     def _save_account(self, username: str):
-        """将已认证的 Xbox 账号保存到 config.py"""
+        """将已认证的 Xbox 账号保存到配置"""
         try:
-            import importlib.util
-            ns = {}
-            spec = importlib.util.spec_from_file_location("config", os.path.join(CONFIG_DIR, "config.py"))
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            ns = module.__dict__
-
-            bot_cfg = dict(ns.get("botConfig") or {})
+            from webui.server import _load_config_module, save_config
+            cfg = _load_config_module()
+            bot_cfg = dict(cfg.get("botConfig") or {})
             accounts = list(bot_cfg.get("xboxAccounts") or [])
 
             # 检查是否已存在
@@ -524,23 +519,8 @@ class XboxLoginManager:
             # 登录了 Xbox 账号必须使用 online 模式,否则 bot 还是离线连接
             bot_cfg["offline"] = False
 
-            # 写回 config.py
-            config_path = os.path.join(CONFIG_DIR, "config.py")
-            from webui.server import _replace_block
-            src = ""
-            with open(config_path, "r", encoding="utf-8") as f:
-                src = f.read()
-            src, ok = _replace_block(src, "botConfig", bot_cfg)
-            if ok:
-                import shutil
-                bak_path = config_path + ".bak"
-                if os.path.exists(config_path):
-                    shutil.copy2(config_path, bak_path)
-                with open(config_path, "w", encoding="utf-8") as f:
-                    f.write(src)
-                shared.logger.info(f"[XboxLogin] 账号 {username} 已保存到配置")
-            else:
-                shared.logger.warning(f"[XboxLogin] 无法保存账号: config.py 中未找到 botConfig")
+            save_config({"botConfig": bot_cfg})
+            shared.logger.info(f"[XboxLogin] 账号 {username} 已保存到配置")
         except Exception as e:
             shared.logger.warning(f"[XboxLogin] 保存账号失败: {e}")
 

@@ -35,23 +35,11 @@ USERS_JSON = os.path.join(CONFIG_DIR, "users.json")
 UPDATE_MARKER = os.path.join(ROOT, ".update_pending")
 
 # --- 版本常量 ---
-VERSION = "v1.1.0"
+VERSION = "v1.1.0.1 dev"
 # ↓仅当不为None时从Github拉取更新日志, 反之则直接显示该变量内容。
-DESCRIPTION = None
-"""
-feature1: App管理界面(beta)
-fix1: 修复无法在webui预览像素画源文件的问题
-app_fix2: 修复app web访问无法刷新、地址栏无法正确同步的问题
-app_fix3: 修复config只读不可写的bug
-app_fix4: 停止服务器按钮无效
-app_fix5: 通过app启动服务端时丢失所有配置
-app_feat1: 可以手动指定服务端路径
-app_fix6: 修复右下角版本号不跟随实际服务端版本号显示的bug
-serv_fix7: 修复了随机密码显示2次的bug
-serv_fix8: 修复启动时配置丢失的问题
-serv_feat1: 当你被ban时可以携带pwd参数进入webui
-app_feat2: 可以在app中设定服务端路径&下载时询问用户下载路径
-app_safe_fix1: 修复了在app中无需通过身份验证就可以修改服务端配置的问题
+DESCRIPTION = """
+fix1: 修复无法保存xbox live档案的问题
+fix2: 修复了启动时有几率无法读取config的问题
 """
 MINIMIUM_ALLOWED_VERSION = "v1.0.0" # 因为v1.0.0版本新增了重要安全改进，大大降低了被第三方恶意mod入侵的风险，所以限制了降级
                                     # 但是如果你需要降级低于v1.0.0的版本，请更改这里的值为b0.0.0以删除限制
@@ -99,9 +87,9 @@ def _is_oneshot_command() -> bool:
         or (os.environ.get("EB_NO_SUPERVISOR") == "1")
     )
 
-# ===== 自动迁移:将根目录下的旧配置文件移动到 config/ 目录 =====
+# ===== 自动迁移:将根目录下的旧配置文件安全移动到 config/ 目录 =====
 os.makedirs(CONFIG_DIR, exist_ok=True)
-# 清理根目录残留的旧配置文件(0.4.1+ 配置统一在 config/ 目录,旧文件直接删除不再迁移)
+import shutil as _shutil_migrate
 for _fname in [
     "config.py", "config.py.bak", "config.json", "config.json.bak",
     "config.example.json",
@@ -110,11 +98,19 @@ for _fname in [
     "banlist.json",
 ]:
     _old = os.path.join(ROOT, _fname)
+    _target = os.path.join(CONFIG_DIR, _fname)
     if os.path.exists(_old):
-        try:
-            os.remove(_old)
-        except OSError:
-            pass
+        # 若 config/ 目录下尚无该配置文件，优先安全迁移而非直接删除！
+        if not os.path.exists(_target):
+            try:
+                _shutil_migrate.move(_old, _target)
+            except Exception:
+                pass
+        else:
+            try:
+                os.remove(_old)
+            except OSError:
+                pass
 
 def _parse_version(v: str) -> tuple:
     """解析版本号字符串(如 'b0.4.1 dev', 'b0.4.1')为可比较的元组 (0, 4, 1)"""
@@ -198,6 +194,13 @@ if not os.path.exists(CONFIG_PY) and not os.path.exists(CONFIG_JSON) and ARGV_NO
     if os.path.exists(CONFIG_EXAMPLE_JSON):
         import shutil as _shutil_cfg
         _shutil_cfg.copy2(CONFIG_EXAMPLE_JSON, CONFIG_JSON)
+        # 清理可能残留的旧备份, 保证重置彻底
+        _bak = CONFIG_JSON + ".bak"
+        if os.path.exists(_bak):
+            try:
+                os.remove(_bak)
+            except OSError:
+                pass
         # --load-without-config 跳过向导,必须清除 is_first_run,
         # 否则下次正常启动会误触发向导
         if WANT_LOAD_WITHOUT_CONFIG:
@@ -212,13 +215,20 @@ if not os.path.exists(CONFIG_PY) and not os.path.exists(CONFIG_JSON) and ARGV_NO
                 pass
         print("未找到 config.json, 已根据模板自动生成默认配置(可在向导中修改)")
 
-# permission.json 缺失时从模板复制(权限系统依赖该文件,路径常量见顶部)
-if not os.path.exists(PERMISSION_JSON) and os.path.exists(PERMISSION_EXAMPLE) and ARGV_NOT_EXIST:
-    with open(PERMISSION_EXAMPLE, "r", encoding="utf-8") as f:
-        content = f.read()
-    with open(PERMISSION_JSON, "w", encoding="utf-8") as f:
-        f.write(content)
-    print("未找到 permission.json, 已根据模板自动生成默认权限配置")
+# permission.json 缺失时从模板复制
+if not os.path.exists(PERMISSION_JSON) and ARGV_NOT_EXIST:
+    if os.path.exists(PERMISSION_EXAMPLE):
+        with open(PERMISSION_EXAMPLE, "r", encoding="utf-8") as f:
+            content = f.read()
+        with open(PERMISSION_JSON, "w", encoding="utf-8") as f:
+            f.write(content)
+        _bak_perm = PERMISSION_JSON + ".bak"
+        if os.path.exists(_bak_perm):
+            try:
+                os.remove(_bak_perm)
+            except OSError:
+                pass
+        print("未找到 permission.json, 已根据模板自动生成默认权限配置")
 
 # ===== 一键重置:python main.py --reset-all =====
 # 清除所有配置文件(不启动服务器),并将模板 config.example.json 的 is_first_run 复位为 True
@@ -1032,10 +1042,11 @@ if not wsConfig:
         wsConfig = {}
 
 # 安全网:如果 ARGV_NOT_EXIST 阶段因某种原因未创建 config.json,此处兜底
-if not os.path.exists(CONFIG_JSON) and not os.path.exists(CONFIG_PY) and os.path.exists(CONFIG_EXAMPLE_JSON) and ARGV_NOT_EXIST:
-    import shutil as _shutil_cfg2
-    _shutil_cfg2.copy2(CONFIG_EXAMPLE_JSON, CONFIG_JSON)
-    print("未找到 config.json, 已根据模板自动生成默认配置(安全网)")
+if not os.path.exists(CONFIG_JSON) and not os.path.exists(CONFIG_PY) and ARGV_NOT_EXIST:
+    if os.path.exists(CONFIG_EXAMPLE_JSON):
+        import shutil as _shutil_cfg2
+        _shutil_cfg2.copy2(CONFIG_EXAMPLE_JSON, CONFIG_JSON)
+        print("未找到 config.json, 已根据模板自动生成默认配置(安全网)")
 
 # is_first_run 检测:JSON 优先
 is_first_run = _cfg.get("is_first_run", None)
