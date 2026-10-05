@@ -46,6 +46,9 @@ app_fix4: 停止服务器按钮无效
 app_fix5: 通过app启动服务端时丢失所有配置
 app_feat1: 可以手动指定服务端路径
 app_fix6: 修复右下角版本号不跟随实际服务端版本号显示的bug
+serv_fix7: 修复了随机密码显示2次的bug
+serv_fix8: 修复启动时配置丢失的问题
+serv_feat1: 当你被ban时可以携带pwd参数进入webui
 """
 MINIMIUM_ALLOWED_VERSION = "v1.0.0" # 因为v1.0.0版本新增了重要安全改进，大大降低了被第三方恶意mod入侵的风险，所以限制了降级
                                     # 但是如果你需要降级低于v1.0.0的版本，请更改这里的值为b0.0.0以删除限制
@@ -66,12 +69,11 @@ WANT_GOTO_OOBE = "--goto-oobe" in sys.argv
 WANT_UPDATE = "update" in sys.argv
 WANT_ROLLBACK = "--rollback" in sys.argv
 WANT_PREVIEW = "preview" in sys.argv
-WANT_SET_PASSWORD = ("--set-password" in sys.argv) or ("--password" in sys.argv)
-ARGV_NOT_EXIST = not WANT_RESET\
+IS_TESTING = "pytest" in sys.modules or any("pytest" in str(a).lower() for a in sys.argv)
+ARGV_NOT_EXIST = not IS_TESTING and not WANT_RESET\
 and not WANT_VIEW_VERSION and not WANT_EXPORT \
 and not WANT_VIEW_DESCRIPTION and not WANT_HELP \
-and not WANT_ROLLBACK and not WANT_PREVIEW \
-and not WANT_SET_PASSWORD
+and not WANT_ROLLBACK and not WANT_PREVIEW
 
 # --- 终端提示符常量 ---
 CONSOLE_PROMPT = "EnderBridge> "
@@ -90,7 +92,6 @@ def _is_oneshot_command() -> bool:
         or WANT_UPDATE
         or WANT_ROLLBACK
         or WANT_PREVIEW
-        or WANT_SET_PASSWORD
         or ("--no-supervisor" in sys.argv)
         or (os.environ.get("EB_NO_SUPERVISOR") == "1")
     )
@@ -189,8 +190,8 @@ if not WANT_RESET and not WANT_EXPORT and not _dependencies_ok():
 # 依赖 config.json 的模块(lib/logger.py、lib/utils.py、lib/mods.py 等)均为延迟加载,
 # 因此 config.json 缺失时(如 --reset-all 之后)可先在此根据模板自动补全,保证程序可启动。
 # 此阶段判断启动参数并执行对应操作(ARGV_NOT_EXIST 见顶部常量区)
-if  not os.path.exists(CONFIG_PY) and not os.path.exists(CONFIG_JSON) and ARGV_NOT_EXIST:
-    # 优先生成 config.json, 若无模板则回退到 config.py
+if not os.path.exists(CONFIG_PY) and not os.path.exists(CONFIG_JSON) and ARGV_NOT_EXIST:
+    # 从模板初始化全新配置
     if os.path.exists(CONFIG_EXAMPLE_JSON):
         import shutil as _shutil_cfg
         _shutil_cfg.copy2(CONFIG_EXAMPLE_JSON, CONFIG_JSON)
@@ -231,6 +232,15 @@ if WANT_RESET:
                 except OSError:
                     pass
                 removed.append(name)
+    try:
+        import glob
+        for f in glob.glob(os.path.join(CONFIG_DIR, "*.bak_reset_*")):
+            try:
+                os.remove(f)
+            except OSError:
+                pass
+    except Exception:
+        pass
     # 复位模板标记,下次启动自动进入向导重新配置
     try:
         if os.path.exists(CONFIG_EXAMPLE_JSON):
@@ -273,14 +283,12 @@ if WANT_HELP:
     print("  update <压缩包>       一键升级(保留配置,默认自动备份)")
     print("  export [输出路径]     一键导出为zip")
     print("  --rollback [备份包]   回滚到指定备份(默认最新)")
-    print("  --set-password [用户] <密码> 设置/重置 WebUI 用户密码(默认用户: admin)")
     print()
     print("选项:")
     print("  --help, -h            显示此帮助信息")
     print("  --version, -v         显示当前版本")
     print("  --safe-mode           安全模式启动: 跳过第三方 Mod 加载，仅保留核心通信与 WebUI")
     print("  --reset-all           一键重置所有配置")
-    print("  --set-password <密码> 重置管理员 admin 密码")
     print("  --load-without-config 跳过配置直接启动(调试用)")
     print("  --system              启用系统保留账户模式")
     print("  --goto-oobe           重新进入配置向导(保留当前配置)")
@@ -288,7 +296,6 @@ if WANT_HELP:
     print()
     print("示例:")
     print("  python main.py                                      启动服务器")
-    print("  python main.py --set-password 123456                将 admin 密码重置为 123456")
     print("  python main.py preview 樱花塔.litematic             在本地浏览器 3D 预览蓝图")
     print("  python main.py preview 樱花塔 --export out.html     导出独立离线 HTML 预览网页")
     print("  python main.py update update.zip                    从压缩包升级")
@@ -297,35 +304,6 @@ if WANT_HELP:
     print("  python main.py export D:/backup/eb.zip              导出到指定路径")
     print("  python main.py --reset-all                          重置所有配置")
     print("  python main.py --version                            查看版本")
-    sys.exit(0)
-
-# ===== 密码设置/重置:python main.py --set-password [用户=admin] <新密码> =====
-if WANT_SET_PASSWORD:
-    args = [a for a in sys.argv if a not in ("--set-password", "--password")]
-    pos_args = [a for a in args[1:] if not a.startswith("-")]
-    if len(pos_args) == 1:
-        target_user = "admin"
-        new_pw = pos_args[0]
-    elif len(pos_args) >= 2:
-        target_user = pos_args[0]
-        new_pw = pos_args[1]
-    else:
-        print("[用法] python main.py --set-password <新密码>")
-        print("       python main.py --set-password <用户名> <新密码>")
-        sys.exit(1)
-
-    from lib.users import user_manager, hash_password
-    user_manager.load()
-    u = user_manager.get_user(target_user)
-    if not u:
-        user_manager.add_user(target_user, new_pw, role="admin")
-    else:
-        u["password_hash"] = hash_password(new_pw)
-        user_manager.save()
-    print("========================================")
-    print(f"  [EnderBridge] 用户 [{target_user}] 密码已成功更新！")
-    print(f"  新密码: {new_pw}")
-    print("========================================")
     sys.exit(0)
 
 # ===== 回滚:python main.py --rollback [备份包] =====
@@ -813,11 +791,27 @@ if os.path.isfile(UPDATE_MARKER) and not WANT_UPDATE:
         except Exception:
             pass
     if pending_path and os.path.isfile(pending_path):
-        from version_manager.package import apply_archive, backup_dir, PackageError
+        from version_manager.package import apply_archive, backup_dir, PackageError, get_archive_version
 
+        # 检查是否低于最低允许版本, 防止降级到危险版本
+        pending_ver = get_archive_version(pending_path)
+        if pending_ver and MINIMIUM_ALLOWED_VERSION:
+            try:
+                if _parse_version(pending_ver) < _parse_version(MINIMIUM_ALLOWED_VERSION):
+                    print("========================================")
+                    print(f"  [安全拦截] 目标版本 {pending_ver} 低于最低允许版本 {MINIMIUM_ALLOWED_VERSION}")
+                    print("  更新操作已终止，当前版本未受影响")
+                    print("========================================")
+                    pending_path = None
+            except Exception:
+                pass
+
+    if pending_path and os.path.isfile(pending_path):
         print("========================================")
         print(f"  WebUI 触发更新: {pending_path}")
         print(f"  当前版本: {VERSION}")
+        if pending_ver:
+            print(f"  目标版本: {pending_ver}")
         print("========================================")
 
         try:
@@ -1360,15 +1354,14 @@ def _start_webui() -> None:
         # 首次运行或升级:打印 admin 凭证到终端并输出到日志
         if user_manager._first_run_password:
             admin_pw = user_manager._first_run_password
-            user_manager._first_run_password = None  # 只打印一次
-            shared.logger.info(f"[EnderBridge] WebUI 用户系统已初始化，初始管理员: admin，初始密码: {admin_pw}")
-            print("=" * 44)
-            print("  [EnderBridge] WebUI 用户系统已初始化")
-            print(f"  用户名: admin")
-            print(f"  密  码: {admin_pw}")
-            print(f"  访客:   guest (无需密码)")
-            print("  请牢记密码,可在 WebUI 用户管理中修改。")
-            print("=" * 44)
+            user_manager._first_run_password = None
+            print("=" * 44, flush=True)
+            print("  [EnderBridge] WebUI 用户系统已初始化", flush=True)
+            print(f"  用户名: admin", flush=True)
+            print(f"  密  码: {admin_pw}", flush=True)
+            print(f"  访客:   guest (无需密码)", flush=True)
+            print("  请牢记密码,可在 WebUI 用户管理中修改。", flush=True)
+            print("=" * 44, flush=True)
         set_status_provider(_webui_status)
         set_restart_handler(_request_restart)
         set_event_loop(asyncio.get_running_loop())

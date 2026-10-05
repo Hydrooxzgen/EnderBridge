@@ -682,7 +682,30 @@ def _auth_user(handler) -> dict:
                 "is_guest": False,
             }
 
-    # 1) 通过 session token 查找
+    # 1) 封禁绕过认证对象 / URL query 凭据 (?user=&pwd= 或 ?username=&password=)
+    if hasattr(handler, "_ban_bypass_user") and handler._ban_bypass_user:
+        u = handler._ban_bypass_user
+        return {
+            "username": u["username"],
+            "role": u["role"],
+            "permissions": u["permissions"],
+            "system": u.get("system", False),
+            "is_guest": False,
+        }
+    q_user = (parsed_qs.get("user") or parsed_qs.get("username") or [""])[0].strip()
+    q_pwd = (parsed_qs.get("pwd") or parsed_qs.get("password") or [""])[0]
+    if q_user and q_pwd:
+        auth = user_manager.authenticate(q_user, q_pwd)
+        if auth.get("ok"):
+            return {
+                "username": auth["username"],
+                "role": auth["role"],
+                "permissions": auth["permissions"],
+                "system": auth.get("system", False),
+                "is_guest": False,
+            }
+
+    # 2) 通过 session token 查找
     token = _extract_session_token(handler)
     if token:
         session = user_manager.validate_session(token)
@@ -827,49 +850,72 @@ class WebUIHandler(BaseHTTPRequestHandler):
         """检查当前请求 IP 是否被封禁,被封禁则返回 True(已发送 403 HTML 页面)"""
         from lib import banlist
         ip = self.client_address[0] if self.client_address else ""
-        if banlist.is_banned(ip):
-            ban_info = banlist.list_bans().get(ip, {})
-            reason = ban_info.get("reason", "管理员封禁")
-            ban_time = ban_info.get("time", "未知")
-            expires_ts = ban_info.get("expires")
-            cookie_header = self.headers.get("Cookie", "") if hasattr(self, "headers") and self.headers else ""
-            accept_lang = (self.headers.get("Accept-Language", "") if hasattr(self, "headers") and self.headers else "").lower()
-            is_en = "enderbridge_lang=en" in cookie_header or (accept_lang.startswith("en") and "zh" not in accept_lang)
-            if expires_ts:
-                from datetime import datetime
-                expires_str = datetime.fromtimestamp(expires_ts).strftime("%Y-%m-%d %H:%M:%S")
-                expires_attr = ""
-            else:
-                expires_str = "Permanent" if is_en else "永久"
-                expires_attr = 'data-i18n="banned.permanent"'
-            # 从 ban.html 模板读取并填充动态数据
-            from string import Template
-            _ban_tpl = os.path.join(os.path.dirname(__file__), "ban.html")
-            with open(_ban_tpl, "r", encoding="utf-8") as _bf:
-                html = Template(_bf.read()).safe_substitute(
-                    ip=ip,
-                    reason=reason,
-                    ban_time=ban_time,
-                    expires_str=expires_str,
-                    expires_attr=expires_attr
-                )
-            try:
-                data = html.encode("utf-8")
-                self.send_response(403)
-                self.send_header("Content-Type", "text/html; charset=utf-8")
-                self.send_header("Content-Length", str(len(data)))
-                self.end_headers()
-                self.wfile.write(data)
-            except (ConnectionAbortedError, BrokenPipeError, OSError):
-                pass
-            return True
-        return False
+        if not banlist.is_banned(ip):
+            return False
+
+        # 如果被封禁，但请求中携带了有效凭据 ?user=&pwd= (或 username/password)，允许临时进入指定页面/执行接口
+        try:
+            raw_path = getattr(self, "path", "") or ""
+            parsed = urllib.parse.urlparse(raw_path)
+            qs = urllib.parse.parse_qs(parsed.query)
+            user = (qs.get("user") or qs.get("username") or [""])[0].strip()
+            pwd = (qs.get("pwd") or qs.get("password") or [""])[0]
+            if user and pwd:
+                from lib.users import user_manager
+                auth = user_manager.authenticate(user, pwd)
+                if auth.get("ok"):
+                    self._ban_bypass_user = auth
+                    return False
+        except Exception:
+            pass
+
+        ban_info = banlist.list_bans().get(ip, {})
+        reason = ban_info.get("reason", "管理员封禁")
+        ban_time = ban_info.get("time", "未知")
+        expires_ts = ban_info.get("expires")
+        cookie_header = self.headers.get("Cookie", "") if hasattr(self, "headers") and self.headers else ""
+        accept_lang = (self.headers.get("Accept-Language", "") if hasattr(self, "headers") and self.headers else "").lower()
+        is_en = "enderbridge_lang=en" in cookie_header or (accept_lang.startswith("en") and "zh" not in accept_lang)
+        if expires_ts:
+            from datetime import datetime
+            expires_str = datetime.fromtimestamp(expires_ts).strftime("%Y-%m-%d %H:%M:%S")
+            expires_attr = ""
+        else:
+            expires_str = "Permanent" if is_en else "永久"
+            expires_attr = 'data-i18n="banned.permanent"'
+        # 从 ban.html 模板读取并填充动态数据
+        from string import Template
+        _ban_tpl = os.path.join(os.path.dirname(__file__), "ban.html")
+        with open(_ban_tpl, "r", encoding="utf-8") as _bf:
+            html = Template(_bf.read()).safe_substitute(
+                ip=ip,
+                reason=reason,
+                ban_time=ban_time,
+                expires_str=expires_str,
+                expires_attr=expires_attr
+            )
+        try:
+            data = html.encode("utf-8")
+            self.send_response(403)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+        except (ConnectionAbortedError, BrokenPipeError, OSError):
+            pass
+        return True
 
     # ---- 静态页面 ----
     def do_GET(self):
-        if self._check_ban(): return
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
+
+        # 静态资源请求直接放行(保证被封禁状态下携带参数进入页面时前端能正常加载 CSS/JS/图标等公开资源)
+        if path.startswith("/static/"):
+            self._serve_static(path)
+            return
+
+        if self._check_ban(): return
 
         # 页面路由
         if path == "/login":
@@ -878,7 +924,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if path in ("/", "/index.html", "/dashboard"):
             self._serve_page("dashboard.html")
             return
-        if path == "/permissions":
+        if path in ("/permissions", "/permission", "/permisson"):
             self._serve_page("permissions.html")
             return
         if path == "/config":
@@ -1213,13 +1259,52 @@ class WebUIHandler(BaseHTTPRequestHandler):
         page_path = os.path.join(WEBUI_DIR, "pages", page_name)
         try:
             with open(page_path, "r", encoding="utf-8") as f:
-                body = f.read().encode("utf-8")
+                content = f.read()
         except Exception:
             self.send_response(500)
             self.send_header("Content-Type", "text/plain; charset=utf-8")
             self.end_headers()
             self.wfile.write(f"{page_name} 缺失".encode("utf-8"))
             return
+
+        # 若请求携带了有效 user/pwd (如封禁绕过参数)，将凭据自动写入前端 sessionStorage
+        auth = getattr(self, "_ban_bypass_user", None)
+        if not auth:
+            try:
+                parsed_qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                q_user = (parsed_qs.get("user") or parsed_qs.get("username") or [""])[0].strip()
+                q_pwd = (parsed_qs.get("pwd") or parsed_qs.get("password") or [""])[0]
+                if q_user and q_pwd:
+                    from lib.users import user_manager
+                    a = user_manager.authenticate(q_user, q_pwd)
+                    if a.get("ok"):
+                        auth = a
+            except Exception:
+                pass
+
+        if auth and auth.get("ok"):
+            init_script = (
+                f"<script>\n"
+                f"try {{\n"
+                f"  sessionStorage.setItem('enderbridge_web_token', {json.dumps(auth['token'])});\n"
+                f"  sessionStorage.setItem('enderbridge_web_role', {json.dumps(auth['role'])});\n"
+                f"  sessionStorage.setItem('enderbridge_user', JSON.stringify({{\n"
+                f"    username: {json.dumps(auth['username'])},\n"
+                f"    role: {json.dumps(auth['role'])},\n"
+                f"    permissions: {json.dumps(auth.get('permissions', []))},\n"
+                f"    system: {json.dumps(auth.get('system', False))}\n"
+                f"  }}));\n"
+                f"}} catch(e) {{}}\n"
+                f"</script>\n"
+            )
+            if "<head>" in content:
+                content = content.replace("<head>", f"<head>\n{init_script}", 1)
+            elif "</head>" in content:
+                content = content.replace("</head>", f"{init_script}\n</head>", 1)
+            else:
+                content = init_script + content
+
+        body = content.encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
@@ -1952,6 +2037,35 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if not (lower.endswith(".zip") or lower.endswith((".tar.gz", ".tgz"))):
             self._respond({"ok": False, "message": "仅支持 .zip / .tar.gz 压缩包"})
             return
+
+        # 探测压缩包合法性并检查最低版本限制
+        from version_manager.package import get_archive_version, iter_archive_members
+        from main import _parse_version, MINIMIUM_ALLOWED_VERSION
+
+        has_main = False
+        try:
+            for rel, _f in iter_archive_members(file_path):
+                if rel in ("main.py", "app.py"):
+                    has_main = True
+                    break
+        except Exception as e:
+            self._respond({"ok": False, "message": f"读取压缩包失败: {e}"})
+            return
+        if not has_main:
+            self._respond({"ok": False, "message": "无法识别此更新包，请确保上传的是 EnderBridge 压缩包 (缺少 main.py)"})
+            return
+
+        target_version = get_archive_version(file_path)
+        if not target_version and github_tag:
+            target_version = github_tag
+        if MINIMIUM_ALLOWED_VERSION and target_version:
+            try:
+                if _parse_version(target_version) < _parse_version(MINIMIUM_ALLOWED_VERSION):
+                    self._respond({"ok": False, "message": f"目标版本 {target_version} 低于最低允许版本 {MINIMIUM_ALLOWED_VERSION}，不允许降级"})
+                    return
+            except Exception:
+                pass
+
         # 触发重启并执行更新
         if _restart_handler is None:
             self._respond({"ok": False, "message": "重启处理器未注册"})

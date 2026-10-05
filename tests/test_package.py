@@ -34,6 +34,7 @@ from version_manager.package import (
     BACKUP_KEEP_COUNT,
     get_backup_description,
     save_backup_meta,
+    get_archive_version,
 )
 
 
@@ -638,3 +639,35 @@ class TestNoneeds:
         assert not (project / "tests").exists()
         assert (project / "main.py").exists()
         assert (project / NONEEDS_FILE).exists()
+
+    def test_get_archive_version_from_version_file(self, tmp_path):
+        zpath = tmp_path / "test_ver.zip"
+        make_zip(str(zpath), {
+            "VERSION": b"v1.2.0",
+            "main.py": b'VERSION = "v1.0.0"\n',
+        })
+        assert get_archive_version(str(zpath)) == "v1.2.0"
+
+    def test_get_archive_version_from_main_py(self, tmp_path):
+        zpath = tmp_path / "test_main.zip"
+        make_zip(str(zpath), {
+            "main.py": b'import os\nVERSION = "b0.3.5"\nprint(VERSION)\n',
+        })
+        assert get_archive_version(str(zpath)) == "b0.3.5"
+
+    def test_get_archive_version_from_config_json(self, tmp_path):
+        zpath = tmp_path / "test_cfg.zip"
+        make_zip(str(zpath), {
+            "config/config.json": b'{"_version": "v1.0.5"}',
+        })
+        assert get_archive_version(str(zpath)) == "v1.0.5"
+
+    def test_archive_version_below_minimum_rejected(self, tmp_path):
+        from main import _parse_version, MINIMIUM_ALLOWED_VERSION
+        zpath = tmp_path / "old_ver.zip"
+        make_zip(str(zpath), {
+            "main.py": b'VERSION = "b0.3.5"\n',
+        })
+        ver = get_archive_version(str(zpath))
+        assert ver == "b0.3.5"
+        assert _parse_version(ver) < _parse_version(MINIMIUM_ALLOWED_VERSION)

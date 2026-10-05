@@ -34,6 +34,13 @@ function toast(msg, type, duration) {
   t._timer = setTimeout(function () { t.style.display = "none"; }, duration || 3000);
 }
 
+function redirectToLogin() {
+  clearAuth();
+  var target = location.pathname + location.search;
+  if (location.pathname === "/login") return;
+  location.href = "/login?redirect=" + encodeURIComponent(target);
+}
+
 function api(path, options) {
   options = options || {};
   options.headers = options.headers || {};
@@ -47,9 +54,18 @@ function api(path, options) {
   }
   var cleanPath = path || "";
   var url = cleanPath.startsWith("/api/") ? cleanPath : ("/api" + (cleanPath.startsWith("/") ? cleanPath : ("/" + cleanPath)));
+
+  // 若当前页面通过 ?user=&pwd= 临时访问，自动透传参数至 API 请求，确保被封禁状态下内部接口亦能放行
+  var _sp = new URLSearchParams(location.search);
+  var _u = _sp.get("user") || _sp.get("username");
+  var _p = _sp.get("pwd") || _sp.get("password");
+  if (_u && _p) {
+    url += (url.indexOf("?") === -1 ? "?" : "&") + "user=" + encodeURIComponent(_u) + "&pwd=" + encodeURIComponent(_p);
+  }
+
   return fetch(url, options).then(function (res) {
     return res.json().then(function (data) {
-      if (res.status === 401) { clearAuth(); location.href = "/login"; return Promise.reject(data); }
+      if (res.status === 401) { redirectToLogin(); return Promise.reject(data); }
       if (res.status === 403) { var _t = (typeof t === "function") ? t : function (k) { return k; }; toast(data.message || _t("common.noPermission"), "err"); return Promise.reject(data); }
       return data;
     });
@@ -81,6 +97,8 @@ function renderMarkdown(md) {
 var _PAGE_PERM_MAP = {
   "dashboard": "dashboard",
   "permissions": "permissions",
+  "permission": "permissions",
+  "permisson": "permissions",
   "config": "config",
   "mods": "mods",
   "studio": "studio",
@@ -120,7 +138,35 @@ function _redirectIfNoPermission(perms) {
 function requireAuth(callback) {
   var role = sessionStorage.getItem(ROLE_KEY) || "";
   var token = sessionStorage.getItem(TOKEN_KEY) || "";
-  if (!role) { location.href = "/login"; return; }
+
+  var _urlParams = new URLSearchParams(location.search);
+  var _urlUser = _urlParams.get("user") || _urlParams.get("username");
+  var _urlPwd = _urlParams.get("pwd") || _urlParams.get("password");
+
+  if (!role) {
+    if (_urlUser && _urlPwd) {
+      api("/auth", { method: "POST", body: JSON.stringify({ username: _urlUser, password: _urlPwd }) })
+        .then(function (d) {
+          if (d.ok) {
+            sessionStorage.setItem(TOKEN_KEY, d.token);
+            sessionStorage.setItem(ROLE_KEY, d.role);
+            sessionStorage.setItem(USER_KEY, JSON.stringify({
+              username: d.username, role: d.role, permissions: d.permissions || [], system: d.system || false
+            }));
+            if (!_redirectIfNoPermission(d.permissions || [])) {
+              callback(d.role);
+            }
+          } else {
+            redirectToLogin();
+          }
+        }).catch(function () {
+          redirectToLogin();
+        });
+      return;
+    }
+    redirectToLogin();
+    return;
+  }
   if (role === "guest") {
     // 访客模式:设置默认权限
     var user = getCurrentUser();
@@ -143,8 +189,7 @@ function requireAuth(callback) {
         callback(d.role);
       }
     } else {
-      clearAuth();
-      location.href = "/login";
+      redirectToLogin();
     }
   }).catch(function () {
     // 网络错误:如果有本地缓存就继续
@@ -154,8 +199,7 @@ function requireAuth(callback) {
         callback(user.role || role);
       }
     }
-    else { clearAuth(); location.href = "/login"; }
-
+    else { redirectToLogin(); }
   });
 }
 

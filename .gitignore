@@ -5,6 +5,7 @@ __pycache__/
 .venv/
 .idea/
 logs/
+config/*
 !config/config.example.json
 !config/permission.example.json
 !config/users.example.json

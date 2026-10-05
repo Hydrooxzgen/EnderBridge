@@ -153,3 +153,97 @@ class TestBannedHtmlResponse:
         assert "Permanent" in body
         assert 'data-i18n="banned.permanent"' in body
 
+    def test_banned_ip_bypass_with_valid_credentials(self, tmp_path, monkeypatch):
+        import io
+        from webui.server import WebUIHandler
+        from lib.users import user_manager, DEFAULT_ROLES
+
+        # 初始化临时用户
+        u_file = tmp_path / "users.json"
+        monkeypatch.setattr("lib.users.USERS_JSON", str(u_file))
+        user_manager._loaded = True
+        user_manager._users = []
+        user_manager._roles = dict(DEFAULT_ROLES)
+        res = user_manager.add_user("testadmin", "Secret123!", role="admin")
+        assert res["ok"] is True
+
+        banned_ip = "192.168.10.50"
+        banlist.ban(banned_ip, reason="Test bypass", duration=0)
+        assert banlist.is_banned(banned_ip)
+
+        # 1. 未携带参数 -> 依然被封禁拦截
+        h1 = WebUIHandler.__new__(WebUIHandler)
+        h1.client_address = (banned_ip, 12345)
+        h1.path = "/permissions"
+        h1.headers = {}
+        h1.wfile = io.BytesIO()
+        h1.send_response = lambda code: None
+        h1.send_header = lambda k, v: None
+        h1.end_headers = lambda: None
+        assert h1._check_ban() is True
+
+        # 2. 携带错误凭据 -> 依然被封禁拦截
+        h2 = WebUIHandler.__new__(WebUIHandler)
+        h2.client_address = (banned_ip, 12345)
+        h2.path = "/permissions?user=testadmin&pwd=wrongpassword"
+        h2.headers = {}
+        h2.wfile = io.BytesIO()
+        h2.send_response = lambda code: None
+        h2.send_header = lambda k, v: None
+        h2.end_headers = lambda: None
+        assert h2._check_ban() is True
+
+        # 3. 携带正确凭据 -> 成功放行，且挂载 _ban_bypass_user
+        h3 = WebUIHandler.__new__(WebUIHandler)
+        h3.client_address = (banned_ip, 12345)
+        h3.path = "/permissions?user=testadmin&pwd=Secret123!"
+        h3.headers = {}
+        h3.wfile = io.BytesIO()
+        h3.send_response = lambda code: None
+        h3.send_header = lambda k, v: None
+        h3.end_headers = lambda: None
+        assert h3._check_ban() is False
+        assert getattr(h3, "_ban_bypass_user", {}).get("username") == "testadmin"
+
+        # 4. 后续不带参数的请求 -> 依然被封禁(IP 未被解封)
+        assert banlist.is_banned(banned_ip)
+        h4 = WebUIHandler.__new__(WebUIHandler)
+        h4.client_address = (banned_ip, 12345)
+        h4.path = "/permissions"
+        h4.headers = {}
+        h4.wfile = io.BytesIO()
+        h4.send_response = lambda code: None
+        h4.send_header = lambda k, v: None
+        h4.end_headers = lambda: None
+        assert h4._check_ban() is True
+
+    def test_permission_aliases_and_script_injection(self, tmp_path, monkeypatch):
+        import io
+        from webui.server import WebUIHandler
+        from lib.users import user_manager, DEFAULT_ROLES
+
+        u_file = tmp_path / "users.json"
+        monkeypatch.setattr("lib.users.USERS_JSON", str(u_file))
+        user_manager._loaded = True
+        user_manager._users = []
+        user_manager._roles = dict(DEFAULT_ROLES)
+        res = user_manager.add_user("testadmin", "Secret123!", role="admin")
+        assert res["ok"] is True
+
+        for alias in ("/permissions", "/permission", "/permisson"):
+            h = WebUIHandler.__new__(WebUIHandler)
+            h.client_address = ("127.0.0.1", 12345)
+            h.path = f"{alias}?user=testadmin&pwd=Secret123!"
+            h.headers = {}
+            h.wfile = io.BytesIO()
+            h.send_response = lambda code: None
+            h.send_header = lambda k, v: None
+            h.end_headers = lambda: None
+
+            h.do_GET()
+            output = h.wfile.getvalue().decode("utf-8")
+            # 确保正常渲染 permissions.html 且注入了 sessionStorage 凭据
+            assert "enderbridge_web_token" in output
+            assert "testadmin" in output
+
+

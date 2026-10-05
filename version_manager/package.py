@@ -143,6 +143,53 @@ def iter_archive_members(archive):
         raise PackageError(f"读取压缩包失败: {e}")
 
 
+def get_archive_version(archive: str) -> str:
+    """从更新压缩包中探测提取版本号 (优先从 VERSION 文件或 main.py 读取)"""
+    version_file_content = None
+    main_py_content = None
+    config_json_content = None
+    try:
+        for rel, fobj in iter_archive_members(archive):
+            if fobj is None:
+                continue
+            if rel == "VERSION":
+                try:
+                    version_file_content = fobj.read().decode("utf-8", errors="replace").strip()
+                except Exception:
+                    pass
+                break
+            elif rel in ("main.py", "app.py"):
+                try:
+                    main_py_content = fobj.read().decode("utf-8", errors="replace")
+                except Exception:
+                    pass
+            elif rel in ("config/config.json", "config.json"):
+                try:
+                    config_json_content = fobj.read().decode("utf-8", errors="replace")
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+    if version_file_content:
+        return version_file_content
+
+    if main_py_content:
+        m = re.search(r'(?:VERSION|__version__)\s*=\s*["\']([^"\']+)["\']', main_py_content)
+        if m:
+            return m.group(1).strip()
+
+    if config_json_content:
+        try:
+            data = json.loads(config_json_content)
+            if data.get("_version"):
+                return str(data["_version"]).strip()
+        except Exception:
+            pass
+
+    return ""
+
+
 def _is_kept(rel: str, keep, allow) -> bool:
     """判断相对路径是否属于保留的数据区(模板白名单放行)"""
     top = rel.split("/", 1)[0]
