@@ -296,10 +296,12 @@ class UserManager:
                 "users": self._users,
                 "roles": self._roles,
             }
-            tmp = USERS_JSON + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-            os.replace(tmp, USERS_JSON)
+            from lib.file_lock import SystemFileLockManager
+            with SystemFileLockManager.unlock_for_write(USERS_JSON):
+                tmp = USERS_JSON + ".tmp"
+                with open(tmp, "w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                os.replace(tmp, USERS_JSON)
 
     # ---- 用户 CRUD ----
 

@@ -2217,7 +2217,7 @@ public partial class MainView : UserControl
             var psi = new ProcessStartInfo
             {
                 FileName = pythonExe,
-                Arguments = "main.py --no-supervisor",
+                Arguments = $"\"{mainPyPath}\" --no-supervisor",
                 WorkingDirectory = rootDir,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,

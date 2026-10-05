@@ -107,6 +107,16 @@ def set_event_loop(loop):
     _event_loop = loop
 
 
+# EB 控制台命令执行器(main.py 注入):用于在 WebUI / API 控制台执行 $ 开头的 EB 指令
+_console_handler = None
+
+
+def set_console_handler(fn):
+    """注入控制台指令分发器:用于执行以 commandPrefix 开头的 EB 指令"""
+    global _console_handler
+    _console_handler = fn
+
+
 # 应用信息(main.py 注入):用于 Release Notes 获取
 _github_repo = ""    # e.g. "UserXYY123/EnderBridge"
 _app_version = APP_VERSION    # 初始为兜底值,set_app_info 后为 main.py 的真实 VERSION
@@ -182,6 +192,8 @@ def _version_below_min(ver: str) -> bool:
 
 def _read_config_src() -> str:
     """读取 config.py 源码文本"""
+    if not os.path.exists(CONFIG_PY):
+        return ""
     with open(CONFIG_PY, "r", encoding="utf-8") as f:
         return f.read()
 
@@ -581,18 +593,20 @@ def save_config(new: dict) -> None:
     # 13. is_first_run 明确复位
     config["is_first_run"] = False
 
-    # 保存到 JSON (原子写入)
-    tmp_path = CONFIG_JSON + f".tmp_{os.getpid()}"
-    with open(tmp_path, "w", encoding="utf-8") as f:
-        json.dump(config, f, ensure_ascii=False, indent=2)
-        f.write("\n")
-    if os.path.exists(CONFIG_JSON):
-        try:
-            import shutil
-            shutil.copy2(CONFIG_JSON, CONFIG_JSON + ".bak")
-        except Exception:
-            pass
-    os.replace(tmp_path, CONFIG_JSON)
+    # 保存到 JSON (原子写入，系统锁安全通道)
+    from lib.file_lock import SystemFileLockManager
+    with SystemFileLockManager.unlock_for_write(CONFIG_JSON):
+        tmp_path = CONFIG_JSON + f".tmp_{os.getpid()}"
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(config, f, ensure_ascii=False, indent=2)
+            f.write("\n")
+        if os.path.exists(CONFIG_JSON):
+            try:
+                import shutil
+                shutil.copy2(CONFIG_JSON, CONFIG_JSON + ".bak")
+            except Exception:
+                pass
+        os.replace(tmp_path, CONFIG_JSON)
 
     # 别名热重载:保存后立即生效,无需重启 (必须在写入 JSON 之后,否则读到旧缓存)
     try:
@@ -627,11 +641,13 @@ def load_permissions() -> dict:
 
 def save_permissions(perm: dict) -> None:
     """原子写入 permission.json,并清除 PermissionManager 缓存使游戏内权限立即生效"""
-    tmp = PERMISSION_JSON + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(perm, f, ensure_ascii=False, indent=2)
-        f.write("\n")
-    os.replace(tmp, PERMISSION_JSON)
+    from lib.file_lock import SystemFileLockManager
+    with SystemFileLockManager.unlock_for_write(PERMISSION_JSON):
+        tmp = PERMISSION_JSON + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(perm, f, ensure_ascii=False, indent=2)
+            f.write("\n")
+        os.replace(tmp, PERMISSION_JSON)
     # 同步清除 lib.permission 的缓存,否则游戏内查询权限仍用旧数据
     try:
         from lib.permission import PermissionManager
@@ -1359,6 +1375,32 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if _event_loop is None or _event_loop.is_closed():
             self._respond({"ok": False, "message": "事件循环未就绪,请稍后重试"})
             return
+        # 1. 优先检查是否为以命令前缀开头的 EB 控制台指令 (如 $bot start, $help 等)
+        from lib.command import Command
+        Command.reload_prefix()
+        cp = Command.command_prefix
+        if command.startswith(cp):
+            if _console_handler is not None:
+                try:
+                    import asyncio
+                    fut = asyncio.run_coroutine_threadsafe(
+                        _console_handler(command), _event_loop
+                    )
+                    res = fut.result(timeout=15)
+                    _audit(self, "command", f"执行了 EB 控制台指令: {command}")
+                    ok = res.get("ok", True) if isinstance(res, dict) else True
+                    msg = (res.get("message") if isinstance(res, dict) else None) or f"EB 指令执行完成: {command}"
+                    self._respond({
+                        "ok": ok,
+                        "statusCode": 0 if ok else 1,
+                        "statusMessage": msg,
+                    })
+                    return
+                except Exception as e:
+                    self._respond({"ok": False, "message": f"EB 指令执行失败: {e}"})
+                    return
+
+        # 2. 游戏客户端命令: 发送给已连接的 MCBE 客户端
         try:
             from lib.current import Current
             client = Current.client
@@ -1376,7 +1418,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
                 "statusCode": body_data.get("statusCode"),
                 "statusMessage": body_data.get("statusMessage"),
             })
-            _audit(self, "command", f"执行了命令: {command}")
+            _audit(self, "command", f"执行了游戏命令: {command}")
         except Exception as e:
             self._respond({"ok": False, "message": f"命令执行失败: {e}"})
 
@@ -1463,19 +1505,26 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if not found:
             self._respond({"ok": False, "message": f"账号 {username} 未找到"})
             return
-        # 更新 activeXboxAccount 和 username（通过整体替换 botConfig 块）
+        # 更新 activeXboxAccount 和 username
         try:
-            src = _read_config_src()
-            src_new, _ = _replace_block(src, "botConfig", {
-                **bot_cfg,
-                "activeXboxAccount": username,
-                "username": username,
-                # offline 完全由用户开关控制,切换账号不再强制覆盖
-            })
-            import shutil
-            shutil.copy2(CONFIG_PY, CONFIG_PY_BAK)
-            with open(CONFIG_PY, "w", encoding="utf-8") as f:
-                f.write(src_new)
+            bot_cfg["activeXboxAccount"] = username
+            bot_cfg["username"] = username
+            save_config({"botConfig": bot_cfg})
+            if os.path.exists(CONFIG_PY):
+                try:
+                    src = _read_config_src()
+                    if src:
+                        src_new, _ = _replace_block(src, "botConfig", {
+                            **bot_cfg,
+                            "activeXboxAccount": username,
+                            "username": username,
+                        })
+                        import shutil
+                        shutil.copy2(CONFIG_PY, CONFIG_PY_BAK)
+                        with open(CONFIG_PY, "w", encoding="utf-8") as f:
+                            f.write(src_new)
+                except Exception:
+                    pass
             self._respond({"ok": True, "message": f"已切换到账号 {username}"})
         except Exception as e:
             self._respond({"ok": False, "message": f"切换失败: {e}"})
@@ -1504,12 +1553,18 @@ class WebUIHandler(BaseHTTPRequestHandler):
             new_cfg = {**bot_cfg, "xboxAccounts": new_accounts, "activeXboxAccount": active}
             if active:
                 new_cfg["username"] = active
-            src = _read_config_src()
-            src, _ = _replace_block(src, "botConfig", new_cfg)
-            import shutil
-            shutil.copy2(CONFIG_PY, CONFIG_PY_BAK)
-            with open(CONFIG_PY, "w", encoding="utf-8") as f:
-                f.write(src)
+            save_config({"botConfig": new_cfg})
+            if os.path.exists(CONFIG_PY):
+                try:
+                    src = _read_config_src()
+                    if src:
+                        src_new, _ = _replace_block(src, "botConfig", new_cfg)
+                        import shutil
+                        shutil.copy2(CONFIG_PY, CONFIG_PY_BAK)
+                        with open(CONFIG_PY, "w", encoding="utf-8") as f:
+                            f.write(src_new)
+                except Exception:
+                    pass
             # 删除该账号的 token 缓存文件(与 prismarine-auth 相同的 SHA1 前缀),防止重新登录时秒复用
             self._delete_account_cache(username, bot_cfg)
             self._respond({"ok": True, "message": f"已移除账号 {username}"})
@@ -2765,6 +2820,10 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if not base_name.endswith(".py") or ".." in base_name or "/" in base_name or "\\" in base_name:
             self._respond({"ok": False, "message": "无效的文件名，必须为以 .py 结尾的文件名"})
             return
+        from lib.security_guard import OFFICIAL_BUILTIN_MOD_FILES
+        if base_name in OFFICIAL_BUILTIN_MOD_FILES:
+            self._respond({"ok": False, "message": f"禁止上传覆盖官方核心 Mod: {base_name}"})
+            return
 
         target_path = os.path.join(ROOT, "mod", base_name)
         try:
@@ -2952,39 +3011,42 @@ class WebUIHandler(BaseHTTPRequestHandler):
 
         resolved = self._resolve_mod_config(name, side)
         try:
+            from lib.file_lock import SystemFileLockManager
             if resolved["configType"] == "file":
                 filepath = resolved["filePath"]
                 os.makedirs(os.path.dirname(filepath), exist_ok=True)
-                if os.path.exists(filepath):
-                    try:
-                        import shutil
-                        shutil.copy2(filepath, filepath + ".bak")
-                    except Exception:
-                        pass
-                with open(filepath, "w", encoding="utf-8") as f:
-                    json.dump(parsed_data, f, ensure_ascii=False, indent=2)
-                    f.write("\n")
+                with SystemFileLockManager.unlock_for_write(filepath):
+                    if os.path.exists(filepath):
+                        try:
+                            import shutil
+                            shutil.copy2(filepath, filepath + ".bak")
+                        except Exception:
+                            pass
+                    with open(filepath, "w", encoding="utf-8") as f:
+                        json.dump(parsed_data, f, ensure_ascii=False, indent=2)
+                        f.write("\n")
             else:
                 full_cfg = {}
-                if os.path.exists(CONFIG_JSON):
-                    with open(CONFIG_JSON, "r", encoding="utf-8") as f:
-                        full_cfg = json.load(f)
-                    try:
-                        import shutil
-                        shutil.copy2(CONFIG_JSON, CONFIG_JSON + ".bak")
-                    except Exception:
-                        pass
-                elif os.path.exists(CONFIG_PY):
-                    ns = _load_config_module()
-                    full_cfg = {k: getattr(ns, k) for k in dir(ns) if not k.startswith("_") and not callable(getattr(ns, k))}
-                elif os.path.exists(os.path.join(CONFIG_DIR, "config.example.json")):
-                    with open(os.path.join(CONFIG_DIR, "config.example.json"), "r", encoding="utf-8") as f:
-                        full_cfg = json.load(f)
+                with SystemFileLockManager.unlock_for_write(CONFIG_JSON):
+                    if os.path.exists(CONFIG_JSON):
+                        with open(CONFIG_JSON, "r", encoding="utf-8") as f:
+                            full_cfg = json.load(f)
+                        try:
+                            import shutil
+                            shutil.copy2(CONFIG_JSON, CONFIG_JSON + ".bak")
+                        except Exception:
+                            pass
+                    elif os.path.exists(CONFIG_PY):
+                        ns = _load_config_module()
+                        full_cfg = {k: getattr(ns, k) for k in dir(ns) if not k.startswith("_") and not callable(getattr(ns, k))}
+                    elif os.path.exists(os.path.join(CONFIG_DIR, "config.example.json")):
+                        with open(os.path.join(CONFIG_DIR, "config.example.json"), "r", encoding="utf-8") as f:
+                            full_cfg = json.load(f)
 
-                full_cfg[resolved["section"]] = parsed_data
-                with open(CONFIG_JSON, "w", encoding="utf-8") as f:
-                    json.dump(full_cfg, f, ensure_ascii=False, indent=2)
-                    f.write("\n")
+                    full_cfg[resolved["section"]] = parsed_data
+                    with open(CONFIG_JSON, "w", encoding="utf-8") as f:
+                        json.dump(full_cfg, f, ensure_ascii=False, indent=2)
+                        f.write("\n")
 
                 # 刷新配置缓存与命令别名
                 try:
@@ -3943,6 +4005,39 @@ class WebUIHandler(BaseHTTPRequestHandler):
                                 })
                                 continue
 
+                            # 1. 优先检查是否为以命令前缀开头的 EB 控制台指令 (如 $bot start, $help 等)
+                            from lib.command import Command
+                            Command.reload_prefix()
+                            cp = Command.command_prefix
+                            if command.startswith(cp):
+                                if _console_handler is not None:
+                                    try:
+                                        import asyncio
+                                        fut = asyncio.run_coroutine_threadsafe(
+                                            _console_handler(command), _event_loop
+                                        )
+                                        res = fut.result(timeout=15)
+                                        _audit(self, "command", f"执行了 EB 控制台指令: {command}")
+                                        ok = res.get("ok", True) if isinstance(res, dict) else True
+                                        msg = (res.get("message") if isinstance(res, dict) else None) or f"EB 指令执行完成: {command}"
+                                        ws.send_json({
+                                            "type": "cmd-result",
+                                            "id": req_id,
+                                            "ok": ok,
+                                            "statusCode": 0 if ok else 1,
+                                            "statusMessage": msg,
+                                        })
+                                        continue
+                                    except Exception as e:
+                                        ws.send_json({
+                                            "type": "cmd-result",
+                                            "id": req_id,
+                                            "ok": False,
+                                            "message": f"EB 指令执行失败: {e}",
+                                        })
+                                        continue
+
+                            # 2. 游戏客户端命令: 发送给已连接的 MCBE 客户端
                             try:
                                 from lib.current import Current
                                 client = Current.client
@@ -3968,7 +4063,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
                                     "statusCode": body_data.get("statusCode"),
                                     "statusMessage": body_data.get("statusMessage"),
                                 })
-                                _audit(self, "command", f"执行了命令: {command}")
+                                _audit(self, "command", f"执行了游戏命令: {command}")
                             except Exception as e:
                                 ws.send_json({
                                     "type": "cmd-result",

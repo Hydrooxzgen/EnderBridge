@@ -35,44 +35,36 @@ USERS_JSON = os.path.join(CONFIG_DIR, "users.json")
 UPDATE_MARKER = os.path.join(ROOT, ".update_pending")
 
 # --- 版本常量 ---
-VERSION = "v1.1.0"
+VERSION = "v1.1.0.1"
 # ↓仅当不为None时从Github拉取更新日志, 反之则直接显示该变量内容。
 DESCRIPTION = None
 """
-feature1: App管理界面(beta)
-fix1: 修复无法在webui预览像素画源文件的问题
-app_fix2: 修复app web访问无法刷新、地址栏无法正确同步的问题
-app_fix3: 修复config只读不可写的bug
-app_fix4: 停止服务器按钮无效
-app_fix5: 通过app启动服务端时丢失所有配置
-app_feat1: 可以手动指定服务端路径
-app_fix6: 修复右下角版本号不跟随实际服务端版本号显示的bug
-serv_fix7: 修复了随机密码显示2次的bug
-serv_fix8: 修复启动时配置丢失的问题
-serv_feat1: 当你被ban时可以携带pwd参数进入webui
-app_feat2: 可以在app中设定服务端路径&下载时询问用户下载路径
-app_safe_fix1: 修复了在app中无需通过身份验证就可以修改服务端配置的问题
+fix1: 修复无法保存xbox live档案的问题
+fix2: 修复了启动时有几率无法读取config的问题
+feat1: 现在可以在webui控制台执行EB指令
+fix3: 修复了在bot连接到服务器的情况下bot list指令无法显示bot的问题
+safe_feat1: 加入系统锁
 """
-MINIMIUM_ALLOWED_VERSION = "v1.0.0" # 因为v1.0.0版本新增了重要安全改进，大大降低了被第三方恶意mod入侵的风险，所以限制了降级
-                                    # 但是如果你需要降级低于v1.0.0的版本，请更改这里的值为b0.0.0以删除限制
+MINIMIUM_ALLOWED_VERSION = "v1.1.0.1" # 因为v1.1.0.1版本新增了重要安全改进，再次降低了被第三方恶意mod入侵的风险，所以限制了降级
+                                      # 但是如果你需要降级低于v1.1.0.1的版本，请更改这里的值为0.0.0以删除限制
 
 GITHUB_REPO = "Hydrooxzgen/EnderBridge"  # You can edit this to your own repository if you fork it :)
 
 # --- 命令行开关常量 ---
+IS_TESTING = "pytest" in sys.modules or any("pytest" in str(a).lower() for a in sys.argv)
 WANT_RESET = ("--reset-all" in sys.argv) or ("--reset" in sys.argv)
 WANT_EXPORT = "export" in sys.argv
 WANT_EXPORT_CLEAR = WANT_EXPORT and "-clear" in sys.argv
 WANT_LOAD_WITHOUT_CONFIG = "--load-without-config" in sys.argv
-WANT_VIEW_VERSION = "--version" in sys.argv or "-v" in sys.argv
+WANT_VIEW_VERSION = not IS_TESTING and ("--version" in sys.argv or "-v" in sys.argv)
 WANT_SYSTEM_MODE = "--system" in sys.argv
 WANT_SAFE_MODE = "--safe-mode" in sys.argv
-WANT_HELP = "--help" in sys.argv or "-h" in sys.argv
+WANT_HELP = not IS_TESTING and ("--help" in sys.argv or "-h" in sys.argv)
 WANT_VIEW_DESCRIPTION = "--description" in sys.argv
 WANT_GOTO_OOBE = "--goto-oobe" in sys.argv
 WANT_UPDATE = "update" in sys.argv
 WANT_ROLLBACK = "--rollback" in sys.argv
 WANT_PREVIEW = "preview" in sys.argv
-IS_TESTING = "pytest" in sys.modules or any("pytest" in str(a).lower() for a in sys.argv)
 ARGV_NOT_EXIST = not IS_TESTING and not WANT_RESET\
 and not WANT_VIEW_VERSION and not WANT_EXPORT \
 and not WANT_VIEW_DESCRIPTION and not WANT_HELP \
@@ -99,9 +91,9 @@ def _is_oneshot_command() -> bool:
         or (os.environ.get("EB_NO_SUPERVISOR") == "1")
     )
 
-# ===== 自动迁移:将根目录下的旧配置文件移动到 config/ 目录 =====
+# ===== 自动迁移:将根目录下的旧配置文件安全移动到 config/ 目录 =====
 os.makedirs(CONFIG_DIR, exist_ok=True)
-# 清理根目录残留的旧配置文件(0.4.1+ 配置统一在 config/ 目录,旧文件直接删除不再迁移)
+import shutil as _shutil_migrate
 for _fname in [
     "config.py", "config.py.bak", "config.json", "config.json.bak",
     "config.example.json",
@@ -110,11 +102,19 @@ for _fname in [
     "banlist.json",
 ]:
     _old = os.path.join(ROOT, _fname)
+    _target = os.path.join(CONFIG_DIR, _fname)
     if os.path.exists(_old):
-        try:
-            os.remove(_old)
-        except OSError:
-            pass
+        # 若 config/ 目录下尚无该配置文件，优先安全迁移而非直接删除！
+        if not os.path.exists(_target):
+            try:
+                _shutil_migrate.move(_old, _target)
+            except Exception:
+                pass
+        else:
+            try:
+                os.remove(_old)
+            except OSError:
+                pass
 
 def _parse_version(v: str) -> tuple:
     """解析版本号字符串(如 'b0.4.1 dev', 'b0.4.1')为可比较的元组 (0, 4, 1)"""
@@ -149,6 +149,8 @@ def _check_minimum_version(new_version: str) -> None:
 # ===== 依赖检测(必须早于任何第三方mod使用) ===== 
 # 自动发现虚拟环境并检测核心依赖 (websockets, bcrypt)
 def _ensure_venv_path() -> None:
+    if IS_TESTING:
+        return
     for _v in (".venv", "venv", "env"):
         _sp = os.path.join(ROOT, _v, "Lib", "site-packages")
         if not os.path.isdir(_sp):
@@ -198,6 +200,13 @@ if not os.path.exists(CONFIG_PY) and not os.path.exists(CONFIG_JSON) and ARGV_NO
     if os.path.exists(CONFIG_EXAMPLE_JSON):
         import shutil as _shutil_cfg
         _shutil_cfg.copy2(CONFIG_EXAMPLE_JSON, CONFIG_JSON)
+        # 清理可能残留的旧备份, 保证重置彻底
+        _bak = CONFIG_JSON + ".bak"
+        if os.path.exists(_bak):
+            try:
+                os.remove(_bak)
+            except OSError:
+                pass
         # --load-without-config 跳过向导,必须清除 is_first_run,
         # 否则下次正常启动会误触发向导
         if WANT_LOAD_WITHOUT_CONFIG:
@@ -212,13 +221,20 @@ if not os.path.exists(CONFIG_PY) and not os.path.exists(CONFIG_JSON) and ARGV_NO
                 pass
         print("未找到 config.json, 已根据模板自动生成默认配置(可在向导中修改)")
 
-# permission.json 缺失时从模板复制(权限系统依赖该文件,路径常量见顶部)
-if not os.path.exists(PERMISSION_JSON) and os.path.exists(PERMISSION_EXAMPLE) and ARGV_NOT_EXIST:
-    with open(PERMISSION_EXAMPLE, "r", encoding="utf-8") as f:
-        content = f.read()
-    with open(PERMISSION_JSON, "w", encoding="utf-8") as f:
-        f.write(content)
-    print("未找到 permission.json, 已根据模板自动生成默认权限配置")
+# permission.json 缺失时从模板复制
+if not os.path.exists(PERMISSION_JSON) and ARGV_NOT_EXIST:
+    if os.path.exists(PERMISSION_EXAMPLE):
+        with open(PERMISSION_EXAMPLE, "r", encoding="utf-8") as f:
+            content = f.read()
+        with open(PERMISSION_JSON, "w", encoding="utf-8") as f:
+            f.write(content)
+        _bak_perm = PERMISSION_JSON + ".bak"
+        if os.path.exists(_bak_perm):
+            try:
+                os.remove(_bak_perm)
+            except OSError:
+                pass
+        print("未找到 permission.json, 已根据模板自动生成默认权限配置")
 
 # ===== 一键重置:python main.py --reset-all =====
 # 清除所有配置文件(不启动服务器),并将模板 config.example.json 的 is_first_run 复位为 True
@@ -1032,10 +1048,11 @@ if not wsConfig:
         wsConfig = {}
 
 # 安全网:如果 ARGV_NOT_EXIST 阶段因某种原因未创建 config.json,此处兜底
-if not os.path.exists(CONFIG_JSON) and not os.path.exists(CONFIG_PY) and os.path.exists(CONFIG_EXAMPLE_JSON) and ARGV_NOT_EXIST:
-    import shutil as _shutil_cfg2
-    _shutil_cfg2.copy2(CONFIG_EXAMPLE_JSON, CONFIG_JSON)
-    print("未找到 config.json, 已根据模板自动生成默认配置(安全网)")
+if not os.path.exists(CONFIG_JSON) and not os.path.exists(CONFIG_PY) and ARGV_NOT_EXIST:
+    if os.path.exists(CONFIG_EXAMPLE_JSON):
+        import shutil as _shutil_cfg2
+        _shutil_cfg2.copy2(CONFIG_EXAMPLE_JSON, CONFIG_JSON)
+        print("未找到 config.json, 已根据模板自动生成默认配置(安全网)")
 
 # is_first_run 检测:JSON 优先
 is_first_run = _cfg.get("is_first_run", None)
@@ -1340,7 +1357,7 @@ def _webui_status() -> dict:
 def _start_webui() -> None:
     """启动 Web 管理界面(每次启动都监听配置的 Web 端口)"""
     try:
-        from webui.server import set_app_info, set_event_loop, set_restart_handler, set_status_provider, set_system_mode, start_webui
+        from webui.server import set_app_info, set_console_handler, set_event_loop, set_restart_handler, set_status_provider, set_system_mode, start_webui
         try:
             from webui.server import set_safe_mode
             set_safe_mode(WANT_SAFE_MODE)
@@ -1368,6 +1385,7 @@ def _start_webui() -> None:
         set_status_provider(_webui_status)
         set_restart_handler(_request_restart)
         set_event_loop(asyncio.get_running_loop())
+        set_console_handler(_dispatch_console_command)
         set_app_info(GITHUB_REPO, VERSION, DESCRIPTION, minimum_version=MINIMIUM_ALLOWED_VERSION)
         set_system_mode(WANT_SYSTEM_MODE)
         start_webui()
@@ -1554,12 +1572,34 @@ def _strip_mc_colors(text: str) -> str:
     return re.sub(r"§.", "", text)
 
 
+_console_listeners = []
+
+
+def add_console_listener(listener):
+    """添加控制台输出捕获监听器(供 WebUI 执行控制台指令时捕获实时输出)"""
+    _console_listeners.append(listener)
+
+
+def remove_console_listener(listener):
+    """移除控制台输出捕获监听器"""
+    try:
+        _console_listeners.remove(listener)
+    except ValueError:
+        pass
+
+
 def console_out(msg):
     """终端输出消息(自动去除 MC 颜色代码)"""
     global _prompt_visible
     _prompt_visible = False  # console_out 清除了当前行,提示符不再可见
+    clean = _strip_mc_colors(str(msg))
     sys.stdout.write("\r\x1b[K")
-    print(_strip_mc_colors(str(msg)))
+    print(clean)
+    for l in list(_console_listeners):
+        try:
+            l(clean)
+        except Exception:
+            pass
 
 
 def _console_help():
@@ -1800,41 +1840,57 @@ async def _dispatch_console_command(text):
     cp = Command.command_prefix
     if text.startswith(cp):
         cmd = text[len(cp):].strip()
+        captured_lines = []
+        def _cap(m):
+            captured_lines.append(str(m))
+        add_console_listener(_cap)
 
-        if cmd in ("help", "h", "?"):
-            _console_help()
-        elif cmd.startswith("help "):
-            feature = cmd[5:].strip()
-            _console_help_feature(feature)
-        elif cmd in ("status", "info"):
-            _console_status()
-        elif cmd == "list":
-            _console_list()
-        elif cmd.startswith("say "):
-            msg = cmd[4:]
-            if Current.client:
-                Current.client.tell(msg)
-                console_out(f"§a已发送: §f{msg}")
+        try:
+            if cmd in ("help", "h", "?"):
+                _console_help()
+                return {"ok": True, "handled": True, "message": "\n".join(captured_lines) or "已显示帮助信息"}
+            elif cmd.startswith("help "):
+                feature = cmd[5:].strip()
+                _console_help_feature(feature)
+                return {"ok": True, "handled": True, "message": "\n".join(captured_lines) or f"已显示 {feature} 帮助信息"}
+            elif cmd in ("status", "info"):
+                _console_status()
+                return {"ok": True, "handled": True, "message": "\n".join(captured_lines) or "已显示服务器状态"}
+            elif cmd == "list":
+                _console_list()
+                return {"ok": True, "handled": True, "message": "\n".join(captured_lines) or "已显示客户端列表"}
+            elif cmd.startswith("say "):
+                msg = cmd[4:]
+                if Current.client:
+                    Current.client.tell(msg)
+                    console_out(f"§a已发送: §f{msg}")
+                    return {"ok": True, "handled": True, "message": f"已发送: {msg}"}
+                else:
+                    console_out("§c无客户端连接")
+                    return {"ok": False, "handled": False, "message": "无客户端连接"}
+            elif cmd.startswith("cmd "):
+                c = cmd[4:]
+                client = Current.client
+                if client:
+                    await client.runCommand(c)  # type: ignore[misc]
+                    console_out(f"§a已执行: §f{c}")
+                    return {"ok": True, "handled": True, "message": f"已执行: {c}"}
+                else:
+                    console_out("§c无客户端连接")
+                    return {"ok": False, "handled": False, "message": "无客户端连接"}
             else:
-                console_out("§c无客户端连接")
-        elif cmd.startswith("cmd "):
-            c = cmd[4:]
-            client = Current.client
-            if client:
-                await client.runCommand(c)  # type: ignore[misc]
-                console_out(f"§a已执行: §f{c}")
-            else:
-                console_out("§c无客户端连接")
-        else:
-            # 转发给服务端 Mod 执行(如 $chat、$spam 等)
-            mod_cmd = f"{cp}{cmd}"
-            handled = await ServerModManager.execute_terminal(mod_cmd)
-            if not handled:
-                # 再尝试支持终端执行的客户端 Mod(如 $bot)
-                handled = await ClientModManager.execute_terminal(mod_cmd)
-            if not handled:
-                console_out(f"§c未知命令: §f{cmd}, 输入 {cp}help 查看帮助")
-        return
+                # 转发给服务端 Mod 执行(如 $chat、$spam 等)
+                mod_cmd = f"{cp}{cmd}"
+                handled = await ServerModManager.execute_terminal(mod_cmd)
+                if not handled:
+                    # 再尝试支持终端执行的客户端 Mod(如 $bot)
+                    handled = await ClientModManager.execute_terminal(mod_cmd)
+                if not handled:
+                    console_out(f"§c未知命令: §f{cmd}, 输入 {cp}help 查看帮助")
+                    return {"ok": False, "handled": False, "message": f"未知命令: {cmd}"}
+                return {"ok": True, "handled": True, "message": "\n".join(captured_lines) or f"EB 指令已执行: {mod_cmd}"}
+        finally:
+            remove_console_listener(_cap)
 
     # 非命令文本:作为聊天消息发送给主客户端
     if Current.client:
@@ -1876,6 +1932,14 @@ async def main():
         await ClientModManager.load()
         shared.logger.info("Mod 加载完成")
     shared.logger.info("服务器已启动")
+
+    # 启用系统级文件锁，防止外部进程或攻击脚本在运行期间篡改核心配置文件
+    try:
+        from lib.file_lock import SystemFileLockManager
+        locked_cnt = SystemFileLockManager.lock_core_system_files()
+        shared.logger.info(f"系统级文件锁已就绪，已受保护核心文件: {locked_cnt} 个")
+    except Exception as e:
+        shared.logger.warning(f"系统级文件锁启用失败: {e}")
 
     # 启动玩家列表轮询任务(如果配置启用)
     asyncio.create_task(_player_list_polling_task())
@@ -1993,6 +2057,13 @@ async def destroy():
         shared.logger.info("服务器已关闭")
     except Exception:
         shared.logger.warning("服务器关闭异常, 正在强制退出")
+
+    # 释放所有系统级文件锁
+    try:
+        from lib.file_lock import SystemFileLockManager
+        SystemFileLockManager.unlock_all()
+    except Exception:
+        pass
 
 
 def _run_supervisor() -> None:

@@ -32,8 +32,52 @@ def _norm(path: str) -> str:
         return ""
 
 
+OFFICIAL_BUILTIN_MOD_FILES = {
+    "ai.py",
+    "bot.py",
+    "mcfunc.py",
+    "message.py",
+    "morews.py",
+    "music.py",
+    "permission.py",
+    "position.py",
+    "read.py",
+    "spam.py",
+    "tool.py",
+}
+
+OFFICIAL_BUILTIN_MOD_DIRS = {
+    "bot",
+    "ezmatic",
+    "image",
+    "qq",
+}
+
+
+def _is_official_mod(co_filename: str) -> bool:
+    """判断代码文件是否属于官方内置 Mod 模块"""
+    if not co_filename:
+        return False
+    norm_file = _norm(co_filename)
+    norm_mod_dir = _norm(MOD_DIR)
+    rel = ""
+    if norm_mod_dir and norm_file.startswith(norm_mod_dir + "/"):
+        rel = norm_file[len(norm_mod_dir) + 1:]
+    elif "/mod/" in norm_file:
+        rel = norm_file.split("/mod/", 1)[1]
+    else:
+        return False
+
+    parts = rel.split("/")
+    if len(parts) == 1 and parts[0] in OFFICIAL_BUILTIN_MOD_FILES:
+        return True
+    if len(parts) > 1 and parts[0] in OFFICIAL_BUILTIN_MOD_DIRS:
+        return True
+    return False
+
+
 def _is_caller_mod() -> Tuple[bool, str]:
-    """回溯当前调用栈，判断当前文件操作是否由 mod/ 目录下的模块直接或间接发起
+    """回溯当前调用栈，判断当前文件操作是否由 mod/ 目录下的非官方第三方模块直接或间接发起
 
     返回: (is_mod: bool, caller_filename: str)
     """
@@ -47,6 +91,23 @@ def _is_caller_mod() -> Tuple[bool, str]:
     norm_mod_dir = _norm(MOD_DIR)
     norm_lib_mods = _norm(os.path.join(ROOT, "lib", "mods.py"))
 
+    # 1. 检查是否处于通过授权通道 save_mod_config 进行的安全 Mod 配置保存上下文
+    try:
+        from lib.mods import is_in_mod_save_context
+        if is_in_mod_save_context():
+            return False, ""
+    except Exception:
+        pass
+
+    # 2. 检查调用栈中是否存在官方授权的配置保存核心方法 (webui.server.save_config)
+    has_authorized_save_api = False
+    f_check = frame
+    while f_check is not None:
+        if f_check.f_code.co_name == "save_config" and "webui" in _norm(f_check.f_code.co_filename):
+            has_authorized_save_api = True
+            break
+        f_check = f_check.f_back
+
     while frame is not None:
         co_filename = frame.f_code.co_filename
         if co_filename:
@@ -55,7 +116,11 @@ def _is_caller_mod() -> Tuple[bool, str]:
             if norm_file and norm_file != norm_lib_mods:
                 # 判断当前调用栈帧是否来自 mod/ 目录
                 if (norm_mod_dir and norm_file.startswith(norm_mod_dir + "/")) or ("/mod/" in norm_file):
-                    return True, co_filename
+                    # 如果是官方内置 Mod 且通过授权的 save_config 核心方法写入，则安全放行
+                    if _is_official_mod(co_filename) and has_authorized_save_api:
+                        pass
+                    else:
+                        return True, co_filename
         frame = frame.f_back
 
     return False, ""
@@ -70,6 +135,10 @@ def _is_protected_target(target) -> bool:
     if not nt:
         return False
 
+    # 0. 绝不拦截 Python 内部编译字节码缓存 (__pycache__, *.pyc, *.pyo 等)
+    if "/__pycache__/" in nt or nt.endswith("/__pycache__") or nt.endswith(".pyc") or nt.endswith(".pyo"):
+        return False
+
     norm_root = _norm(ROOT)
     norm_cfg_dir = _norm(CONFIG_DIR)
 
@@ -81,12 +150,18 @@ def _is_protected_target(target) -> bool:
     if nt.endswith("/config/config.json") or nt.endswith("/config/users.json") or nt.endswith("/config/permission.json") or nt.endswith("/config/banlist.json"):
         return True
 
-    # 3. 严格保护项目入口与核心代码目录
+    # 3. 严格保护项目入口与核心代码目录及官方内置 Mod 源码
     if norm_root:
         if nt == f"{norm_root}/main.py" or nt == f"{norm_root}/.noneeds":
             return True
         if nt.startswith(f"{norm_root}/lib/") or nt.startswith(f"{norm_root}/webui/") or nt.startswith(f"{norm_root}/version_manager/"):
             return True
+        for of in OFFICIAL_BUILTIN_MOD_FILES:
+            if nt == f"{norm_root}/mod/{of}":
+                return True
+        for od in OFFICIAL_BUILTIN_MOD_DIRS:
+            if nt.startswith(f"{norm_root}/mod/{od}/"):
+                return True
 
     return False
 
@@ -157,7 +232,9 @@ def _audit_hook(event: str, args: tuple) -> None:
 def _log_and_block(caller: str, target: str, action: str) -> None:
     """记录安全告警并抛出 PermissionError 中断非法操作"""
     caller_name = os.path.basename(caller) if caller else "未知 Mod"
-    msg = f"[EnderBridge 安全防护] 成功拦截第三方 Mod ({caller_name}) 企图非法{action}核心系统配置: {target}的操作！ "
+    caller_is_official = _is_official_mod(caller) if caller else False
+    mod_kind = "官方内置 Mod" if caller_is_official else "第三方 Mod"
+    msg = f"[EnderBridge 安全防护] 成功拦截{mod_kind} ({caller_name}) 企图非法{action}核心系统配置: {target}的操作！"
     try:
         from lib import shared
         if hasattr(shared, "logger"):

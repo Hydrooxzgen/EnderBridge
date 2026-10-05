@@ -491,7 +491,7 @@ def execute_studio_action(action: str, category: str, filename: str, params: dic
     except Exception:
         loop = None
 
-    if loop is not None and not loop.is_closed():
+    if loop is not None and not loop.is_closed() and loop.is_running():
         fut = asyncio.run_coroutine_threadsafe(
             _async_execute_studio_action(action, category, filename, params),
             loop
