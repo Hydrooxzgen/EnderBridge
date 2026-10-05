@@ -344,12 +344,23 @@ class BotProcess:
                     break
                 text = line.decode("utf-8", errors="replace").strip()
                 if text:
-                    # 包含 error/stack/throw 的是致命错误,用 warning 级别确保可见
-                    lower = text.lower()
-                    if any(kw in lower for kw in ('error', 'stack', 'throw', 'crash')):
-                        shared.logger.warning(f"[Bot] {text}")
+                    # 去除重复的 [Bot] 前缀
+                    cleaned = text
+                    if cleaned.startswith("[Bot] "):
+                        cleaned = cleaned[6:].strip()
+                    lower = cleaned.lower()
+                    # 排除正常连接关闭或非错误的 hadError / error: false
+                    is_normal = (
+                        "连接已关闭" in cleaned
+                        or "haderror: false" in lower
+                        or "haderror:  " in lower
+                        or "haderror: )" in lower
+                        or "error: false" in lower
+                    )
+                    if not is_normal and any(kw in lower for kw in ('error', 'stack', 'throw', 'crash')):
+                        shared.logger.warning(f"[Bot] {cleaned}")
                     else:
-                        shared.logger.debug(f"[Bot] {text}")
+                        shared.logger.debug(f"[Bot] {cleaned}")
         except asyncio.CancelledError:
             pass
         except Exception:
@@ -743,16 +754,25 @@ class Mod:
             return
 
         result = await bot.send_command({"type": "list"})
-        players = result.get("players", []) if result.get("ok") else []
+        if not result.get("ok"):
+            self.client.tell(f"Bot | Error > {result.get('message', '获取假人列表失败')}", sender)
+            return
 
-        if not players:
-            self.client.tell("Bot | List > 当前无假人", sender)
+        bot_info = result.get("bot", {})
+        bot_user = bot_info.get("username") or _bot_config().get("username", "FakeBot")
+        bot_ready = bot_info.get("ready", bot.ready)
+        status_str = "已就绪/在线" if bot_ready else "连接中"
+
+        players = result.get("players", [])
+        lines = [f"Bot | List > Bot 客户端 [{bot_user}] ({status_str})"]
+        if players:
+            lines.append(f"当前额外假人列表 ({len(players)} 个):")
+            for p in players:
+                lines.append(f"  - {p['name']} @ ({p['x']:.0f}, {p['y']:.0f}, {p['z']:.0f})")
         else:
-            lines = "\n".join(
-                f"  {p['name']} @ ({p['x']:.0f}, {p['y']:.0f}, {p['z']:.0f})"
-                for p in players
-            )
-            self.client.tell(f"Bot | List > 假人列表:\n{lines}", sender)
+            lines.append("当前无额外生成的假人分身（可使用 $bot spawn <名称> 生成）")
+
+        self.client.tell("\n".join(lines), sender)
 
     async def _cmd_shell(self, sender):
         """进入 Bot Shell 交互模式"""

@@ -135,6 +135,10 @@ def _is_protected_target(target) -> bool:
     if not nt:
         return False
 
+    # 0. 绝不拦截 Python 内部编译字节码缓存 (__pycache__, *.pyc, *.pyo 等)
+    if "/__pycache__/" in nt or nt.endswith("/__pycache__") or nt.endswith(".pyc") or nt.endswith(".pyo"):
+        return False
+
     norm_root = _norm(ROOT)
     norm_cfg_dir = _norm(CONFIG_DIR)
 
@@ -228,7 +232,9 @@ def _audit_hook(event: str, args: tuple) -> None:
 def _log_and_block(caller: str, target: str, action: str) -> None:
     """记录安全告警并抛出 PermissionError 中断非法操作"""
     caller_name = os.path.basename(caller) if caller else "未知 Mod"
-    msg = f"[EnderBridge 安全防护] 成功拦截第三方 Mod ({caller_name}) 企图非法{action}核心系统配置: {target}的操作！ "
+    caller_is_official = _is_official_mod(caller) if caller else False
+    mod_kind = "官方内置 Mod" if caller_is_official else "第三方 Mod"
+    msg = f"[EnderBridge 安全防护] 成功拦截{mod_kind} ({caller_name}) 企图非法{action}核心系统配置: {target}的操作！"
     try:
         from lib import shared
         if hasattr(shared, "logger"):

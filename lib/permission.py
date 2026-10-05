@@ -54,10 +54,12 @@ class PermissionManager:
     async def set(cls, new_permission: dict):
         """写入完整权限配置,成功返回 True,失败返回 Error"""
         try:
-            # 先写入临时文件再原子替换,避免进程中断导致原文件损坏
-            with open(TEMP_PATH, "w", encoding="utf-8") as f:
-                json.dump(new_permission, f, ensure_ascii=False, indent=2)
-            os.replace(TEMP_PATH, PERMISSION_PATH)
+            # 先写入临时文件再原子替换,并在系统锁保护通道下安全执行
+            from lib.file_lock import SystemFileLockManager
+            with SystemFileLockManager.unlock_for_write(PERMISSION_PATH):
+                with open(TEMP_PATH, "w", encoding="utf-8") as f:
+                    json.dump(new_permission, f, ensure_ascii=False, indent=2)
+                os.replace(TEMP_PATH, PERMISSION_PATH)
             # 写入后清除缓存,下次读取重新加载
             cls._cache = None
             cls._cache_mtime = None

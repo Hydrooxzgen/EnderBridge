@@ -192,6 +192,8 @@ def _version_below_min(ver: str) -> bool:
 
 def _read_config_src() -> str:
     """读取 config.py 源码文本"""
+    if not os.path.exists(CONFIG_PY):
+        return ""
     with open(CONFIG_PY, "r", encoding="utf-8") as f:
         return f.read()
 
@@ -591,18 +593,20 @@ def save_config(new: dict) -> None:
     # 13. is_first_run 明确复位
     config["is_first_run"] = False
 
-    # 保存到 JSON (原子写入)
-    tmp_path = CONFIG_JSON + f".tmp_{os.getpid()}"
-    with open(tmp_path, "w", encoding="utf-8") as f:
-        json.dump(config, f, ensure_ascii=False, indent=2)
-        f.write("\n")
-    if os.path.exists(CONFIG_JSON):
-        try:
-            import shutil
-            shutil.copy2(CONFIG_JSON, CONFIG_JSON + ".bak")
-        except Exception:
-            pass
-    os.replace(tmp_path, CONFIG_JSON)
+    # 保存到 JSON (原子写入，系统锁安全通道)
+    from lib.file_lock import SystemFileLockManager
+    with SystemFileLockManager.unlock_for_write(CONFIG_JSON):
+        tmp_path = CONFIG_JSON + f".tmp_{os.getpid()}"
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(config, f, ensure_ascii=False, indent=2)
+            f.write("\n")
+        if os.path.exists(CONFIG_JSON):
+            try:
+                import shutil
+                shutil.copy2(CONFIG_JSON, CONFIG_JSON + ".bak")
+            except Exception:
+                pass
+        os.replace(tmp_path, CONFIG_JSON)
 
     # 别名热重载:保存后立即生效,无需重启 (必须在写入 JSON 之后,否则读到旧缓存)
     try:
@@ -637,11 +641,13 @@ def load_permissions() -> dict:
 
 def save_permissions(perm: dict) -> None:
     """原子写入 permission.json,并清除 PermissionManager 缓存使游戏内权限立即生效"""
-    tmp = PERMISSION_JSON + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(perm, f, ensure_ascii=False, indent=2)
-        f.write("\n")
-    os.replace(tmp, PERMISSION_JSON)
+    from lib.file_lock import SystemFileLockManager
+    with SystemFileLockManager.unlock_for_write(PERMISSION_JSON):
+        tmp = PERMISSION_JSON + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(perm, f, ensure_ascii=False, indent=2)
+            f.write("\n")
+        os.replace(tmp, PERMISSION_JSON)
     # 同步清除 lib.permission 的缓存,否则游戏内查询权限仍用旧数据
     try:
         from lib.permission import PermissionManager
@@ -1499,19 +1505,26 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if not found:
             self._respond({"ok": False, "message": f"账号 {username} 未找到"})
             return
-        # 更新 activeXboxAccount 和 username（通过整体替换 botConfig 块）
+        # 更新 activeXboxAccount 和 username
         try:
-            src = _read_config_src()
-            src_new, _ = _replace_block(src, "botConfig", {
-                **bot_cfg,
-                "activeXboxAccount": username,
-                "username": username,
-                # offline 完全由用户开关控制,切换账号不再强制覆盖
-            })
-            import shutil
-            shutil.copy2(CONFIG_PY, CONFIG_PY_BAK)
-            with open(CONFIG_PY, "w", encoding="utf-8") as f:
-                f.write(src_new)
+            bot_cfg["activeXboxAccount"] = username
+            bot_cfg["username"] = username
+            save_config({"botConfig": bot_cfg})
+            if os.path.exists(CONFIG_PY):
+                try:
+                    src = _read_config_src()
+                    if src:
+                        src_new, _ = _replace_block(src, "botConfig", {
+                            **bot_cfg,
+                            "activeXboxAccount": username,
+                            "username": username,
+                        })
+                        import shutil
+                        shutil.copy2(CONFIG_PY, CONFIG_PY_BAK)
+                        with open(CONFIG_PY, "w", encoding="utf-8") as f:
+                            f.write(src_new)
+                except Exception:
+                    pass
             self._respond({"ok": True, "message": f"已切换到账号 {username}"})
         except Exception as e:
             self._respond({"ok": False, "message": f"切换失败: {e}"})
@@ -1540,12 +1553,18 @@ class WebUIHandler(BaseHTTPRequestHandler):
             new_cfg = {**bot_cfg, "xboxAccounts": new_accounts, "activeXboxAccount": active}
             if active:
                 new_cfg["username"] = active
-            src = _read_config_src()
-            src, _ = _replace_block(src, "botConfig", new_cfg)
-            import shutil
-            shutil.copy2(CONFIG_PY, CONFIG_PY_BAK)
-            with open(CONFIG_PY, "w", encoding="utf-8") as f:
-                f.write(src)
+            save_config({"botConfig": new_cfg})
+            if os.path.exists(CONFIG_PY):
+                try:
+                    src = _read_config_src()
+                    if src:
+                        src_new, _ = _replace_block(src, "botConfig", new_cfg)
+                        import shutil
+                        shutil.copy2(CONFIG_PY, CONFIG_PY_BAK)
+                        with open(CONFIG_PY, "w", encoding="utf-8") as f:
+                            f.write(src_new)
+                except Exception:
+                    pass
             # 删除该账号的 token 缓存文件(与 prismarine-auth 相同的 SHA1 前缀),防止重新登录时秒复用
             self._delete_account_cache(username, bot_cfg)
             self._respond({"ok": True, "message": f"已移除账号 {username}"})
@@ -2992,39 +3011,42 @@ class WebUIHandler(BaseHTTPRequestHandler):
 
         resolved = self._resolve_mod_config(name, side)
         try:
+            from lib.file_lock import SystemFileLockManager
             if resolved["configType"] == "file":
                 filepath = resolved["filePath"]
                 os.makedirs(os.path.dirname(filepath), exist_ok=True)
-                if os.path.exists(filepath):
-                    try:
-                        import shutil
-                        shutil.copy2(filepath, filepath + ".bak")
-                    except Exception:
-                        pass
-                with open(filepath, "w", encoding="utf-8") as f:
-                    json.dump(parsed_data, f, ensure_ascii=False, indent=2)
-                    f.write("\n")
+                with SystemFileLockManager.unlock_for_write(filepath):
+                    if os.path.exists(filepath):
+                        try:
+                            import shutil
+                            shutil.copy2(filepath, filepath + ".bak")
+                        except Exception:
+                            pass
+                    with open(filepath, "w", encoding="utf-8") as f:
+                        json.dump(parsed_data, f, ensure_ascii=False, indent=2)
+                        f.write("\n")
             else:
                 full_cfg = {}
-                if os.path.exists(CONFIG_JSON):
-                    with open(CONFIG_JSON, "r", encoding="utf-8") as f:
-                        full_cfg = json.load(f)
-                    try:
-                        import shutil
-                        shutil.copy2(CONFIG_JSON, CONFIG_JSON + ".bak")
-                    except Exception:
-                        pass
-                elif os.path.exists(CONFIG_PY):
-                    ns = _load_config_module()
-                    full_cfg = {k: getattr(ns, k) for k in dir(ns) if not k.startswith("_") and not callable(getattr(ns, k))}
-                elif os.path.exists(os.path.join(CONFIG_DIR, "config.example.json")):
-                    with open(os.path.join(CONFIG_DIR, "config.example.json"), "r", encoding="utf-8") as f:
-                        full_cfg = json.load(f)
+                with SystemFileLockManager.unlock_for_write(CONFIG_JSON):
+                    if os.path.exists(CONFIG_JSON):
+                        with open(CONFIG_JSON, "r", encoding="utf-8") as f:
+                            full_cfg = json.load(f)
+                        try:
+                            import shutil
+                            shutil.copy2(CONFIG_JSON, CONFIG_JSON + ".bak")
+                        except Exception:
+                            pass
+                    elif os.path.exists(CONFIG_PY):
+                        ns = _load_config_module()
+                        full_cfg = {k: getattr(ns, k) for k in dir(ns) if not k.startswith("_") and not callable(getattr(ns, k))}
+                    elif os.path.exists(os.path.join(CONFIG_DIR, "config.example.json")):
+                        with open(os.path.join(CONFIG_DIR, "config.example.json"), "r", encoding="utf-8") as f:
+                            full_cfg = json.load(f)
 
-                full_cfg[resolved["section"]] = parsed_data
-                with open(CONFIG_JSON, "w", encoding="utf-8") as f:
-                    json.dump(full_cfg, f, ensure_ascii=False, indent=2)
-                    f.write("\n")
+                    full_cfg[resolved["section"]] = parsed_data
+                    with open(CONFIG_JSON, "w", encoding="utf-8") as f:
+                        json.dump(full_cfg, f, ensure_ascii=False, indent=2)
+                        f.write("\n")
 
                 # 刷新配置缓存与命令别名
                 try:

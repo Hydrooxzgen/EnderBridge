@@ -41,6 +41,8 @@ DESCRIPTION = """
 fix1: 修复无法保存xbox live档案的问题
 fix2: 修复了启动时有几率无法读取config的问题
 feat1: 现在可以在webui控制台执行EB指令
+fix3: 修复了在bot连接到服务器的情况下bot list指令无法显示bot的问题
+safe_feat1: 加入系统锁
 """
 MINIMIUM_ALLOWED_VERSION = "v1.0.0" # 因为v1.0.0版本新增了重要安全改进，大大降低了被第三方恶意mod入侵的风险，所以限制了降级
                                     # 但是如果你需要降级低于v1.0.0的版本，请更改这里的值为b0.0.0以删除限制
@@ -1930,6 +1932,14 @@ async def main():
         shared.logger.info("Mod 加载完成")
     shared.logger.info("服务器已启动")
 
+    # 启用系统级文件锁，防止外部进程或攻击脚本在运行期间篡改核心配置文件
+    try:
+        from lib.file_lock import SystemFileLockManager
+        locked_cnt = SystemFileLockManager.lock_core_system_files()
+        shared.logger.info(f"系统级文件锁已就绪，已受保护核心文件: {locked_cnt} 个")
+    except Exception as e:
+        shared.logger.warning(f"系统级文件锁启用失败: {e}")
+
     # 启动玩家列表轮询任务(如果配置启用)
     asyncio.create_task(_player_list_polling_task())
 
@@ -2046,6 +2056,13 @@ async def destroy():
         shared.logger.info("服务器已关闭")
     except Exception:
         shared.logger.warning("服务器关闭异常, 正在强制退出")
+
+    # 释放所有系统级文件锁
+    try:
+        from lib.file_lock import SystemFileLockManager
+        SystemFileLockManager.unlock_all()
+    except Exception:
+        pass
 
 
 def _run_supervisor() -> None:

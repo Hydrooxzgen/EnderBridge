@@ -259,7 +259,11 @@ async function main() {
 
   client.on('close', (hadError) => {
     if (!disconnectReported) {
-      log('连接已关闭 (hadError:', hadError, ')');
+      if (hadError) {
+        log('连接异常关闭 (hadError:', hadError, ')');
+      } else {
+        log('连接已关闭');
+      }
       send({ type: 'disconnect', reason: `连接已关闭 (error: ${hadError || false})` });
     }
     botReady = false;
@@ -460,7 +464,15 @@ function handleList() {
     y: data.y,
     z: data.z,
   }));
-  send({ ok: true, action: 'list', players: list });
+  send({
+    ok: true,
+    action: 'list',
+    bot: {
+      username,
+      ready: botReady,
+    },
+    players: list,
+  });
 }
 
 function handleGameCommand(cmd) {

@@ -122,8 +122,10 @@ save_config({"botConfig": {"username": "OfficialBot"}})
             exec(code)
         finally:
             if backup is not None:
-                with open(cfg_path, "w", encoding="utf-8") as f:
-                    f.write(backup)
+                from lib.file_lock import SystemFileLockManager
+                with SystemFileLockManager.unlock_for_write(cfg_path):
+                    with open(cfg_path, "w", encoding="utf-8") as f:
+                        f.write(backup)
 
     def test_third_party_mod_blocked_from_calling_save_config(self):
         # 验证第三方 Mod 企图调用 save_config 写入配置被拦截
@@ -152,8 +154,10 @@ save_config({"botConfig": {"username": "HackedBot"}})
             assert cfg.get("botConfig", {}).get("username") == "SaveModConfigBot"
         finally:
             if backup is not None:
-                with open(cfg_path, "w", encoding="utf-8") as f:
-                    f.write(backup)
+                from lib.file_lock import SystemFileLockManager
+                with SystemFileLockManager.unlock_for_write(cfg_path):
+                    with open(cfg_path, "w", encoding="utf-8") as f:
+                        f.write(backup)
 
     def test_save_mod_config_disallows_tampering_system_keys(self):
         # 验证即使 hacker 尝试利用 save_mod_config 写入未授权的系统字段(如 webuiConfig)，也会被拦截/剔除
@@ -179,3 +183,14 @@ with open(target, "a", encoding="utf-8") as f:
 
         with pytest.raises(PermissionError, match=r"\[EnderBridge.*Mod"):
             exec(code, {"MOD_DIR": MOD_DIR})
+
+    def test_bytecode_cache_not_blocked(self):
+        # 验证 Python 编译产生的 __pycache__ 及 .pyc 临时文件不属于受保护目标，绝不误杀
+        from lib.security_guard import _is_protected_target
+        pyc_temp = os.path.join(MOD_DIR, "qq", "__pycache__", "main.cpython-314.pyc.2010927395120")
+        assert _is_protected_target(pyc_temp) is False
+        pyc_file = os.path.join(MOD_DIR, "tool", "__pycache__", "main.cpython-314.pyc")
+        assert _is_protected_target(pyc_file) is False
+        pycache_dir = os.path.join(MOD_DIR, "qq", "__pycache__")
+        assert _is_protected_target(pycache_dir) is False
+

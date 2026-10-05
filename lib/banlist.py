@@ -159,10 +159,12 @@ def load():
 def save():
     """保存 banlist.json"""
     with _lock:
-        tmp = BANLIST_JSON + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(_banned_ips, f, ensure_ascii=False, indent=2)
-        os.replace(tmp, BANLIST_JSON)
+        from lib.file_lock import SystemFileLockManager
+        with SystemFileLockManager.unlock_for_write(BANLIST_JSON):
+            tmp = BANLIST_JSON + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(_banned_ips, f, ensure_ascii=False, indent=2)
+            os.replace(tmp, BANLIST_JSON)
 
 
 def is_banned(ip: str) -> bool:

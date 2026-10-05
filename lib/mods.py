@@ -102,11 +102,13 @@ def save_mod_config(mod_name: str, config_patch: dict) -> bool:
                 f.update(sanitized_patch)
 
             # 原子写入 config.json
-            tmp_path = str(CONFIG_JSON) + f".mod_tmp_{os.getpid()}"
-            with open(tmp_path, "w", encoding="utf-8") as fp:
-                json.dump(cfg, fp, ensure_ascii=False, indent=2)
-                fp.write("\n")
-            os.replace(tmp_path, str(CONFIG_JSON))
+            from lib.file_lock import SystemFileLockManager
+            with SystemFileLockManager.unlock_for_write(str(CONFIG_JSON)):
+                tmp_path = str(CONFIG_JSON) + f".mod_tmp_{os.getpid()}"
+                with open(tmp_path, "w", encoding="utf-8") as fp:
+                    json.dump(cfg, fp, ensure_ascii=False, indent=2)
+                    fp.write("\n")
+                os.replace(tmp_path, str(CONFIG_JSON))
 
             # 重新加载配置缓存
             reload_config()
