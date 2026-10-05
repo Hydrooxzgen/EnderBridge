@@ -1485,6 +1485,16 @@ public partial class MainView : UserControl
 
     private async void ModsReloadAll_Click(object? sender, RoutedEventArgs e)
     {
+        if (string.IsNullOrEmpty(_apiClient.Token) || _currentUserRole != "admin")
+        {
+            var noPerm = "无权限: 重载全部模组属于管理员权限！请先登录管理员账号。";
+            AppendLog($"[GUI 权限拦截] ❌ {noPerm}");
+            ShowToast($"❌ {noPerm}", ToastType.Error);
+            LoginUsernameBox.Text = "admin";
+            LoginOverlay.IsVisible = true;
+            return;
+        }
+
         AppendLog("[GUI 模组 API] 正在发起全量模组热重载 (POST /api/mods/reload-all) ...");
         var (ok, msg) = await _apiClient.ReloadAllModsAsync();
         AppendLog(ok ? $"[GUI 模组 API] ✅ {msg}" : $"[GUI 模组 API] ❌ {msg}");
@@ -1549,6 +1559,17 @@ public partial class MainView : UserControl
 
     private async void ConfigSave_Click(object? sender, RoutedEventArgs e)
     {
+        // 权限校验：未登录或非管理员身份，严禁修改配置！
+        if (string.IsNullOrEmpty(_apiClient.Token) || _currentUserRole != "admin")
+        {
+            var noPerm = "无权限: 修改系统配置属于高危管理操作，必须以管理员(admin)身份登录！请先登录管理员账号。";
+            AppendLog($"[GUI 权限拦截] ❌ {noPerm}");
+            ShowToast($"❌ {noPerm}", ToastType.Error);
+            LoginUsernameBox.Text = "admin";
+            LoginOverlay.IsVisible = true;
+            return;
+        }
+
         var rootDir = _localCore.RootDirectory ?? AppContext.BaseDirectory;
         var configDir = Path.Combine(rootDir, "config");
         if (!Directory.Exists(configDir)) Directory.CreateDirectory(configDir);
@@ -1625,7 +1646,34 @@ public partial class MainView : UserControl
             ["localOnly"] = web["localOnly"]?.GetValue<bool>() ?? false
         };
 
-        // 1. 双重落盘保险：原子写入本地 config/config.json
+        // 1. 如果后端服务正在运行，强制通过 API 热更新校验（由后端验证 token 和权限后落盘并审计）
+        if (_serverProcess != null && !_serverProcess.HasExited)
+        {
+            try
+            {
+                AppendLog("[GUI 配置 API] 正在向后端提交配置热更新 (PUT /api/config) ...");
+                var (ok, msg) = await _apiClient.SaveConfigAsync(targetConfig);
+                if (ok)
+                {
+                    _currentConfigNode = targetConfig;
+                    AppendLog($"[GUI 配置 API] ✅ 后端运行时已成功更新配置并热重载: {msg}");
+                    ShowToast("✅ 配置已保存(部分设置需重启生效)", ToastType.Success);
+                }
+                else
+                {
+                    AppendLog($"[GUI 配置 API] ❌ 后端拒绝保存配置: {msg}");
+                    ShowToast($"❌ 保存配置失败: {msg}", ToastType.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"[GUI 配置 API] ❌ 请求异常: {ex.Message}");
+                ShowToast($"❌ 保存配置异常: {ex.Message}", ToastType.Error);
+            }
+            return;
+        }
+
+        // 2. 服务端未运行时的离线写入（已严格验证管理员身份）
         try
         {
             var jsonStr = targetConfig.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
@@ -1633,35 +1681,13 @@ public partial class MainView : UserControl
             await File.WriteAllTextAsync(tempFile, jsonStr);
             File.Move(tempFile, cfgPath, overwrite: true);
             _currentConfigNode = targetConfig;
-            AppendLog("[GUI 配置] ✅ 本地 config/config.json 已保存！");
+            AppendLog("[GUI 配置] ✅ 本地 config/config.json 已更新保存！");
+            ShowToast("✅ 本地配置已保存(下次启动生效)", ToastType.Success);
         }
         catch (Exception ex)
         {
             AppendLog($"[GUI 配置] ❌ 写入本地配置失败: {ex.Message}");
             ShowToast($"❌ 写入本地配置失败: {ex.Message}", ToastType.Error);
-            return;
-        }
-
-        // 2. 如果后端服务在线，调用 PUT /api/config 触发热重载与审计日志
-        try
-        {
-            AppendLog("[GUI 配置 API] 正在向后端提交配置热更新 (PUT /api/config) ...");
-            var (ok, msg) = await _apiClient.SaveConfigAsync(targetConfig);
-            if (ok)
-            {
-                AppendLog($"[GUI 配置 API] ✅ 后端运行时已热重载: {msg}");
-                ShowToast("✅ 配置已保存(部分设置需重启服务器生效)", ToastType.Success);
-            }
-            else
-            {
-                AppendLog($"[GUI 配置 API] 提示: 本地已持久化，后端响应: {msg}");
-                ShowToast("✅ 配置已保存(部分设置需重启服务器生效)", ToastType.Success);
-            }
-        }
-        catch (Exception ex)
-        {
-            AppendLog($"[GUI 配置 API] 提示: 本地文件已生效 (后端未运行或离线: {ex.Message})");
-            ShowToast("✅ 配置已保存(部分设置需重启服务器生效)", ToastType.Success);
         }
     }
 
@@ -2078,6 +2104,16 @@ public partial class MainView : UserControl
 
     private async void BackupCreate_Click(object? sender, RoutedEventArgs e)
     {
+        if (string.IsNullOrEmpty(_apiClient.Token) || _currentUserRole != "admin")
+        {
+            var noPerm = "无权限: 创建快照属于管理员权限！请先登录管理员账号。";
+            AppendLog($"[GUI 权限拦截] ❌ {noPerm}");
+            ShowToast($"❌ {noPerm}", ToastType.Error);
+            LoginUsernameBox.Text = "admin";
+            LoginOverlay.IsVisible = true;
+            return;
+        }
+
         AppendLog("[GUI 备份 API] 正在创建系统完整快照 (POST /api/backups) ...");
         var (ok, msg) = await _apiClient.CreateBackupAsync($"GUI 手动快照 ({DateTime.Now:yyyyMMdd_HHmmss})");
         AppendLog(ok ? $"[GUI 备份 API] ✅ {msg}" : $"[GUI 备份 API] 提示: {msg}");
@@ -2644,10 +2680,83 @@ public partial class MainView : UserControl
 
             if (!isResponding)
             {
-                LoginErrorText.Text = "核心服务端未启动，请先在主界面点击 [▶ 启动] 运行服务！";
+                // 服务端离线状态下，尝试使用本地 config/users.json 进行离线管理员鉴权
+                var rootDir = _localCore.RootDirectory ?? AppContext.BaseDirectory;
+                var usersFile = Path.Combine(rootDir, "config", "users.json");
+                if (!File.Exists(usersFile)) usersFile = Path.Combine(rootDir, "users.json");
+
+                bool offlineOk = false;
+                string? offlineRole = null;
+
+                if (File.Exists(usersFile))
+                {
+                    try
+                    {
+                        var usersJson = await File.ReadAllTextAsync(usersFile);
+                        using var doc = JsonDocument.Parse(usersJson);
+                        if (doc.RootElement.TryGetProperty("users", out var usersObj) &&
+                            usersObj.TryGetProperty(user, out var userElem))
+                        {
+                            var userRole = userElem.TryGetProperty("role", out var roleProp) ? roleProp.GetString() ?? "viewer" : "viewer";
+                            var hash = userElem.TryGetProperty("password_hash", out var hashProp) ? hashProp.GetString() ?? "" : "";
+
+                            if (pass == hash || pass.Trim() == hash.Trim())
+                            {
+                                offlineOk = true;
+                                offlineRole = userRole;
+                            }
+                            else
+                            {
+                                var pythonExe = FindPythonExecutable(rootDir);
+                                var escapedPass = pass.Replace("\\", "\\\\").Replace("\"", "\\\"");
+                                var escapedHash = hash.Replace("\\", "\\\\").Replace("\"", "\\\"");
+                                var psi = new ProcessStartInfo
+                                {
+                                    FileName = pythonExe,
+                                    Arguments = $"-c \"import sys; from lib.users import verify_password; sys.exit(0 if verify_password(\\\"\"\"{escapedPass}\\\"\"\", \\\"\"\"{escapedHash}\\\"\"\") else 1)\"",
+                                    WorkingDirectory = rootDir,
+                                    UseShellExecute = false,
+                                    CreateNoWindow = true
+                                };
+                                using var p = Process.Start(psi);
+                                if (p != null)
+                                {
+                                    await p.WaitForExitAsync();
+                                    if (p.ExitCode == 0)
+                                    {
+                                        offlineOk = true;
+                                        offlineRole = userRole;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        AppendLog($"[GUI 离线认证] 校验过程异常: {ex.Message}");
+                    }
+                }
+
+                if (offlineOk && !string.IsNullOrEmpty(offlineRole))
+                {
+                    var offlineToken = $"offline_{Guid.NewGuid():N}";
+                    _apiClient.SetToken(offlineToken);
+                    _currentUsername = user;
+                    _currentUserRole = offlineRole;
+                    UserAuthBadgeBtn.Content = $"🛡️ {user} ({offlineRole}) [点击退出]";
+                    UserAuthBadgeBtn.Foreground = BrushOk;
+                    LoginOverlay.IsVisible = false;
+                    AppendLog($"[GUI 离线认证] ✅ 离线身份验证通过！当前身份: {user} (角色: {offlineRole})");
+                    ShowToast($"✅ 离线登录成功！欢迎，{user} ({offlineRole})", ToastType.Success);
+                    SaveSessionLocally(offlineToken, user, offlineRole);
+                    RefreshActiveView();
+                    return;
+                }
+
+                LoginErrorText.Text = "核心服务端未启动且离线管理员凭据验证未通过！请启动服务或检查账号密码。";
                 LoginErrorText.IsVisible = true;
-                AppendLog("[GUI 认证] ❌ 服务端未运行，无法验证凭据");
-                ShowToast("❌ 服务端未运行，请先点击启动服务", ToastType.Error);
+                AppendLog("[GUI 认证] ❌ 服务端未运行且离线凭据错误");
+                ShowToast("❌ 登录失败：凭据错误或服务端未启动", ToastType.Error);
                 return;
             }
         }
@@ -2699,8 +2808,8 @@ public partial class MainView : UserControl
             if (File.Exists(sessionFile)) File.Delete(sessionFile);
         }
         catch {}
-        AppendLog("[GUI 认证] 已退出登录，当前回到访客权限");
-        ShowToast("已退出当前账号，回到访客只读模式", ToastType.Info);
+        AppendLog("[GUI 认证] 已退出登录");
+        ShowToast("已退出登录", ToastType.Info);
         RefreshActiveView();
     }
 
@@ -2734,7 +2843,7 @@ public partial class MainView : UserControl
                     _currentUserRole = role;
                     UserAuthBadgeBtn.Content = $"🛡️ {uname} ({role}) [点击退出]";
                     UserAuthBadgeBtn.Foreground = BrushOk;
-                    AppendLog($"[GUI 认证] 已自动载入本地持久化凭证: {uname} ({role})");
+                    AppendLog($"[GUI 认证] 已自动载入本地凭证: {uname} ({role})");
                 }
             }
         }
