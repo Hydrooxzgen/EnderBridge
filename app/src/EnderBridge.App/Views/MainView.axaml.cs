@@ -242,13 +242,18 @@ public partial class MainView : UserControl
         return false;
     }
 
+    private void UpdateCorePathTextBoxes(string? path)
+    {
+        var val = path ?? "";
+        if (CustomCorePathTextBox != null) CustomCorePathTextBox.Text = val;
+        if (ConfigCorePathTextBox != null) ConfigCorePathTextBox.Text = val;
+        if (SettingsCorePathTextBox != null) SettingsCorePathTextBox.Text = val;
+    }
+
     private void RefreshLocalCoreStatus()
     {
         _localCore = _versionService.CheckLocalCore();
-        if (CustomCorePathTextBox != null)
-        {
-            CustomCorePathTextBox.Text = _versionService.GetCustomCorePath() ?? "";
-        }
+        UpdateCorePathTextBoxes(_versionService.GetCustomCorePath());
 
         if (_localCore.Exists)
         {
@@ -518,9 +523,9 @@ public partial class MainView : UserControl
             return;
         }
 
-        // 2. 离线/未启动时的本地下载解压
+        // 2. 离线/未启动时的本地下载解压：提示用户选择目标下载与安装目录
         var customPath = _versionService.GetCustomCorePath();
-        var targetDir = _localCore.Exists && !string.IsNullOrEmpty(_localCore.RootDirectory)
+        var defaultTargetDir = _localCore.Exists && !string.IsNullOrEmpty(_localCore.RootDirectory)
             ? _localCore.RootDirectory
             : (!string.IsNullOrWhiteSpace(customPath) && Directory.Exists(customPath)
                 ? customPath
@@ -529,6 +534,55 @@ public partial class MainView : UserControl
                     : (!AppContext.BaseDirectory.Contains(".net", StringComparison.OrdinalIgnoreCase) && !AppContext.BaseDirectory.Contains("temp", StringComparison.OrdinalIgnoreCase)
                         ? AppContext.BaseDirectory
                         : Environment.CurrentDirectory)));
+
+        var targetDir = defaultTargetDir;
+
+        try
+        {
+            var topLevel = TopLevel.GetTopLevel(this);
+            if (topLevel?.StorageProvider != null)
+            {
+                Avalonia.Platform.Storage.IStorageFolder? startLocation = null;
+                try
+                {
+                    if (Directory.Exists(defaultTargetDir))
+                    {
+                        startLocation = await topLevel.StorageProvider.TryGetFolderFromPathAsync(defaultTargetDir);
+                    }
+                }
+                catch {}
+
+                var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+                {
+                    Title = $"选择 {rel.TagName} 服务端下载与解压安装目录",
+                    AllowMultiple = false,
+                    SuggestedStartLocation = startLocation
+                });
+
+                if (folders == null || folders.Count == 0)
+                {
+                    AppendLog("[GUI 核心下载] 用户已取消选择下载安装目录，下载已终止。");
+                    ShowToast("已取消下载安装", ToastType.Info);
+                    return;
+                }
+
+                var pickedPath = folders[0].Path.LocalPath;
+                if (string.IsNullOrWhiteSpace(pickedPath))
+                {
+                    ShowToast("选择的目录路径无效", ToastType.Error);
+                    return;
+                }
+
+                targetDir = pickedPath;
+                _versionService.SetCustomCorePath(targetDir);
+                UpdateCorePathTextBoxes(targetDir);
+                RefreshLocalCoreStatus();
+            }
+        }
+        catch (Exception ex)
+        {
+            AppendLog($"[GUI 核心下载] 路径选择器异常: {ex.Message}，继续使用目标目录: {targetDir}");
+        }
 
         // 本地磁盘写入权限探测检查
         try
@@ -663,7 +717,7 @@ public partial class MainView : UserControl
                 var localPath = files[0].Path.LocalPath;
                 if (!string.IsNullOrEmpty(localPath))
                 {
-                    CustomCorePathTextBox.Text = localPath;
+                    UpdateCorePathTextBoxes(localPath);
                     _versionService.SetCustomCorePath(localPath);
                     RefreshLocalCoreStatus();
                     AppendLog($"[GUI 核心路径] 已手动指定服务端主文件: {localPath}");
@@ -694,7 +748,7 @@ public partial class MainView : UserControl
                 var localPath = folders[0].Path.LocalPath;
                 if (!string.IsNullOrEmpty(localPath))
                 {
-                    CustomCorePathTextBox.Text = localPath;
+                    UpdateCorePathTextBoxes(localPath);
                     _versionService.SetCustomCorePath(localPath);
                     RefreshLocalCoreStatus();
                     AppendLog($"[GUI 核心路径] 已手动指定服务端工作目录: {localPath}");
@@ -710,10 +764,26 @@ public partial class MainView : UserControl
 
     private void SaveCustomCorePath_Click(object? sender, RoutedEventArgs e)
     {
-        var path = CustomCorePathTextBox.Text?.Trim();
+        ApplyCorePath(CustomCorePathTextBox?.Text);
+    }
+
+    private void SaveConfigCorePath_Click(object? sender, RoutedEventArgs e)
+    {
+        ApplyCorePath(ConfigCorePathTextBox?.Text);
+    }
+
+    private void SaveSettingsCorePath_Click(object? sender, RoutedEventArgs e)
+    {
+        ApplyCorePath(SettingsCorePathTextBox?.Text);
+    }
+
+    private void ApplyCorePath(string? rawPath)
+    {
+        var path = rawPath?.Trim();
         if (string.IsNullOrEmpty(path))
         {
             _versionService.SetCustomCorePath(null);
+            UpdateCorePathTextBoxes("");
             RefreshLocalCoreStatus();
             AppendLog("[GUI 核心路径] 已清空自定义路径，恢复默认自动探测。");
             ShowToast("已恢复为默认自动探测", ToastType.Info);
@@ -721,6 +791,7 @@ public partial class MainView : UserControl
         else
         {
             _versionService.SetCustomCorePath(path);
+            UpdateCorePathTextBoxes(path);
             RefreshLocalCoreStatus();
             AppendLog($"[GUI 核心路径] 已保存自定义路径: {path}");
             ShowToast("✅ 服务端路径已更新并保存", ToastType.Success);
@@ -729,7 +800,7 @@ public partial class MainView : UserControl
 
     private void ResetCustomCorePath_Click(object? sender, RoutedEventArgs e)
     {
-        if (CustomCorePathTextBox != null) CustomCorePathTextBox.Text = "";
+        UpdateCorePathTextBoxes("");
         _versionService.SetCustomCorePath(null);
         RefreshLocalCoreStatus();
         AppendLog("[GUI 核心路径] 已恢复默认自动探测模式。");
