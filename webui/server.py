@@ -107,6 +107,16 @@ def set_event_loop(loop):
     _event_loop = loop
 
 
+# EB 控制台命令执行器(main.py 注入):用于在 WebUI / API 控制台执行 $ 开头的 EB 指令
+_console_handler = None
+
+
+def set_console_handler(fn):
+    """注入控制台指令分发器:用于执行以 commandPrefix 开头的 EB 指令"""
+    global _console_handler
+    _console_handler = fn
+
+
 # 应用信息(main.py 注入):用于 Release Notes 获取
 _github_repo = ""    # e.g. "UserXYY123/EnderBridge"
 _app_version = APP_VERSION    # 初始为兜底值,set_app_info 后为 main.py 的真实 VERSION
@@ -1359,6 +1369,32 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if _event_loop is None or _event_loop.is_closed():
             self._respond({"ok": False, "message": "事件循环未就绪,请稍后重试"})
             return
+        # 1. 优先检查是否为以命令前缀开头的 EB 控制台指令 (如 $bot start, $help 等)
+        from lib.command import Command
+        Command.reload_prefix()
+        cp = Command.command_prefix
+        if command.startswith(cp):
+            if _console_handler is not None:
+                try:
+                    import asyncio
+                    fut = asyncio.run_coroutine_threadsafe(
+                        _console_handler(command), _event_loop
+                    )
+                    res = fut.result(timeout=15)
+                    _audit(self, "command", f"执行了 EB 控制台指令: {command}")
+                    ok = res.get("ok", True) if isinstance(res, dict) else True
+                    msg = (res.get("message") if isinstance(res, dict) else None) or f"EB 指令执行完成: {command}"
+                    self._respond({
+                        "ok": ok,
+                        "statusCode": 0 if ok else 1,
+                        "statusMessage": msg,
+                    })
+                    return
+                except Exception as e:
+                    self._respond({"ok": False, "message": f"EB 指令执行失败: {e}"})
+                    return
+
+        # 2. 游戏客户端命令: 发送给已连接的 MCBE 客户端
         try:
             from lib.current import Current
             client = Current.client
@@ -1376,7 +1412,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
                 "statusCode": body_data.get("statusCode"),
                 "statusMessage": body_data.get("statusMessage"),
             })
-            _audit(self, "command", f"执行了命令: {command}")
+            _audit(self, "command", f"执行了游戏命令: {command}")
         except Exception as e:
             self._respond({"ok": False, "message": f"命令执行失败: {e}"})
 
@@ -2765,6 +2801,10 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if not base_name.endswith(".py") or ".." in base_name or "/" in base_name or "\\" in base_name:
             self._respond({"ok": False, "message": "无效的文件名，必须为以 .py 结尾的文件名"})
             return
+        from lib.security_guard import OFFICIAL_BUILTIN_MOD_FILES
+        if base_name in OFFICIAL_BUILTIN_MOD_FILES:
+            self._respond({"ok": False, "message": f"禁止上传覆盖官方核心 Mod: {base_name}"})
+            return
 
         target_path = os.path.join(ROOT, "mod", base_name)
         try:
@@ -3943,6 +3983,39 @@ class WebUIHandler(BaseHTTPRequestHandler):
                                 })
                                 continue
 
+                            # 1. 优先检查是否为以命令前缀开头的 EB 控制台指令 (如 $bot start, $help 等)
+                            from lib.command import Command
+                            Command.reload_prefix()
+                            cp = Command.command_prefix
+                            if command.startswith(cp):
+                                if _console_handler is not None:
+                                    try:
+                                        import asyncio
+                                        fut = asyncio.run_coroutine_threadsafe(
+                                            _console_handler(command), _event_loop
+                                        )
+                                        res = fut.result(timeout=15)
+                                        _audit(self, "command", f"执行了 EB 控制台指令: {command}")
+                                        ok = res.get("ok", True) if isinstance(res, dict) else True
+                                        msg = (res.get("message") if isinstance(res, dict) else None) or f"EB 指令执行完成: {command}"
+                                        ws.send_json({
+                                            "type": "cmd-result",
+                                            "id": req_id,
+                                            "ok": ok,
+                                            "statusCode": 0 if ok else 1,
+                                            "statusMessage": msg,
+                                        })
+                                        continue
+                                    except Exception as e:
+                                        ws.send_json({
+                                            "type": "cmd-result",
+                                            "id": req_id,
+                                            "ok": False,
+                                            "message": f"EB 指令执行失败: {e}",
+                                        })
+                                        continue
+
+                            # 2. 游戏客户端命令: 发送给已连接的 MCBE 客户端
                             try:
                                 from lib.current import Current
                                 client = Current.client
@@ -3968,7 +4041,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
                                     "statusCode": body_data.get("statusCode"),
                                     "statusMessage": body_data.get("statusMessage"),
                                 })
-                                _audit(self, "command", f"执行了命令: {command}")
+                                _audit(self, "command", f"执行了游戏命令: {command}")
                             except Exception as e:
                                 ws.send_json({
                                     "type": "cmd-result",

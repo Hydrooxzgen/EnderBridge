@@ -6,6 +6,7 @@ import asyncio
 import ctypes
 import importlib
 import json
+import os
 import threading
 import time
 
@@ -21,6 +22,100 @@ try:
     install_security_guard()
 except Exception:
     pass
+
+_save_mod_lock = threading.Lock()
+_in_mod_save_context = False
+
+
+def is_in_mod_save_context() -> bool:
+    """供底层安全守卫 (security_guard) 查询当前是否处于授权的 Mod 配置保存上下文"""
+    return _in_mod_save_context
+
+
+# 针对各 Mod 的白名单作用域与字段，防止越权写入非相关字段或核心系统配置
+MOD_ALLOWED_SCOPES = {
+    "bot": "botConfig",
+    "ai": "AIConfig",
+    "music": "features.music",
+    "qq": "features.qq",
+}
+
+MOD_ALLOWED_KEYS = {
+    "bot": {
+        "xboxAccounts", "activeXboxAccount", "username", "offline",
+        "mode", "host", "port", "version", "authTitle",
+        "profilesFolder", "realmId", "realmInvite", "enabled",
+    },
+    "ai": {"options", "models", "chatCooldown"},
+    "music": {"playPercussion"},
+    "qq": {"enabled", "groupId", "host", "port", "accessToken"},
+}
+
+
+def save_mod_config(mod_name: str, config_patch: dict) -> bool:
+    """专为 Mod 设立的安全配置持久化通道。
+
+    安全设计：
+    1. 严格检查 mod_name 与允许修改的配置作用域 (Scope Isolation)。
+       例如 'bot' 仅允许修改 'botConfig' 下的受信任业务字段；
+       严禁任何 Mod 触碰 webuiConfig, users, permission, banlist 等系统级核心配置。
+    2. 在安全上下文中执行原子持久化写入，防范第三方 Mod 篡改核心配置或伪造调用栈。
+    """
+    global _in_mod_save_context
+    if not isinstance(mod_name, str) or not isinstance(config_patch, dict):
+        return False
+
+    mod_key = mod_name.strip().lower()
+    allowed_scope = MOD_ALLOWED_SCOPES.get(mod_key)
+    if not allowed_scope:
+        shared.logger.warning(f"[安全防护] 拒绝未注册 Mod [{mod_name}] 的配置保存请求")
+        return False
+
+    allowed_keys = MOD_ALLOWED_KEYS.get(mod_key, set())
+    # 严格校验 patch 中的每一个 key 是否在白名单中
+    sanitized_patch = {}
+    for k, v in config_patch.items():
+        if k in allowed_keys:
+            sanitized_patch[k] = v
+        else:
+            shared.logger.warning(f"[安全防护] Mod [{mod_name}] 企图修改非授权配置字段 [{k}]，已被安全拦截！")
+
+    if not sanitized_patch:
+        return False
+
+    with _save_mod_lock:
+        try:
+            _in_mod_save_context = True
+            from lib.config_loader import CONFIG_JSON, get_config, reload_config
+
+            cfg = get_config(force_reload=True).copy()
+
+            if allowed_scope == "botConfig":
+                b = cfg.setdefault("botConfig", {})
+                b.update(sanitized_patch)
+            elif allowed_scope == "AIConfig":
+                a = cfg.setdefault("AIConfig", {})
+                a.update(sanitized_patch)
+            elif allowed_scope.startswith("features."):
+                feat_key = allowed_scope.split(".", 1)[1]
+                f = cfg.setdefault("features", {}).setdefault(feat_key, {})
+                f.update(sanitized_patch)
+
+            # 原子写入 config.json
+            tmp_path = str(CONFIG_JSON) + f".mod_tmp_{os.getpid()}"
+            with open(tmp_path, "w", encoding="utf-8") as fp:
+                json.dump(cfg, fp, ensure_ascii=False, indent=2)
+                fp.write("\n")
+            os.replace(tmp_path, str(CONFIG_JSON))
+
+            # 重新加载配置缓存
+            reload_config()
+            return True
+        except Exception as e:
+            shared.logger.error(f"[save_mod_config] 保存配置失败: {e}")
+            return False
+        finally:
+            _in_mod_save_context = False
 
 
 class _TerminalClient:
@@ -688,6 +783,9 @@ class ClientModManager:
                         mod_instance.client = original_mod_clients[mod_name]
 
         # 策略2: 无客户端连接或未匹配时,临时实例化已加载的 Mod 类
+        if not ClientModManager.loaded_mod:
+            await ClientModManager.load()
+
         for name, mod_class in ClientModManager.loaded_mod.items():
             # 仅执行标记了 terminal_compatible 的 Mod
             if not getattr(mod_class, "terminal_compatible", False):

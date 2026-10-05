@@ -40,6 +40,7 @@ VERSION = "v1.1.0.1 dev"
 DESCRIPTION = """
 fix1: 修复无法保存xbox live档案的问题
 fix2: 修复了启动时有几率无法读取config的问题
+feat1: 现在可以在webui控制台执行EB指令
 """
 MINIMIUM_ALLOWED_VERSION = "v1.0.0" # 因为v1.0.0版本新增了重要安全改进，大大降低了被第三方恶意mod入侵的风险，所以限制了降级
                                     # 但是如果你需要降级低于v1.0.0的版本，请更改这里的值为b0.0.0以删除限制
@@ -47,20 +48,20 @@ MINIMIUM_ALLOWED_VERSION = "v1.0.0" # 因为v1.0.0版本新增了重要安全改
 GITHUB_REPO = "Hydrooxzgen/EnderBridge"  # You can edit this to your own repository if you fork it :)
 
 # --- 命令行开关常量 ---
+IS_TESTING = "pytest" in sys.modules or any("pytest" in str(a).lower() for a in sys.argv)
 WANT_RESET = ("--reset-all" in sys.argv) or ("--reset" in sys.argv)
 WANT_EXPORT = "export" in sys.argv
 WANT_EXPORT_CLEAR = WANT_EXPORT and "-clear" in sys.argv
 WANT_LOAD_WITHOUT_CONFIG = "--load-without-config" in sys.argv
-WANT_VIEW_VERSION = "--version" in sys.argv or "-v" in sys.argv
+WANT_VIEW_VERSION = not IS_TESTING and ("--version" in sys.argv or "-v" in sys.argv)
 WANT_SYSTEM_MODE = "--system" in sys.argv
 WANT_SAFE_MODE = "--safe-mode" in sys.argv
-WANT_HELP = "--help" in sys.argv or "-h" in sys.argv
+WANT_HELP = not IS_TESTING and ("--help" in sys.argv or "-h" in sys.argv)
 WANT_VIEW_DESCRIPTION = "--description" in sys.argv
 WANT_GOTO_OOBE = "--goto-oobe" in sys.argv
 WANT_UPDATE = "update" in sys.argv
 WANT_ROLLBACK = "--rollback" in sys.argv
 WANT_PREVIEW = "preview" in sys.argv
-IS_TESTING = "pytest" in sys.modules or any("pytest" in str(a).lower() for a in sys.argv)
 ARGV_NOT_EXIST = not IS_TESTING and not WANT_RESET\
 and not WANT_VIEW_VERSION and not WANT_EXPORT \
 and not WANT_VIEW_DESCRIPTION and not WANT_HELP \
@@ -145,6 +146,8 @@ def _check_minimum_version(new_version: str) -> None:
 # ===== 依赖检测(必须早于任何第三方mod使用) ===== 
 # 自动发现虚拟环境并检测核心依赖 (websockets, bcrypt)
 def _ensure_venv_path() -> None:
+    if IS_TESTING:
+        return
     for _v in (".venv", "venv", "env"):
         _sp = os.path.join(ROOT, _v, "Lib", "site-packages")
         if not os.path.isdir(_sp):
@@ -1351,7 +1354,7 @@ def _webui_status() -> dict:
 def _start_webui() -> None:
     """启动 Web 管理界面(每次启动都监听配置的 Web 端口)"""
     try:
-        from webui.server import set_app_info, set_event_loop, set_restart_handler, set_status_provider, set_system_mode, start_webui
+        from webui.server import set_app_info, set_console_handler, set_event_loop, set_restart_handler, set_status_provider, set_system_mode, start_webui
         try:
             from webui.server import set_safe_mode
             set_safe_mode(WANT_SAFE_MODE)
@@ -1379,6 +1382,7 @@ def _start_webui() -> None:
         set_status_provider(_webui_status)
         set_restart_handler(_request_restart)
         set_event_loop(asyncio.get_running_loop())
+        set_console_handler(_dispatch_console_command)
         set_app_info(GITHUB_REPO, VERSION, DESCRIPTION, minimum_version=MINIMIUM_ALLOWED_VERSION)
         set_system_mode(WANT_SYSTEM_MODE)
         start_webui()
@@ -1565,12 +1569,34 @@ def _strip_mc_colors(text: str) -> str:
     return re.sub(r"§.", "", text)
 
 
+_console_listeners = []
+
+
+def add_console_listener(listener):
+    """添加控制台输出捕获监听器(供 WebUI 执行控制台指令时捕获实时输出)"""
+    _console_listeners.append(listener)
+
+
+def remove_console_listener(listener):
+    """移除控制台输出捕获监听器"""
+    try:
+        _console_listeners.remove(listener)
+    except ValueError:
+        pass
+
+
 def console_out(msg):
     """终端输出消息(自动去除 MC 颜色代码)"""
     global _prompt_visible
     _prompt_visible = False  # console_out 清除了当前行,提示符不再可见
+    clean = _strip_mc_colors(str(msg))
     sys.stdout.write("\r\x1b[K")
-    print(_strip_mc_colors(str(msg)))
+    print(clean)
+    for l in list(_console_listeners):
+        try:
+            l(clean)
+        except Exception:
+            pass
 
 
 def _console_help():
@@ -1811,41 +1837,57 @@ async def _dispatch_console_command(text):
     cp = Command.command_prefix
     if text.startswith(cp):
         cmd = text[len(cp):].strip()
+        captured_lines = []
+        def _cap(m):
+            captured_lines.append(str(m))
+        add_console_listener(_cap)
 
-        if cmd in ("help", "h", "?"):
-            _console_help()
-        elif cmd.startswith("help "):
-            feature = cmd[5:].strip()
-            _console_help_feature(feature)
-        elif cmd in ("status", "info"):
-            _console_status()
-        elif cmd == "list":
-            _console_list()
-        elif cmd.startswith("say "):
-            msg = cmd[4:]
-            if Current.client:
-                Current.client.tell(msg)
-                console_out(f"§a已发送: §f{msg}")
+        try:
+            if cmd in ("help", "h", "?"):
+                _console_help()
+                return {"ok": True, "handled": True, "message": "\n".join(captured_lines) or "已显示帮助信息"}
+            elif cmd.startswith("help "):
+                feature = cmd[5:].strip()
+                _console_help_feature(feature)
+                return {"ok": True, "handled": True, "message": "\n".join(captured_lines) or f"已显示 {feature} 帮助信息"}
+            elif cmd in ("status", "info"):
+                _console_status()
+                return {"ok": True, "handled": True, "message": "\n".join(captured_lines) or "已显示服务器状态"}
+            elif cmd == "list":
+                _console_list()
+                return {"ok": True, "handled": True, "message": "\n".join(captured_lines) or "已显示客户端列表"}
+            elif cmd.startswith("say "):
+                msg = cmd[4:]
+                if Current.client:
+                    Current.client.tell(msg)
+                    console_out(f"§a已发送: §f{msg}")
+                    return {"ok": True, "handled": True, "message": f"已发送: {msg}"}
+                else:
+                    console_out("§c无客户端连接")
+                    return {"ok": False, "handled": False, "message": "无客户端连接"}
+            elif cmd.startswith("cmd "):
+                c = cmd[4:]
+                client = Current.client
+                if client:
+                    await client.runCommand(c)  # type: ignore[misc]
+                    console_out(f"§a已执行: §f{c}")
+                    return {"ok": True, "handled": True, "message": f"已执行: {c}"}
+                else:
+                    console_out("§c无客户端连接")
+                    return {"ok": False, "handled": False, "message": "无客户端连接"}
             else:
-                console_out("§c无客户端连接")
-        elif cmd.startswith("cmd "):
-            c = cmd[4:]
-            client = Current.client
-            if client:
-                await client.runCommand(c)  # type: ignore[misc]
-                console_out(f"§a已执行: §f{c}")
-            else:
-                console_out("§c无客户端连接")
-        else:
-            # 转发给服务端 Mod 执行(如 $chat、$spam 等)
-            mod_cmd = f"{cp}{cmd}"
-            handled = await ServerModManager.execute_terminal(mod_cmd)
-            if not handled:
-                # 再尝试支持终端执行的客户端 Mod(如 $bot)
-                handled = await ClientModManager.execute_terminal(mod_cmd)
-            if not handled:
-                console_out(f"§c未知命令: §f{cmd}, 输入 {cp}help 查看帮助")
-        return
+                # 转发给服务端 Mod 执行(如 $chat、$spam 等)
+                mod_cmd = f"{cp}{cmd}"
+                handled = await ServerModManager.execute_terminal(mod_cmd)
+                if not handled:
+                    # 再尝试支持终端执行的客户端 Mod(如 $bot)
+                    handled = await ClientModManager.execute_terminal(mod_cmd)
+                if not handled:
+                    console_out(f"§c未知命令: §f{cmd}, 输入 {cp}help 查看帮助")
+                    return {"ok": False, "handled": False, "message": f"未知命令: {cmd}"}
+                return {"ok": True, "handled": True, "message": "\n".join(captured_lines) or f"EB 指令已执行: {mod_cmd}"}
+        finally:
+            remove_console_listener(_cap)
 
     # 非命令文本:作为聊天消息发送给主客户端
     if Current.client:

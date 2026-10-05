@@ -501,8 +501,9 @@ class XboxLoginManager:
     def _save_account(self, username: str):
         """将已认证的 Xbox 账号保存到配置"""
         try:
-            from webui.server import _load_config_module, save_config
-            cfg = _load_config_module()
+            from lib.mods import save_mod_config
+            from lib.config_loader import get_config
+            cfg = get_config()
             bot_cfg = dict(cfg.get("botConfig") or {})
             accounts = list(bot_cfg.get("xboxAccounts") or [])
 
@@ -510,17 +511,18 @@ class XboxLoginManager:
             exists = any(a.get("username") == username for a in accounts)
             if not exists:
                 accounts.append({"username": username})
-                bot_cfg["xboxAccounts"] = accounts
 
-            # 登录成功后总是将新账号设为活跃 — 用户登录新账号就是希望立即使用它,
-            # 这样 web 显示的账号与实际 bot 连接的账号保持一致
-            bot_cfg["activeXboxAccount"] = username
-            bot_cfg["username"] = username
-            # 登录了 Xbox 账号必须使用 online 模式,否则 bot 还是离线连接
-            bot_cfg["offline"] = False
+            patch = {
+                "xboxAccounts": accounts,
+                "activeXboxAccount": username,
+                "username": username,
+                "offline": False,
+            }
 
-            save_config({"botConfig": bot_cfg})
-            shared.logger.info(f"[XboxLogin] 账号 {username} 已保存到配置")
+            if save_mod_config("bot", patch):
+                shared.logger.info(f"[XboxLogin] 账号 {username} 已保存到配置")
+            else:
+                shared.logger.warning(f"[XboxLogin] 保存账号失败: 配置被安全策略拦截")
         except Exception as e:
             shared.logger.warning(f"[XboxLogin] 保存账号失败: {e}")
 

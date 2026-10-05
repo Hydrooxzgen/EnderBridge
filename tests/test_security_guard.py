@@ -103,3 +103,79 @@ normal_work()
         finally:
             if os.path.isfile(mod_local_file):
                 os.remove(mod_local_file)
+
+    def test_official_mod_can_call_save_config(self):
+        # 验证官方核心 Mod (如 bot.py) 通过官方 save_config 正常保存账号等配置
+        from webui.server import save_config
+        cfg_path = os.path.join(CONFIG_DIR, "config.json")
+        backup = None
+        if os.path.exists(cfg_path):
+            with open(cfg_path, "r", encoding="utf-8") as f:
+                backup = f.read()
+
+        code = compile("""
+from webui.server import save_config
+save_config({"botConfig": {"username": "OfficialBot"}})
+""", os.path.join(MOD_DIR, "bot.py"), "exec")
+
+        try:
+            exec(code)
+        finally:
+            if backup is not None:
+                with open(cfg_path, "w", encoding="utf-8") as f:
+                    f.write(backup)
+
+    def test_third_party_mod_blocked_from_calling_save_config(self):
+        # 验证第三方 Mod 企图调用 save_config 写入配置被拦截
+        code = compile("""
+from webui.server import save_config
+save_config({"botConfig": {"username": "HackedBot"}})
+""", os.path.join(MOD_DIR, "evil_bot_mod.py"), "exec")
+
+        with pytest.raises(PermissionError, match=r"\[EnderBridge.*Mod"):
+            exec(code)
+
+    def test_save_mod_config_bot_allowed(self):
+        # 验证专有 save_mod_config 函数允许 bot 修改其合法字段
+        from lib.mods import save_mod_config
+        from lib.config_loader import get_config
+        cfg_path = os.path.join(CONFIG_DIR, "config.json")
+        backup = None
+        if os.path.exists(cfg_path):
+            with open(cfg_path, "r", encoding="utf-8") as f:
+                backup = f.read()
+
+        try:
+            ok = save_mod_config("bot", {"username": "SaveModConfigBot", "offline": False})
+            assert ok is True
+            cfg = get_config(force_reload=True)
+            assert cfg.get("botConfig", {}).get("username") == "SaveModConfigBot"
+        finally:
+            if backup is not None:
+                with open(cfg_path, "w", encoding="utf-8") as f:
+                    f.write(backup)
+
+    def test_save_mod_config_disallows_tampering_system_keys(self):
+        # 验证即使 hacker 尝试利用 save_mod_config 写入未授权的系统字段(如 webuiConfig)，也会被拦截/剔除
+        from lib.mods import save_mod_config
+        # 传入未在 MOD_ALLOWED_KEYS["bot"] 中的恶意字段
+        ok = save_mod_config("bot", {"webuiConfig": {"token": "malicious"}})
+        assert ok is False
+
+    def test_save_mod_config_unregistered_mod_rejected(self):
+        # 验证未注册的第三方 Mod 调用 save_mod_config 直接被拒绝
+        from lib.mods import save_mod_config
+        ok = save_mod_config("evil_third_party_mod", {"attack": "data"})
+        assert ok is False
+
+    def test_mod_blocked_from_modifying_official_mod_source(self):
+        # 验证第三方 Mod 企图在磁盘上篡改/覆盖官方内置 Mod (如 bot.py) 源码被底层拦截
+        code = compile("""
+import os
+target = os.path.join(MOD_DIR, "bot.py")
+with open(target, "a", encoding="utf-8") as f:
+    f.write("# hacked")
+""", os.path.join(MOD_DIR, "evil_hacker_mod.py"), "exec")
+
+        with pytest.raises(PermissionError, match=r"\[EnderBridge.*Mod"):
+            exec(code, {"MOD_DIR": MOD_DIR})
