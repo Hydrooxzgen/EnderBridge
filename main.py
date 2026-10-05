@@ -35,9 +35,10 @@ USERS_JSON = os.path.join(CONFIG_DIR, "users.json")
 UPDATE_MARKER = os.path.join(ROOT, ".update_pending")
 
 # --- 版本常量 ---
-VERSION = "v1.1.0 dev"
+VERSION = "v1.1.0"
 # ↓仅当不为None时从Github拉取更新日志, 反之则直接显示该变量内容。
-DESCRIPTION = """
+DESCRIPTION = None
+"""
 feature1: App管理界面(beta)
 fix1: 修复无法在webui预览像素画源文件的问题
 app_fix2: 修复app web访问无法刷新、地址栏无法正确同步的问题
