@@ -1,0 +1,188 @@
+﻿<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:CompileBindings="True">
+    <Design.PreviewWith>
+        <Border Width="400">
+            <TabControl>
+                <TabItem Header="Arch">
+                    <Border Height="100">
+                        <TextBlock Text="Content" Foreground="{DynamicResource PrimaryForegroundBrush}" FontSize="20" />
+                    </Border>
+                </TabItem>
+                <TabItem Header="Leafaa11111aaaaaa">
+                    <Border Height="100" />
+                </TabItem>
+                <TabItem Header="Disabled"
+                         IsEnabled="False" />
+            </TabControl>
+        </Border>
+    </Design.PreviewWith>
+
+    <!-- TabControl 主题 -->
+    <Style Selector="TabControl">
+        <Setter Property="Margin" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Margin="{TemplateBinding Margin}"
+                        Background="{TemplateBinding Background}"
+                        HorizontalAlignment="{TemplateBinding HorizontalAlignment}"
+                        VerticalAlignment="{TemplateBinding VerticalAlignment}"
+                        ClipToBounds="True">
+                    <DockPanel>
+                        <ItemsPresenter Name="PART_ItemsPresenter"
+                                        ClipToBounds="True"
+                                        ItemsPanel="{TemplateBinding ItemsPanel}"
+                                        DockPanel.Dock="{TemplateBinding TabStripPlacement}" />
+                        <ContentPresenter Name="PART_SelectedContentHost"
+                                          ClipToBounds="True"
+                                          Margin="{TemplateBinding Padding}"
+                                          HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          Content="{TemplateBinding SelectedContent}"
+                                          ContentTemplate="{TemplateBinding SelectedContentTemplate}" />
+                    </DockPanel>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+
+        <Style Selector="^[TabStripPlacement=Left] /template/ ItemsPresenter#PART_ItemsPresenter > WrapPanel">
+            <Setter Property="Orientation" Value="Vertical" />
+        </Style>
+        <Style Selector="^[TabStripPlacement=Right] /template/ ItemsPresenter#PART_ItemsPresenter > WrapPanel">
+            <Setter Property="Orientation" Value="Vertical" />
+        </Style>
+        <Style Selector="^[TabStripPlacement=Top] /template/ ItemsPresenter#PART_ItemsPresenter">
+            <Setter Property="Margin" Value="0 0 0 4" />
+        </Style>
+    </Style>
+
+    <!-- TabItem 主题 -->
+    <Style Selector="TabItem">
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="ExtraLight" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryForegroundBrush}" />
+        <Setter Property="Padding" Value="0 4,12,0" />
+        <Setter Property="Margin" Value="0" />
+        <Setter Property="MinHeight" Value="36" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Name="PART_LayoutRoot"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        Padding="{TemplateBinding Padding}"
+                        Background="{TemplateBinding Background}">
+                    <Panel>
+                        <ContentPresenter Name="PART_ContentPresenter"
+                                          ContentTemplate="{TemplateBinding HeaderTemplate}"
+                                          Content="{TemplateBinding Header}"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          FontFamily="{TemplateBinding FontFamily}"
+                                          FontSize="{TemplateBinding FontSize}"
+                                          FontWeight="{TemplateBinding FontWeight}" />
+                        <Border HorizontalAlignment="Stretch"
+                                VerticalAlignment="Bottom"
+                                CornerRadius="10"
+                                Height="0"
+                                Name="PART_SelectedPipe"
+                                Background="{DynamicResource AccentBackgroundBrush}" />
+                    </Panel>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+
+        <Style Selector="^ /template/ Border#PART_SelectedPipe">
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Height" Duration="0:0:0.18" Easing="BackEaseOut" />
+                </Transitions>
+            </Setter>
+        </Style>
+
+        <!-- 选中状态 -->
+        <Style Selector="^:selected">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryForegroundBrush}" />  <!-- 主要文本颜色 -->
+            <Setter Property="FontWeight" Value="DemiBold" />
+
+            <Style Selector="^ /template/ Border#PART_SelectedPipe">
+                <Setter Property="Height" Value="2" />
+            </Style>
+        </Style>
+
+        <!-- 悬停状态 -->
+        <Style Selector="^:pointerover">
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryForegroundBrush}" />
+            <Setter Property="Background" Value="Transparent" />
+
+            <Style Selector="^ /template/ Border#PART_SelectedPipe">
+                <Setter Property="Height" Value="4" />
+            </Style>
+        </Style>
+
+        <!-- 按下状态 -->
+        <Style Selector="^:pressed">
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryForegroundBrush}" />  <!-- 主要文本颜色 -->
+        </Style>
+
+        <!-- 禁用状态 -->
+        <Style Selector="^:disabled">
+            <Setter Property="Opacity" Value="0.5" />
+        </Style>
+
+        <!-- 左侧放置样式 -->
+        <Style Selector="^[TabStripPlacement=Left]">
+            <Style Selector="^ /template/ Rectangle#PART_SelectedPipe">
+                <Setter Property="Width" Value="3" />
+                <Setter Property="Height" Value="24" />
+                <Setter Property="Margin" Value="0,0,2,0" />
+                <Setter Property="HorizontalAlignment" Value="Left" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+            <Style Selector="^ /template/ ContentPresenter#PART_ContentPresenter">
+                <Setter Property="Margin" Value="8,0,0,0" />
+            </Style>
+        </Style>
+
+        <!-- 顶部放置样式 -->
+        <Style Selector="^[TabStripPlacement=Top]">
+            <Style Selector="^ /template/ Rectangle#PART_SelectedPipe">
+                <Setter Property="Height" Value="3" />
+                <Setter Property="Margin" Value="0,0,0,2" />
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="VerticalAlignment" Value="Bottom" />
+            </Style>
+        </Style>
+
+        <!-- 右侧放置样式 -->
+        <Style Selector="^[TabStripPlacement=Right]">
+            <Setter Property="HorizontalContentAlignment" Value="Right" />
+
+            <Style Selector="^ /template/ Rectangle#PART_SelectedPipe">
+                <Setter Property="Width" Value="3" />
+                <Setter Property="Height" Value="24" />
+                <Setter Property="Margin" Value="2,0,0,0" />
+                <Setter Property="HorizontalAlignment" Value="Right" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+            <Style Selector="^ /template/ ContentPresenter#PART_ContentPresenter">
+                <Setter Property="Margin" Value="0,0,8,0" />
+            </Style>
+        </Style>
+
+        <!-- 底部放置样式 -->
+        <Style Selector="^[TabStripPlacement=Bottom]">
+            <Style Selector="^ /template/ Rectangle#PART_SelectedPipe">
+                <Setter Property="Height" Value="3" />
+                <Setter Property="Margin" Value="0,2,0,0" />
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="VerticalAlignment" Value="Top" />
+            </Style>
+        </Style>
+    </Style>
+</Styles>

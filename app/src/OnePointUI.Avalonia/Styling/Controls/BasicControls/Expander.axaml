@@ -1,0 +1,53 @@
+﻿<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Design.PreviewWith>
+        <Border Padding="20">
+            <!-- Add Controls for Previewer Here -->
+            <Expander Width="200" Header="111" IsExpanded="True">
+                <StackPanel>
+                    <Button>111</Button>
+                    <Button>111</Button>
+                    <Button>111</Button>
+                </StackPanel>
+            </Expander>
+        </Border>
+    </Design.PreviewWith>
+
+    <!-- Add Styles Here -->
+    <Style Selector="Expander">
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border CornerRadius="6"
+                        BorderThickness="2,0,2,2"
+                        BorderBrush="{DynamicResource PrimaryBorderBrush}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <ToggleButton Width="{TemplateBinding Width}" Height="40" Name="HeardBtn" Classes="Expander">
+                            <Grid Width="{TemplateBinding Width}">
+                                <ContentPresenter Content="{TemplateBinding Header}"
+                                                  HorizontalAlignment="Left" VerticalAlignment="Center" Margin="10" />
+                            </Grid>
+                        </ToggleButton>
+
+                        <Border Grid.Row="1" Name="MainContent"
+                                Padding="4"
+                                IsVisible="{Binding #HeardBtn.IsChecked}">
+                            <ContentPresenter Content="{TemplateBinding Content}" />
+                        </Border>
+                    </Grid>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+
+    <Style Selector="ToggleButton#HeardBtn:checked Expander">
+        <Setter Property="IsExpanded" Value="True" />
+    </Style>
+    <Style Selector="ToggleButton#HeardBtn:unchecked Expander">
+        <Setter Property="IsExpanded" Value="False" />
+    </Style>
+</Styles>

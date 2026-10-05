@@ -1,0 +1,31 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:OnePointUI.Avalonia.Styling.Controls.OnePointControls.Items">
+    <Design.PreviewWith>
+        <controls:BorderCard />
+    </Design.PreviewWith>
+
+    <Style Selector="controls|BorderCard">
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Padding" Value="8" />
+        <!-- Set Defaults -->
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Panel>
+                    <Border BorderThickness="1"
+                            BorderBrush="{DynamicResource GeneralBorderBrush}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            Opacity="{DynamicResource GeneralBorderBrushOpacity}" />
+
+                    <Border Background="{DynamicResource GeneralBorderBrush}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            Margin="1"
+                            Opacity="{DynamicResource GeneralBorderBrushOpacity}" />
+
+                    <ContentPresenter Content="{TemplateBinding Content}"
+                                      Padding="{TemplateBinding Padding}" />
+                </Panel>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+</Styles>

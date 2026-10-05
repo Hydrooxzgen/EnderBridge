@@ -417,6 +417,10 @@ def load_config() -> dict:
         "commandAliases": command_aliases,
         "playerListPolling": config.get("playerListPolling", {"enabled": False, "intervalSeconds": 30}),
         "updateConfig": config.get("updateConfig", {"autoBackup": True}),
+        "wsConfig": cfg,
+        "webuiConfig": webui,
+        "watchdog": config.get("watchdog", {"auto_restart": True}),
+        "raw": config,
     }
 
 
@@ -448,143 +452,147 @@ def save_config(new: dict) -> None:
     # 合并现有配置，JSON 优先
     config = {**py_config, **json_config}
 
-    # 更新配置
-    config["wsConfig"] = {
-        "name": str(new.get("name") or "").strip() or "EnderBridge",
-        "port": int(new.get("port") or 8800),
-    }
-    config["commandPrefix"] = str(new.get("commandPrefix") or "!").strip() or "!"
-    config["logLevel"] = str(new.get("logLevel") or "info").strip()
-    config["features"] = new.get("features") or {}
-    config["rateLimit"] = new.get("rateLimit") or {}
+    # 1. wsConfig
+    ws_input = new.get("wsConfig") if isinstance(new.get("wsConfig"), dict) else None
+    if ws_input:
+        config.setdefault("wsConfig", {})
+        config["wsConfig"]["name"] = str(ws_input.get("name") or "").strip() or "EnderBridge"
+        config["wsConfig"]["port"] = int(ws_input.get("port") or 8800)
+    elif "name" in new or "port" in new:
+        config["wsConfig"] = {
+            "name": str(new.get("name") or "").strip() or "EnderBridge",
+            "port": int(new.get("port") or 8800),
+        }
 
-    # Mods
-    mods_form = new.get("mods") or {"client": {}, "server": {}}
-    mods_form.setdefault("client", {})
-    mods_form.setdefault("server", {})
-    mods_form["client"].setdefault("Message", "mod.message")
-    config["mods"] = mods_form
+    # 2. commandPrefix & logLevel
+    if "commandPrefix" in new:
+        config["commandPrefix"] = str(new.get("commandPrefix") or "!").strip() or "!"
+    if "logLevel" in new:
+        config["logLevel"] = str(new.get("logLevel") or "info").strip()
 
-    config["spam"] = new.get("spam") or {}
-    config["basePath"] = new.get("basePath") or {}
+    # 3. features
+    if "features" in new and isinstance(new["features"], dict):
+        if "features" not in config or not isinstance(config["features"], dict):
+            config["features"] = {}
+        for fk, fv in new["features"].items():
+            if isinstance(fv, dict) and isinstance(config["features"].get(fk), dict):
+                config["features"][fk].update(fv)
+            else:
+                config["features"][fk] = fv
 
-    # AI
-    ai = config.get("AIConfig", {})
-    ai.setdefault("options", {})
-    ai.setdefault("models", {})
-    ai_form = new.get("ai") or {}
-    ai["options"]["baseURL"] = str(ai_form.get("baseURL") or "").strip()
-    ai["options"]["apiKey"] = str(ai_form.get("apiKey") or "").strip()
-    chat = dict(ai.get("models", {}).get("chat", {}))
-    cmd = dict(ai.get("models", {}).get("command", {}))
-    chat["model"] = str(ai_form.get("chatModel") or "deepseek-chat").strip()
-    chat["max_tokens"] = int(ai_form.get("chatMaxTokens") or 512)
-    chat["messages"] = _set_system_prompt(chat.get("messages"), ai_form.get("chatPrompt"))
-    cmd["model"] = str(ai_form.get("cmdModel") or "deepseek-chat").strip()
-    cmd["max_tokens"] = int(ai_form.get("cmdMaxTokens") or 1024)
-    cmd["messages"] = _set_system_prompt(cmd.get("messages"), ai_form.get("cmdPrompt"))
-    ai["models"]["chat"] = chat
-    ai["models"]["command"] = cmd
-    ai["chatCooldown"] = int(ai_form.get("chatCooldown") or 5000)
-    config["AIConfig"] = ai
+    # 4. watchdog
+    if "watchdog" in new and isinstance(new["watchdog"], dict):
+        config.setdefault("watchdog", {}).update(new["watchdog"])
 
-    # 工具配置
-    utils_form = new.get("utils") or {}
-    config["utilsConfig"] = {
-        "tellAllToTell": bool(utils_form.get("tellAllToTell", False)),
-        "enablePolling": bool(utils_form.get("enablePolling", True)),
-    }
+    # 5. rateLimit & spam & basePath & commandAliases & playerListPolling & updateConfig & githubToken
+    for k in ("rateLimit", "spam", "basePath", "commandAliases", "playerListPolling", "updateConfig", "githubToken"):
+        if k in new:
+            config[k] = new[k]
 
-    # SAPI
-    sapi_form = new.get("sapi") or {}
-    config["sapiConfig"] = {
-        "gmsg": str(sapi_form.get("gmsg") or "gmsg").strip(),
-        "smsg": str(sapi_form.get("smsg") or "smsg").strip(),
-    }
+    # 6. Mods
+    if "mods" in new and isinstance(new["mods"], dict):
+        config["mods"] = new["mods"]
+        config["mods"].setdefault("client", {})
+        config["mods"].setdefault("server", {})
+        config["mods"]["client"].setdefault("Message", "mod.message")
 
-    # 消息通知与公告
-    message_form = new.get("messageConfig") or {}
-    announce_form = message_form.get("announcements") or {}
-    config["messageConfig"] = {
-        "agreement": {
-            "enabled": True,
-            "title": "📋 服务器协议",
-            "text": "欢迎来到本服务器！\n\n请遵守以下规则：\n1. 尊重其他玩家\n2. 禁止作弊和破坏\n3. 禁止刷屏和骚扰\n\n输入 agree 同意协议后即可游戏。",
-        },
-        "announcements": {
-            "enabled": bool(announce_form.get("enabled", False)),
-            "interval": int(announce_form.get("interval", 300)),
-            "messages": announce_form.get("messages", [
-                "欢迎来到本服务器！请遵守游戏规则。",
-                "加入我们的 QQ 群：123456789",
-                "服务器官网：https://example.com",
-            ]),
-        },
-    }
+    # 7. AIConfig / ai
+    if "AIConfig" in new and isinstance(new["AIConfig"], dict):
+        ai = config.setdefault("AIConfig", {})
+        for ak, av in new["AIConfig"].items():
+            if isinstance(av, dict) and isinstance(ai.get(ak), dict):
+                ai[ak].update(av)
+            else:
+                ai[ak] = av
+    elif "ai" in new and isinstance(new["ai"], dict):
+        ai = config.get("AIConfig", {})
+        ai.setdefault("options", {})
+        ai.setdefault("models", {})
+        ai_form = new["ai"]
+        ai["options"]["baseURL"] = str(ai_form.get("baseURL") or "").strip()
+        ai["options"]["apiKey"] = str(ai_form.get("apiKey") or "").strip()
+        chat = dict(ai.get("models", {}).get("chat", {}))
+        cmd = dict(ai.get("models", {}).get("command", {}))
+        chat["model"] = str(ai_form.get("chatModel") or "deepseek-chat").strip()
+        chat["max_tokens"] = int(ai_form.get("chatMaxTokens") or 512)
+        chat["messages"] = _set_system_prompt(chat.get("messages"), ai_form.get("chatPrompt"))
+        cmd["model"] = str(ai_form.get("cmdModel") or "deepseek-chat").strip()
+        cmd["max_tokens"] = int(ai_form.get("cmdMaxTokens") or 1024)
+        cmd["messages"] = _set_system_prompt(cmd.get("messages"), ai_form.get("cmdPrompt"))
+        ai["models"]["chat"] = chat
+        ai["models"]["command"] = cmd
+        ai["chatCooldown"] = int(ai_form.get("chatCooldown") or 5000)
+        config["AIConfig"] = ai
 
-    # Bot
-    bot_form = new.get("bot") or {}
-    config["botConfig"] = {
-        "enabled": bool(bot_form.get("enabled", True)),
-        "mode": str(bot_form.get("mode") or "server").strip(),
-        "host": str(bot_form.get("host") or "127.0.0.1").strip(),
-        "port": int(bot_form.get("port") or 19132),
-        "username": str(bot_form.get("username") or "FakeBot").strip(),
-        "offline": bool(bot_form.get("offline", True)),
-        "version": bot_form.get("version") or None,
-        "authTitle": bot_form.get("authTitle") or None,
-        "profilesFolder": bot_form.get("profilesFolder") or None,
-        "realmId": bot_form.get("realmId") or None,
-        "realmInvite": bot_form.get("realmInvite") or None,
-        "xboxAccounts": [],  # 由登录 API 管理
-        "activeXboxAccount": None,
-    }
+    # 8. utilsConfig / utils
+    if "utilsConfig" in new and isinstance(new["utilsConfig"], dict):
+        config.setdefault("utilsConfig", {}).update(new["utilsConfig"])
+    elif "utils" in new and isinstance(new["utils"], dict):
+        utils_form = new["utils"]
+        config["utilsConfig"] = {
+            "tellAllToTell": bool(utils_form.get("tellAllToTell", False)),
+            "enablePolling": bool(utils_form.get("enablePolling", True)),
+        }
 
-    # WebUI
-    webui = new.get("webui") or {}
-    config["webuiConfig"] = {
-        "enabled": bool(webui.get("enabled", True)),
-        "port": int(webui.get("port") or 18888),
-        "token": str(webui.get("token") or "").strip(),
-        "localOnly": bool(webui.get("localOnly", False)),
-    }
+    # 9. sapiConfig / sapi
+    if "sapiConfig" in new and isinstance(new["sapiConfig"], dict):
+        config.setdefault("sapiConfig", {}).update(new["sapiConfig"])
+    elif "sapi" in new and isinstance(new["sapi"], dict):
+        sapi_form = new["sapi"]
+        config["sapiConfig"] = {
+            "gmsg": str(sapi_form.get("gmsg") or "gmsg").strip(),
+            "smsg": str(sapi_form.get("smsg") or "smsg").strip(),
+        }
 
-    # GitHub Token
-    config["githubToken"] = str(new.get("githubToken") or "").strip()
+    # 10. messageConfig
+    if "messageConfig" in new and isinstance(new["messageConfig"], dict):
+        config.setdefault("messageConfig", {}).update(new["messageConfig"])
 
-    # Mods
-    config["mods"] = new.get("mods") or {"client": {}, "server": {}}
-    config["mods"].setdefault("client", {})
-    config["mods"].setdefault("server", {})
-    config["mods"]["client"].setdefault("Message", "mod.message")
+    # 11. botConfig / bot
+    if "botConfig" in new and isinstance(new["botConfig"], dict):
+        b = config.setdefault("botConfig", {})
+        for bk, bv in new["botConfig"].items():
+            b[bk] = bv
+    elif "bot" in new and isinstance(new["bot"], dict):
+        bot_form = new["bot"]
+        b = config.setdefault("botConfig", {})
+        b["enabled"] = bool(bot_form.get("enabled", True))
+        b["mode"] = str(bot_form.get("mode") or "server").strip()
+        b["host"] = str(bot_form.get("host") or "127.0.0.1").strip()
+        b["port"] = int(bot_form.get("port") or 19132)
+        b["username"] = str(bot_form.get("username") or "FakeBot").strip()
+        b["offline"] = bool(bot_form.get("offline", True))
+        if "version" in bot_form: b["version"] = bot_form["version"]
+        if "authTitle" in bot_form: b["authTitle"] = bot_form["authTitle"]
+        if "profilesFolder" in bot_form: b["profilesFolder"] = bot_form["profilesFolder"]
+        if "realmId" in bot_form: b["realmId"] = bot_form["realmId"]
+        if "realmInvite" in bot_form: b["realmInvite"] = bot_form["realmInvite"]
 
-    config["spam"] = new.get("spam") or {}
-    config["basePath"] = new.get("basePath") or {}
+    # 12. webuiConfig / webui
+    webui_input = new.get("webuiConfig") if isinstance(new.get("webuiConfig"), dict) else (new.get("webui") if isinstance(new.get("webui"), dict) else None)
+    if webui_input is not None:
+        w = config.setdefault("webuiConfig", {})
+        if "enabled" in webui_input: w["enabled"] = bool(webui_input["enabled"])
+        if "port" in webui_input: w["port"] = int(webui_input["port"])
+        if "token" in webui_input: w["token"] = str(webui_input.get("token") or "").strip()
+        if "localOnly" in webui_input: w["localOnly"] = bool(webui_input.get("localOnly", False))
+        if "autoBan" in webui_input: w["autoBan"] = bool(webui_input.get("autoBan", True))
 
-    # 命令别名
-    config["commandAliases"] = new.get("commandAliases") or {}
+    # 13. is_first_run 明确复位
+    config["is_first_run"] = False
 
-    # 玩家列表轮询
-    plp = new.get("playerListPolling") or {}
-    config["playerListPolling"] = {
-        "enabled": bool(plp.get("enabled", False)),
-        "intervalSeconds": int(plp.get("intervalSeconds", 30)),
-    }
-
-    # 更新与备份设置
-    upd = new.get("updateConfig") or {}
-    config["updateConfig"] = {
-        "autoBackup": bool(upd.get("autoBackup", True)),
-    }
-
-    # 版本信息
-    config["_version"] = "b0.3.6"
-
-    # 保存到 JSON
-    if os.path.exists(CONFIG_JSON):
-        os.replace(CONFIG_JSON, CONFIG_JSON + ".bak")
-    with open(CONFIG_JSON, "w", encoding="utf-8") as f:
+    # 保存到 JSON (原子写入)
+    tmp_path = CONFIG_JSON + f".tmp_{os.getpid()}"
+    with open(tmp_path, "w", encoding="utf-8") as f:
         json.dump(config, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+    if os.path.exists(CONFIG_JSON):
+        try:
+            import shutil
+            shutil.copy2(CONFIG_JSON, CONFIG_JSON + ".bak")
+        except Exception:
+            pass
+    os.replace(tmp_path, CONFIG_JSON)
 
     # 别名热重载:保存后立即生效,无需重启 (必须在写入 JSON 之后,否则读到旧缓存)
     try:
@@ -655,9 +663,50 @@ def _auth_user(handler) -> dict:
 
     通过会话 token 查找用户。无 token 时回退到 guest 访客。
     """
-    token = _extract_session_token(handler)
+    # 0) 本地 GUI 信任凭证 (Loopback + X-EB-GUI: 1 或 ?gui=1 / ?eb_gui=1)
+    parsed_qs = urllib.parse.parse_qs(urllib.parse.urlparse(handler.path).query)
+    is_gui = (
+        handler.headers.get("X-EB-GUI", "") == "1"
+        or parsed_qs.get("gui", [""])[0] == "1"
+        or parsed_qs.get("eb_gui", [""])[0] == "1"
+    )
+    if is_gui:
+        client_ip = handler.client_address[0] if hasattr(handler, "client_address") else ""
+        if client_ip in ("127.0.0.1", "::1", "localhost", "testclient") or client_ip.endswith("127.0.0.1"):
+            from lib.users import discover_all_permissions
+            return {
+                "username": "gui_admin",
+                "role": "admin",
+                "permissions": discover_all_permissions(),
+                "system": True,
+                "is_guest": False,
+            }
 
-    # 1) 通过 session token 查找
+    # 1) 封禁绕过认证对象 / URL query 凭据 (?user=&pwd= 或 ?username=&password=)
+    if hasattr(handler, "_ban_bypass_user") and handler._ban_bypass_user:
+        u = handler._ban_bypass_user
+        return {
+            "username": u["username"],
+            "role": u["role"],
+            "permissions": u["permissions"],
+            "system": u.get("system", False),
+            "is_guest": False,
+        }
+    q_user = (parsed_qs.get("user") or parsed_qs.get("username") or [""])[0].strip()
+    q_pwd = (parsed_qs.get("pwd") or parsed_qs.get("password") or [""])[0]
+    if q_user and q_pwd:
+        auth = user_manager.authenticate(q_user, q_pwd)
+        if auth.get("ok"):
+            return {
+                "username": auth["username"],
+                "role": auth["role"],
+                "permissions": auth["permissions"],
+                "system": auth.get("system", False),
+                "is_guest": False,
+            }
+
+    # 2) 通过 session token 查找
+    token = _extract_session_token(handler)
     if token:
         session = user_manager.validate_session(token)
         if session:
@@ -801,49 +850,72 @@ class WebUIHandler(BaseHTTPRequestHandler):
         """检查当前请求 IP 是否被封禁,被封禁则返回 True(已发送 403 HTML 页面)"""
         from lib import banlist
         ip = self.client_address[0] if self.client_address else ""
-        if banlist.is_banned(ip):
-            ban_info = banlist.list_bans().get(ip, {})
-            reason = ban_info.get("reason", "管理员封禁")
-            ban_time = ban_info.get("time", "未知")
-            expires_ts = ban_info.get("expires")
-            cookie_header = self.headers.get("Cookie", "") if hasattr(self, "headers") and self.headers else ""
-            accept_lang = (self.headers.get("Accept-Language", "") if hasattr(self, "headers") and self.headers else "").lower()
-            is_en = "enderbridge_lang=en" in cookie_header or (accept_lang.startswith("en") and "zh" not in accept_lang)
-            if expires_ts:
-                from datetime import datetime
-                expires_str = datetime.fromtimestamp(expires_ts).strftime("%Y-%m-%d %H:%M:%S")
-                expires_attr = ""
-            else:
-                expires_str = "Permanent" if is_en else "永久"
-                expires_attr = 'data-i18n="banned.permanent"'
-            # 从 ban.html 模板读取并填充动态数据
-            from string import Template
-            _ban_tpl = os.path.join(os.path.dirname(__file__), "ban.html")
-            with open(_ban_tpl, "r", encoding="utf-8") as _bf:
-                html = Template(_bf.read()).safe_substitute(
-                    ip=ip,
-                    reason=reason,
-                    ban_time=ban_time,
-                    expires_str=expires_str,
-                    expires_attr=expires_attr
-                )
-            try:
-                data = html.encode("utf-8")
-                self.send_response(403)
-                self.send_header("Content-Type", "text/html; charset=utf-8")
-                self.send_header("Content-Length", str(len(data)))
-                self.end_headers()
-                self.wfile.write(data)
-            except (ConnectionAbortedError, BrokenPipeError, OSError):
-                pass
-            return True
-        return False
+        if not banlist.is_banned(ip):
+            return False
+
+        # 如果被封禁，但请求中携带了有效凭据 ?user=&pwd= (或 username/password)，允许临时进入指定页面/执行接口
+        try:
+            raw_path = getattr(self, "path", "") or ""
+            parsed = urllib.parse.urlparse(raw_path)
+            qs = urllib.parse.parse_qs(parsed.query)
+            user = (qs.get("user") or qs.get("username") or [""])[0].strip()
+            pwd = (qs.get("pwd") or qs.get("password") or [""])[0]
+            if user and pwd:
+                from lib.users import user_manager
+                auth = user_manager.authenticate(user, pwd)
+                if auth.get("ok"):
+                    self._ban_bypass_user = auth
+                    return False
+        except Exception:
+            pass
+
+        ban_info = banlist.list_bans().get(ip, {})
+        reason = ban_info.get("reason", "管理员封禁")
+        ban_time = ban_info.get("time", "未知")
+        expires_ts = ban_info.get("expires")
+        cookie_header = self.headers.get("Cookie", "") if hasattr(self, "headers") and self.headers else ""
+        accept_lang = (self.headers.get("Accept-Language", "") if hasattr(self, "headers") and self.headers else "").lower()
+        is_en = "enderbridge_lang=en" in cookie_header or (accept_lang.startswith("en") and "zh" not in accept_lang)
+        if expires_ts:
+            from datetime import datetime
+            expires_str = datetime.fromtimestamp(expires_ts).strftime("%Y-%m-%d %H:%M:%S")
+            expires_attr = ""
+        else:
+            expires_str = "Permanent" if is_en else "永久"
+            expires_attr = 'data-i18n="banned.permanent"'
+        # 从 ban.html 模板读取并填充动态数据
+        from string import Template
+        _ban_tpl = os.path.join(os.path.dirname(__file__), "ban.html")
+        with open(_ban_tpl, "r", encoding="utf-8") as _bf:
+            html = Template(_bf.read()).safe_substitute(
+                ip=ip,
+                reason=reason,
+                ban_time=ban_time,
+                expires_str=expires_str,
+                expires_attr=expires_attr
+            )
+        try:
+            data = html.encode("utf-8")
+            self.send_response(403)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+        except (ConnectionAbortedError, BrokenPipeError, OSError):
+            pass
+        return True
 
     # ---- 静态页面 ----
     def do_GET(self):
-        if self._check_ban(): return
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
+
+        # 静态资源请求直接放行(保证被封禁状态下携带参数进入页面时前端能正常加载 CSS/JS/图标等公开资源)
+        if path.startswith("/static/"):
+            self._serve_static(path)
+            return
+
+        if self._check_ban(): return
 
         # 页面路由
         if path == "/login":
@@ -852,7 +924,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if path in ("/", "/index.html", "/dashboard"):
             self._serve_page("dashboard.html")
             return
-        if path == "/permissions":
+        if path in ("/permissions", "/permission", "/permisson"):
             self._serve_page("permissions.html")
             return
         if path == "/config":
@@ -1187,13 +1259,52 @@ class WebUIHandler(BaseHTTPRequestHandler):
         page_path = os.path.join(WEBUI_DIR, "pages", page_name)
         try:
             with open(page_path, "r", encoding="utf-8") as f:
-                body = f.read().encode("utf-8")
+                content = f.read()
         except Exception:
             self.send_response(500)
             self.send_header("Content-Type", "text/plain; charset=utf-8")
             self.end_headers()
             self.wfile.write(f"{page_name} 缺失".encode("utf-8"))
             return
+
+        # 若请求携带了有效 user/pwd (如封禁绕过参数)，将凭据自动写入前端 sessionStorage
+        auth = getattr(self, "_ban_bypass_user", None)
+        if not auth:
+            try:
+                parsed_qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                q_user = (parsed_qs.get("user") or parsed_qs.get("username") or [""])[0].strip()
+                q_pwd = (parsed_qs.get("pwd") or parsed_qs.get("password") or [""])[0]
+                if q_user and q_pwd:
+                    from lib.users import user_manager
+                    a = user_manager.authenticate(q_user, q_pwd)
+                    if a.get("ok"):
+                        auth = a
+            except Exception:
+                pass
+
+        if auth and auth.get("ok"):
+            init_script = (
+                f"<script>\n"
+                f"try {{\n"
+                f"  sessionStorage.setItem('enderbridge_web_token', {json.dumps(auth['token'])});\n"
+                f"  sessionStorage.setItem('enderbridge_web_role', {json.dumps(auth['role'])});\n"
+                f"  sessionStorage.setItem('enderbridge_user', JSON.stringify({{\n"
+                f"    username: {json.dumps(auth['username'])},\n"
+                f"    role: {json.dumps(auth['role'])},\n"
+                f"    permissions: {json.dumps(auth.get('permissions', []))},\n"
+                f"    system: {json.dumps(auth.get('system', False))}\n"
+                f"  }}));\n"
+                f"}} catch(e) {{}}\n"
+                f"</script>\n"
+            )
+            if "<head>" in content:
+                content = content.replace("<head>", f"<head>\n{init_script}", 1)
+            elif "</head>" in content:
+                content = content.replace("</head>", f"{init_script}\n</head>", 1)
+            else:
+                content = init_script + content
+
+        body = content.encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
@@ -1666,6 +1777,7 @@ class WebUIHandler(BaseHTTPRequestHandler):
                 "error": str(e),
             }
         status_data["safeMode"] = _is_safe_mode
+        status_data["version"] = _app_version or "EnderBridge"
         is_ok = bool(status_data.get("ok", True)) and status_data.get("status") != "hanging"
         http_code = 200 if is_ok else 503
         self._respond(status_data, status=http_code)
@@ -1925,6 +2037,35 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if not (lower.endswith(".zip") or lower.endswith((".tar.gz", ".tgz"))):
             self._respond({"ok": False, "message": "仅支持 .zip / .tar.gz 压缩包"})
             return
+
+        # 探测压缩包合法性并检查最低版本限制
+        from version_manager.package import get_archive_version, iter_archive_members
+        from main import _parse_version, MINIMIUM_ALLOWED_VERSION
+
+        has_main = False
+        try:
+            for rel, _f in iter_archive_members(file_path):
+                if rel in ("main.py", "app.py"):
+                    has_main = True
+                    break
+        except Exception as e:
+            self._respond({"ok": False, "message": f"读取压缩包失败: {e}"})
+            return
+        if not has_main:
+            self._respond({"ok": False, "message": "无法识别此更新包，请确保上传的是 EnderBridge 压缩包 (缺少 main.py)"})
+            return
+
+        target_version = get_archive_version(file_path)
+        if not target_version and github_tag:
+            target_version = github_tag
+        if MINIMIUM_ALLOWED_VERSION and target_version:
+            try:
+                if _parse_version(target_version) < _parse_version(MINIMIUM_ALLOWED_VERSION):
+                    self._respond({"ok": False, "message": f"目标版本 {target_version} 低于最低允许版本 {MINIMIUM_ALLOWED_VERSION}，不允许降级"})
+                    return
+            except Exception:
+                pass
+
         # 触发重启并执行更新
         if _restart_handler is None:
             self._respond({"ok": False, "message": "重启处理器未注册"})
@@ -2247,9 +2388,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
         except Exception as e:
             self._respond({"ok": False, "message": f"保存失败: {e}"})
             return
-        new_local_only = (body["config"].get("webui") or {}).get("localOnly", False)
-        # localOnly/port 变更时原地重启 WebUI 以重新绑定地址
-        new_port = int((body["config"].get("webui") or {}).get("port") or 18888)
+        webui_sub = body["config"].get("webuiConfig") or body["config"].get("webui") or {}
+        new_local_only = webui_sub.get("localOnly", old_local_only)
+        new_port = int(webui_sub.get("port") or old_port)
         need_restart = (bool(old_local_only) != bool(new_local_only)) or (int(old_port) != new_port)
         _audit(self, "config", "保存了配置")
         if need_restart:
@@ -2937,13 +3078,14 @@ class WebUIHandler(BaseHTTPRequestHandler):
                 self._respond({"ok": True, "filename": fn, "category": cat, "content": content})
                 return
 
-            mime = CATEGORIES.get(cat, {}).get("mime") or mimetypes.guess_type(fn)[0] or "application/octet-stream"
+            mime = mimetypes.guess_type(fn)[0] or CATEGORIES.get(cat, {}).get("mime") or "application/octet-stream"
             with open(filepath, "rb") as f:
                 content = f.read()
             self.send_response(200)
             self.send_header("Content-Type", mime)
             self.send_header("Content-Length", str(len(content)))
             self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Cache-Control", "private, max-age=300")
             self.end_headers()
             self.wfile.write(content)
         except FileNotFoundError:

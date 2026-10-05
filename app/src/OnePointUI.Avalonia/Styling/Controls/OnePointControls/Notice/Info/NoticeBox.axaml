@@ -1,0 +1,135 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:onePointControls="clr-namespace:OnePointUI.Avalonia.Styling.Controls.OnePointControls;assembly=OnePointUI.Avalonia"
+             mc:Ignorable="d" d:DesignWidth="220"
+             Width="220"
+             x:Class="OnePointUI.Avalonia.Styling.Controls.OnePointControls.Notice.Info.NoticeBox">
+    <Border Background="{DynamicResource PrimaryBackgroundBrush}"
+            Margin="15,5"
+            CornerRadius="8"
+            Padding="8"
+            Name="PATH_Border"
+            BoxShadow="0 0 5 0 Gray">
+        <Border.Styles>
+            <Style Selector="Border#PATH_Border">
+                <Style.Animations>
+                    <Animation Duration="0:0:0.8"
+                               Easing="ExponentialEaseOut">
+                        <KeyFrame Cue="0%">
+                            <Setter Property="ScaleTransform.ScaleX" Value="1.02" />
+                            <Setter Property="ScaleTransform.ScaleY" Value="1.02" />
+                            <Setter Property="Margin" Value="220,5,-220,5" />
+                        </KeyFrame>
+                        <KeyFrame Cue="98%">
+                            <Setter Property="ScaleTransform.ScaleX" Value="1.02" />
+                            <Setter Property="ScaleTransform.ScaleY" Value="1.02" />
+                            <Setter Property="Margin" Value="15,5" />
+                        </KeyFrame>
+                        <KeyFrame Cue="100%">
+                            <Setter Property="ScaleTransform.ScaleX" Value="1" />
+                            <Setter Property="ScaleTransform.ScaleY" Value="1" />
+                        </KeyFrame>
+                    </Animation>
+                </Style.Animations>
+            </Style>
+        </Border.Styles>
+        <Border ClipToBounds="True">
+            <Grid RowDefinitions="28,*">
+                <Grid Margin="0,-4,0,0">
+                    <onePointControls:FontIcon Glyph="&#xE946;"
+                                               Foreground="{DynamicResource PrimaryForegroundBrush}"
+                                               VerticalAlignment="Center"
+                                               Name="NoticeIcon"
+                                               FontSize="16">
+                        <onePointControls:FontIcon.Styles>
+                            <Style Selector="onePointControls|FontIcon#NoticeIcon">
+                                <Style.Animations>
+                                    <Animation Duration="0:0:0.8"
+                                               Easing="ExponentialEaseOut">
+                                        <KeyFrame Cue="0%">
+                                            <Setter Property="Margin"
+                                                    Value="40,0,-40,0" />
+                                        </KeyFrame>
+                                        <KeyFrame Cue="60%">
+                                            <Setter Property="Margin"
+                                                    Value="40,0,-40,0" />
+                                        </KeyFrame>
+                                        <KeyFrame Cue="100%">
+                                            <Setter Property="Margin"
+                                                    Value="0" />
+                                        </KeyFrame>
+                                    </Animation>
+                                </Style.Animations>
+                            </Style>
+                        </onePointControls:FontIcon.Styles>
+                    </onePointControls:FontIcon>
+
+                    <TextBlock VerticalAlignment="Center"
+                               Margin="22,-2,0,0"
+                               FontSize="16"
+                               Name="NoticeTitle">
+                        <TextBlock.Styles>
+                            <Style Selector="TextBlock#NoticeTitle">
+                                <Style.Animations>
+                                    <Animation Duration="0:0:0.8"
+                                               Easing="ExponentialEaseOut">
+                                        <KeyFrame Cue="0%">
+                                            <Setter Property="Margin"
+                                                    Value="40,-2,-40,0" />
+                                        </KeyFrame>
+                                        <KeyFrame Cue="60%">
+                                            <Setter Property="Margin"
+                                                    Value="40,-2,-40,0" />
+                                        </KeyFrame>
+                                        <KeyFrame Cue="100%">
+                                            <Setter Property="Margin"
+                                                    Value="22,-2,0,0" />
+                                        </KeyFrame>
+                                    </Animation>
+                                </Style.Animations>
+                            </Style>
+                        </TextBlock.Styles>
+                        Notice Title
+                    </TextBlock>
+
+                    <Button Classes="NoBorder"
+                            IsVisible="False"
+                            HorizontalAlignment="Right"
+                            Width="24" Height="24">
+                        <onePointControls:FontIcon Glyph="&#xE8BB;" />
+                    </Button>
+                </Grid>
+
+                <TextBlock Grid.Row="1"
+                           FontSize="11"
+                           Text="Notice Message"
+                           TextWrapping="Wrap"
+                           Name="NoticeContent">
+                    <TextBlock.Styles>
+                        <Style Selector="TextBlock#NoticeContent">
+                            <Style.Animations>
+                                <Animation Duration="0:0:1"
+                                           Easing="ExponentialEaseOut">
+                                    <KeyFrame Cue="0%">
+                                        <Setter Property="Margin"
+                                                Value="40,0,-40,0" />
+                                    </KeyFrame>
+                                    <KeyFrame Cue="70%">
+                                        <Setter Property="Margin"
+                                                Value="40,0,-40,0" />
+                                    </KeyFrame>
+                                    <KeyFrame Cue="100%">
+                                        <Setter Property="Margin"
+                                                Value="0" />
+                                    </KeyFrame>
+                                </Animation>
+                            </Style.Animations>
+                        </Style>
+                    </TextBlock.Styles>
+                </TextBlock>
+            </Grid>
+        </Border>
+    </Border>
+</UserControl>

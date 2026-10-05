@@ -143,17 +143,24 @@ class Logger:
             log_message = str(message)
 
         if self.print:
-            colors = {
-                "info": "\x1b[32m",
-                "warning": "\x1b[33m",
-                "error": "\x1b[31m",
-                "debug": "\x1b[35m",
-                "reset": "\x1b[0m",
-            }
-            color = colors.get(type_, "")
+            use_color = sys.stdout.isatty() and not os.environ.get("NO_COLOR") and not os.environ.get("EB_GUI")
+            if use_color:
+                colors = {
+                    "info": "\x1b[32m",
+                    "warning": "\x1b[33m",
+                    "error": "\x1b[31m",
+                    "debug": "\x1b[35m",
+                    "reset": "\x1b[0m",
+                }
+                color = colors.get(type_, "")
+                reset = colors["reset"]
+            else:
+                color = ""
+                reset = ""
+
             if _before_console_output:
                 _before_console_output()
-            sys.stdout.write(f"{color}{log_message}{colors['reset']}\n")
+            sys.stdout.write(f"{color}{log_message}{reset}\n")
             sys.stdout.flush()
             if _after_console_output:
                 _after_console_output()

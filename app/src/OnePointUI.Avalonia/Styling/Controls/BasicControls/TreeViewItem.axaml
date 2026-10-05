@@ -1,0 +1,20 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Design.PreviewWith>
+        <Border Padding="20" Width="240">
+            <StackPanel>
+                <TreeViewItem Header="Leaf" />
+                <TreeViewItem Header="Expanded" IsExpanded="True">
+                    <TreeViewItem Header="Child" />
+                </TreeViewItem>
+            </StackPanel>
+        </Border>
+    </Design.PreviewWith>
+
+    <Style Selector="TreeViewItem">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryForegroundBrush}" />
+        <Setter Property="Padding" Value="4" />
+        <Setter Property="MinHeight" Value="30" />
+    </Style>
+</Styles>

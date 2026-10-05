@@ -1,0 +1,48 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <TrimMode>none</TrimMode>
+        <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Avalonia" Version="12.1.3" />
+        <PackageReference Include="Avalonia.Skia" Version="12.1.3" />
+        <PackageReference Include="SkiaSharp" Version="3.119.4" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Remove="Assets\Fonts\SegoeFluentIcons.ttf"/>
+        <EmbeddedResource Include="Assets\Fonts\SegoeFluentIcons.ttf"/>
+        <None Remove="Assets\Shader\bubble.sksl"/>
+        <EmbeddedResource Include="Assets\Shader\bubble.sksl"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <EmbeddedResource Include="Assets\Fonts\DinPro.ttf"/>
+        <AvaloniaResource Include="Assets\OnePointUI.Icon.png"/>
+        <None Remove="Assets\Shader\voronoi.sksl"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Compile Update="Styling\Controls\OnePointControls\Notice\Info\NoticeBox.axaml.cs">
+            <DependentUpon>NoticeBox.axaml</DependentUpon>
+            <SubType>Code</SubType>
+        </Compile>
+        <Compile Update="Styling\Controls\OnePointControls\Notice\Info\NoticePanel.axaml.cs">
+            <DependentUpon>NoticePanel.axaml</DependentUpon>
+            <SubType>Code</SubType>
+        </Compile>
+        <Compile Update="Styling\Controls\OnePointControls\Items\SteamCard.axaml.cs">
+          <DependentUpon>SteamCard.axaml</DependentUpon>
+        </Compile>
+    </ItemGroup>
+
+    <ItemGroup>
+        <EmbeddedResource Include="Assets\Shader\voronoi.sksl"/>
+    </ItemGroup>
+
+</Project>

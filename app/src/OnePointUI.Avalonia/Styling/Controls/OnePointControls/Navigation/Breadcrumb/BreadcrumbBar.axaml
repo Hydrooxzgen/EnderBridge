@@ -1,0 +1,27 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:onePointControls="clr-namespace:OnePointUI.Avalonia.Styling.Controls.OnePointControls"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+             x:Class="OnePointUI.Avalonia.Styling.Controls.OnePointControls.Navigation.Breadcrumb.BreadcrumbBar">
+    <UserControl.Styles>
+        <Style Selector="onePointControls|FontIcon">
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryForegroundBrush}" />
+        </Style>
+    </UserControl.Styles>
+
+    <ScrollViewer>
+        <StackPanel Orientation="Horizontal">
+            <Button Classes="NoBorder"
+                    Name="RootItemBox"
+                    FontSize="24"
+                    Padding="8,4"
+                    Margin="0,0,8,0"
+                    Click="RootItemBox_OnClick" />
+            <StackPanel Orientation="Horizontal"
+                        VerticalAlignment="Center"
+                        Name="ItemsBar" />
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

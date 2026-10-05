@@ -1,0 +1,28 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:OnePointUI.Avalonia.Styling.Controls.OnePointControls.Notice"
+        xmlns:onePointControls="clr-namespace:OnePointUI.Avalonia.Styling.Controls.OnePointControls">
+    <Design.PreviewWith>
+        <controls:IconNotice Message="你好" />
+    </Design.PreviewWith>
+
+    <Style Selector="controls|IconNotice">
+        <!-- Set Defaults -->
+        <Setter Property="Template">
+            <ControlTemplate>
+                <StackPanel>
+                    <onePointControls:FontIcon Glyph="{TemplateBinding Glyph}"
+                                               FontSize="22"
+                                               Foreground="{DynamicResource PrimaryForegroundBrush}"
+                                               HorizontalAlignment="Center"
+                                               Margin="0,0,0,5" />
+
+                    <TextBlock FontSize="16"
+                               HorizontalAlignment="Center"
+                               Text="{TemplateBinding Message}"
+                               Margin="5" />
+                </StackPanel>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+</Styles>

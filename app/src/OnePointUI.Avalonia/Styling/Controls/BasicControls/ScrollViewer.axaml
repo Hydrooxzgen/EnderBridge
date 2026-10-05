@@ -1,0 +1,91 @@
+﻿<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:behaviors="using:OnePointUI.Avalonia.Behaviors"
+        xmlns:converters="using:OnePointUI.Avalonia.Converters">
+
+    <Styles.Resources>
+        <converters:ScrollViewerOpacityMaskConverter x:Key="ScrollViewerOpacityMaskConverter" FadeSize="32" />
+    </Styles.Resources>
+
+    <Design.PreviewWith>
+        <Border Background="Teal" Padding="20">
+            <ScrollViewer Width="200" Height="200"
+                          HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Spacing="20" Width="210">
+                    <TextBlock Foreground="White">Item 1</TextBlock>
+                    <TextBlock Foreground="White">Item 2</TextBlock>
+                    <TextBlock Foreground="White">Item 3</TextBlock>
+                    <TextBlock Foreground="White">Item 4</TextBlock>
+                    <TextBlock Foreground="White">Item 5</TextBlock>
+                    <TextBlock Foreground="White">Item 6</TextBlock>
+                    <TextBlock Foreground="White">Item 7</TextBlock>
+                    <TextBlock Foreground="White">Item 8</TextBlock>
+                    <TextBlock Foreground="White">Item 9</TextBlock>
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+    </Design.PreviewWith>
+
+    <Style Selector="ScrollViewer">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="IsScrollInertiaEnabled" Value="True" />
+        <Setter Property="behaviors:ScrollViewerSmoothScroll.EnableSmoothScroll" Value="True" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Grid ColumnDefinitions="*,Auto" RowDefinitions="*,Auto">
+                    
+                    <ScrollContentPresenter
+                        Name="PART_ContentPresenter"
+                        Grid.Row="0"
+                        Grid.Column="0"
+                        Grid.RowSpan="2"
+                        Grid.ColumnSpan="2"
+                        Background="{TemplateBinding Background}"
+                        HorizontalSnapPointsType="{TemplateBinding HorizontalSnapPointsType}"
+                        VerticalSnapPointsType="{TemplateBinding VerticalSnapPointsType}"
+                        HorizontalSnapPointsAlignment="{TemplateBinding HorizontalSnapPointsAlignment}"
+                        VerticalSnapPointsAlignment="{TemplateBinding VerticalSnapPointsAlignment}"
+                        Padding="{TemplateBinding Padding}"
+                        ScrollViewer.IsScrollInertiaEnabled="{TemplateBinding IsScrollInertiaEnabled}">
+                        
+                        <ScrollContentPresenter.OpacityMask>
+                            <MultiBinding Converter="{StaticResource ScrollViewerOpacityMaskConverter}">
+                                <Binding Path="Offset.Y" RelativeSource="{RelativeSource TemplatedParent}" />
+                                <Binding Path="Extent.Height" RelativeSource="{RelativeSource TemplatedParent}" />
+                                <Binding Path="Viewport.Height" RelativeSource="{RelativeSource TemplatedParent}" />
+                            </MultiBinding>
+                        </ScrollContentPresenter.OpacityMask>
+                        
+                    </ScrollContentPresenter>
+
+                    <ScrollBar Name="PART_HorizontalScrollBar"
+                               Orientation="Horizontal"
+                               Margin="0,0,0,2"
+                               Grid.Row="1" />
+                    <ScrollBar Name="PART_VerticalScrollBar"
+                               Orientation="Vertical"
+                               Margin="0,0,2,0"
+                               Grid.Column="1" />
+                    <Panel x:Name="PART_ScrollBarsSeparator"
+                           Grid.Row="1"
+                           Grid.Column="1"
+                           Background="Transparent"
+                           Opacity="0">
+                        <Panel.Transitions>
+                            <Transitions>
+                                <DoubleTransition Property="Opacity" Duration="0:0:0.1" />
+                            </Transitions>
+                        </Panel.Transitions>
+                    </Panel>
+                </Grid>
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^[IsExpanded=true] /template/ Panel#PART_ScrollBarsSeparator">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+        <Style Selector="^[AllowAutoHide=True] /template/ ScrollContentPresenter#PART_ContentPresenter">
+            <Setter Property="Grid.ColumnSpan" Value="2" />
+            <Setter Property="Grid.RowSpan" Value="2" />
+        </Style>
+    </Style>
+</Styles>

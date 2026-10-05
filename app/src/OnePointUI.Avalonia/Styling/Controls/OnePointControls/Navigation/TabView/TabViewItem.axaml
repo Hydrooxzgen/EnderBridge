@@ -1,0 +1,75 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:OnePointUI.Avalonia.Styling.Controls.OnePointControls.Navigation.TabView"
+        xmlns:onePointControls="clr-namespace:OnePointUI.Avalonia.Styling.Controls.OnePointControls">
+    <Design.PreviewWith>
+        <Border Padding="12">
+            <controls:TabView SelectedIndex="0">
+                <controls:TabViewItem Header="Home" Glyph="&#xE80F;" />
+                <controls:TabViewItem Header="Editor" />
+            </controls:TabView>
+        </Border>
+    </Design.PreviewWith>
+
+    <Style Selector="controls|TabViewItem">
+        <Setter Property="MinHeight" Value="32" />
+        <Setter Property="MinWidth" Value="88" />
+        <Setter Property="MaxWidth" Value="220" />
+        <Setter Property="Padding" Value="10,0,6,0" />
+        <Setter Property="Margin" Value="0" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryForegroundBrush}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Name="PART_LayoutRoot"
+                        Background="{TemplateBinding Background}"
+                        Padding="{TemplateBinding Padding}"
+                        CornerRadius="6">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <onePointControls:FontIcon Grid.Column="0"
+                                                   Glyph="{TemplateBinding Glyph}"
+                                                   FontSize="13"
+                                                   Margin="0,0,6,0"
+                                                   VerticalAlignment="Center"
+                                                   IsVisible="{TemplateBinding HasGlyph}" />
+                        <ContentPresenter Grid.Column="1"
+                                          Name="PART_ContentPresenter"
+                                          Content="{TemplateBinding Header}"
+                                          ContentTemplate="{TemplateBinding HeaderTemplate}"
+                                          VerticalAlignment="Center"
+                                          HorizontalAlignment="Left"
+                                          FontSize="{TemplateBinding FontSize}"
+                                          FontFamily="{TemplateBinding FontFamily}"
+                                          FontWeight="{TemplateBinding FontWeight}" />
+                        <Button Grid.Column="2"
+                                Name="PART_CloseButton"
+                                Classes="NoBorder"
+                                Width="18"
+                                Height="18"
+                                Margin="6,0,0,0"
+                                Padding="0"
+                                VerticalAlignment="Center"
+                                IsVisible="{TemplateBinding IsClosable}">
+                            <onePointControls:FontIcon Glyph="&#xE8BB;" FontSize="8" />
+                        </Button>
+                    </Grid>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+
+        <Style Selector="^:selected /template/ Border#PART_LayoutRoot">
+            <Setter Property="Background" Value="{DynamicResource AccentSubtleBrush}" />
+        </Style>
+        <Style Selector="^:pointerover /template/ Border#PART_LayoutRoot">
+            <Setter Property="Background" Value="{DynamicResource PrimaryBackgroundOverBrush}" />
+        </Style>
+        <Style Selector="^:selected:pointerover /template/ Border#PART_LayoutRoot">
+            <Setter Property="Background" Value="{DynamicResource AccentSubtleHoverBrush}" />
+        </Style>
+        <Style Selector="^:disabled">
+            <Setter Property="Opacity" Value="0.5" />
+        </Style>
+    </Style>
+</Styles>

@@ -93,21 +93,82 @@
     gap: 12px;
   }
   .pixel-canvas-container {
-    background: #111827;
+    background: #0f172a;
     border: 1px solid var(--card-border);
     border-radius: 8px;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 12px;
-    min-height: 280px;
+    padding: 16px;
+    min-height: 320px;
     overflow: auto;
+    position: relative;
   }
-  .pixel-canvas-preview {
-    image-rendering: pixelated;
+  .pixel-preview-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    flex-wrap: wrap;
+    width: 100%;
+  }
+  .pixel-preview-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
     max-width: 100%;
-    height: auto;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  }
+  .pixel-preview-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .pixel-canvas-preview, .pixel-original-preview {
+    image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: crisp-edges;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+    border-radius: 6px;
+    border: 1px solid var(--card-border);
+    background: repeating-conic-gradient(#1e293b 0% 25%, #0f172a 0% 50%) 50% / 16px 16px;
+    max-width: 100%;
+    transition: width 0.15s ease, height 0.15s ease;
+  }
+  .image-select-item {
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--card-border);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: all 0.15s ease;
+    background: var(--card);
+    gap: 10px;
+  }
+  .image-select-item:hover {
+    border-color: var(--primary, #3b82f6);
+    background: var(--input-bg);
+  }
+  .image-select-item.active {
+    border-color: var(--primary, #3b82f6);
+    background: rgba(59, 130, 246, 0.1);
+  }
+  .image-thumb-img {
+    width: 44px;
+    height: 44px;
+    object-fit: cover;
+    border-radius: 6px;
+    border: 1px solid var(--card-border);
+    background: #111827;
+    flex-shrink: 0;
   }
   .mcfunc-layout {
     display: grid;
@@ -232,7 +293,10 @@
     <div style="display:grid;grid-template-columns:300px 1fr;gap:16px;">
       <!-- 左侧:图片列表 -->
       <div class="card" style="padding:14px;">
-        <div style="font-weight:600;margin-bottom:10px;">图片库</div>
+        <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <div style="font-weight:600;">图片库</div>
+          <span id="imageAssetCountBadge" class="badge-sec-safe" style="font-size:11px;">0 张</span>
+        </div>
         <div id="imageAssetList" style="max-height:550px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;">
           <!-- 动态图片列表 -->
         </div>
@@ -240,8 +304,11 @@
 
       <!-- 右侧:实时方块像素调色仿真画布 -->
       <div class="card" style="padding:16px;">
-        <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px;">
-          <h3 style="margin:0;" data-i18n="studio.pixelPreview">🎨 像素画方块实时仿真</h3>
+        <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+          <div>
+            <h3 style="margin:0 0 2px 0;" data-i18n="studio.pixelPreview">🎨 像素画方块实时仿真</h3>
+            <div id="pixelImageInfoBadge" style="font-size:11px;color:var(--text-dim);">未选择图片</div>
+          </div>
           <div class="row gap-10">
             <button class="btn btn-sm btn-primary" id="imgDrawInGameBtn" data-i18n="studio.drawInGame">🚀 推送到游戏绘制</button>
             <button class="btn btn-sm" id="imgDrawConfirmBtn" data-i18n="studio.drawConfirm">✔️ 确认绘制 (y)</button>
@@ -275,9 +342,47 @@
           </div>
         </div>
 
-        <!-- 仿真预览 Canvas -->
-        <div class="pixel-canvas-container">
-          <canvas id="pixelArtCanvas" class="pixel-canvas-preview"></canvas>
+        <!-- 视图控制工具栏: 预览模式切换 & 缩放 -->
+        <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+          <div class="row gap-10" style="align-items:center;">
+            <span style="font-size:12px;font-weight:600;">预览模式:</span>
+            <div class="chip-bar" id="pixelViewModeBar" style="margin:0;">
+              <div class="chip-tab active" data-mode="sim" style="font-size:12px;padding:3px 10px;">🧱 方块仿真</div>
+              <div class="chip-tab" data-mode="orig" style="font-size:12px;padding:3px 10px;">🖼️ 原始图片</div>
+              <div class="chip-tab" data-mode="split" style="font-size:12px;padding:3px 10px;">⚖️ 对比模式</div>
+            </div>
+          </div>
+          <div class="row gap-10" style="align-items:center;">
+            <span style="font-size:12px;color:var(--text-dim);">显示尺寸:</span>
+            <select id="pixelZoomSelect" style="padding:3px 8px;font-size:12px;border-radius:4px;border:1px solid var(--card-border);background:var(--card);color:var(--text);">
+              <option value="fit" selected>自适应 (Fit)</option>
+              <option value="1">1x (原始尺寸)</option>
+              <option value="2">2x (放大 2 倍)</option>
+              <option value="4">4x (放大 4 倍)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- 仿真预览 Canvas / 原图 容器 -->
+        <div class="pixel-canvas-container" id="pixelCanvasContainer">
+          <div id="pixelPreviewLoading" style="display:none;color:var(--text-dim);font-size:13px;align-items:center;gap:8px;">
+            <span class="spinner" style="display:inline-block;width:14px;height:14px;border:2px solid var(--text-dim);border-top-color:var(--primary);border-radius:50%;animation:spin 1s linear infinite;"></span>
+            <span>正在载入并计算仿真...</span>
+          </div>
+          <div id="pixelPreviewError" style="display:none;color:#ef4444;font-size:13px;text-align:center;padding:16px;"></div>
+
+          <div class="pixel-preview-wrapper" id="pixelPreviewWrapper">
+            <!-- 仿真 Canvas 区域 -->
+            <div class="pixel-preview-box" id="pixelSimBox">
+              <div class="pixel-preview-label">🧱 方块像素仿真</div>
+              <canvas id="pixelArtCanvas" class="pixel-canvas-preview"></canvas>
+            </div>
+            <!-- 原图 Preview 区域 -->
+            <div class="pixel-preview-box" id="pixelOrigBox" style="display:none;">
+              <div class="pixel-preview-label">🖼️ 原始图片</div>
+              <img id="pixelOriginalImg" class="pixel-original-preview" alt="原始图像" />
+            </div>
+          </div>
         </div>
 
         <!-- 方块材料清单统计 -->

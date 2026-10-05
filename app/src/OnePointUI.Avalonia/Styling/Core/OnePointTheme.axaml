@@ -1,0 +1,7 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="OnePointUI.Avalonia.Style.Core.OnePointTheme">
+    <!-- 样式资源已移至ThemeColors.axaml，由ThemeManager动态加载 -->
+
+    <StyleInclude Source="/Styling/Controls/Controls.axaml" />
+</Styles>

@@ -35,20 +35,23 @@ USERS_JSON = os.path.join(CONFIG_DIR, "users.json")
 UPDATE_MARKER = os.path.join(ROOT, ".update_pending")
 
 # --- 版本常量 ---
-VERSION = "v1.0.0"
+VERSION = "v1.1.0"
 # ↓仅当不为None时从Github拉取更新日志, 反之则直接显示该变量内容。
 DESCRIPTION = None
 """
-fix1: 修复更新(降级)后无法在终端输入或者通过ctrl+c停止服务器的问题
-feat1: 挂起检测看门狗与自愈探针
-feat2: 定时自动备份引擎与元数据联动
-feat3: 出厂安全排障模式(--safe-mode)
-safe_feature 1: 解决重要安全漏洞
-feat4: 新增webui启用/禁用mod功能
-feat5: 新增导入mod功能
-feat_for_dev1: 权限界面现在可以自动读取features而不是每次更新需要手动添加
-fix2: 修复访客进入mod管理界面不是只读的bug
-fix3: 修复了访客mod界面只读提示的i18n显示错误的问题
+feature1: App管理界面(beta)
+fix1: 修复无法在webui预览像素画源文件的问题
+app_fix2: 修复app web访问无法刷新、地址栏无法正确同步的问题
+app_fix3: 修复config只读不可写的bug
+app_fix4: 停止服务器按钮无效
+app_fix5: 通过app启动服务端时丢失所有配置
+app_feat1: 可以手动指定服务端路径
+app_fix6: 修复右下角版本号不跟随实际服务端版本号显示的bug
+serv_fix7: 修复了随机密码显示2次的bug
+serv_fix8: 修复启动时配置丢失的问题
+serv_feat1: 当你被ban时可以携带pwd参数进入webui
+app_feat2: 可以在app中设定服务端路径&下载时询问用户下载路径
+app_safe_fix1: 修复了在app中无需通过身份验证就可以修改服务端配置的问题
 """
 MINIMIUM_ALLOWED_VERSION = "v1.0.0" # 因为v1.0.0版本新增了重要安全改进，大大降低了被第三方恶意mod入侵的风险，所以限制了降级
                                     # 但是如果你需要降级低于v1.0.0的版本，请更改这里的值为b0.0.0以删除限制
@@ -69,7 +72,8 @@ WANT_GOTO_OOBE = "--goto-oobe" in sys.argv
 WANT_UPDATE = "update" in sys.argv
 WANT_ROLLBACK = "--rollback" in sys.argv
 WANT_PREVIEW = "preview" in sys.argv
-ARGV_NOT_EXIST = not WANT_RESET\
+IS_TESTING = "pytest" in sys.modules or any("pytest" in str(a).lower() for a in sys.argv)
+ARGV_NOT_EXIST = not IS_TESTING and not WANT_RESET\
 and not WANT_VIEW_VERSION and not WANT_EXPORT \
 and not WANT_VIEW_DESCRIPTION and not WANT_HELP \
 and not WANT_ROLLBACK and not WANT_PREVIEW
@@ -143,10 +147,27 @@ def _check_minimum_version(new_version: str) -> None:
 
 
 # ===== 依赖检测(必须早于任何第三方mod使用) ===== 
-# websockets 使用动态导入:缺失时自动运行 setup.py 安装,成功后继续启动。
+# 自动发现虚拟环境并检测核心依赖 (websockets, bcrypt)
+def _ensure_venv_path() -> None:
+    for _v in (".venv", "venv", "env"):
+        _sp = os.path.join(ROOT, _v, "Lib", "site-packages")
+        if not os.path.isdir(_sp):
+            _lib = os.path.join(ROOT, _v, "lib")
+            if os.path.isdir(_lib):
+                for _pv in os.listdir(_lib):
+                    _p = os.path.join(_lib, _pv, "site-packages")
+                    if os.path.isdir(_p):
+                        _sp = _p
+                        break
+        if os.path.isdir(_sp) and _sp not in sys.path:
+            sys.path.insert(0, _sp)
+
+_ensure_venv_path()
+
 def _dependencies_ok() -> bool:
     try:
         import websockets  # noqa: F401
+        import bcrypt      # noqa: F401
         return True
     except ImportError:
         return False
@@ -172,8 +193,8 @@ if not WANT_RESET and not WANT_EXPORT and not _dependencies_ok():
 # 依赖 config.json 的模块(lib/logger.py、lib/utils.py、lib/mods.py 等)均为延迟加载,
 # 因此 config.json 缺失时(如 --reset-all 之后)可先在此根据模板自动补全,保证程序可启动。
 # 此阶段判断启动参数并执行对应操作(ARGV_NOT_EXIST 见顶部常量区)
-if  not os.path.exists(CONFIG_PY) and not os.path.exists(CONFIG_JSON) and ARGV_NOT_EXIST:
-    # 优先生成 config.json, 若无模板则回退到 config.py
+if not os.path.exists(CONFIG_PY) and not os.path.exists(CONFIG_JSON) and ARGV_NOT_EXIST:
+    # 从模板初始化全新配置
     if os.path.exists(CONFIG_EXAMPLE_JSON):
         import shutil as _shutil_cfg
         _shutil_cfg.copy2(CONFIG_EXAMPLE_JSON, CONFIG_JSON)
@@ -214,6 +235,15 @@ if WANT_RESET:
                 except OSError:
                     pass
                 removed.append(name)
+    try:
+        import glob
+        for f in glob.glob(os.path.join(CONFIG_DIR, "*.bak_reset_*")):
+            try:
+                os.remove(f)
+            except OSError:
+                pass
+    except Exception:
+        pass
     # 复位模板标记,下次启动自动进入向导重新配置
     try:
         if os.path.exists(CONFIG_EXAMPLE_JSON):
@@ -764,11 +794,27 @@ if os.path.isfile(UPDATE_MARKER) and not WANT_UPDATE:
         except Exception:
             pass
     if pending_path and os.path.isfile(pending_path):
-        from version_manager.package import apply_archive, backup_dir, PackageError
+        from version_manager.package import apply_archive, backup_dir, PackageError, get_archive_version
 
+        # 检查是否低于最低允许版本, 防止降级到危险版本
+        pending_ver = get_archive_version(pending_path)
+        if pending_ver and MINIMIUM_ALLOWED_VERSION:
+            try:
+                if _parse_version(pending_ver) < _parse_version(MINIMIUM_ALLOWED_VERSION):
+                    print("========================================")
+                    print(f"  [安全拦截] 目标版本 {pending_ver} 低于最低允许版本 {MINIMIUM_ALLOWED_VERSION}")
+                    print("  更新操作已终止，当前版本未受影响")
+                    print("========================================")
+                    pending_path = None
+            except Exception:
+                pass
+
+    if pending_path and os.path.isfile(pending_path):
         print("========================================")
         print(f"  WebUI 触发更新: {pending_path}")
         print(f"  当前版本: {VERSION}")
+        if pending_ver:
+            print(f"  目标版本: {pending_ver}")
         print("========================================")
 
         try:
@@ -1030,21 +1076,6 @@ if "--downgrade-config" in sys.argv:
         print("降级失败: 未找到 config.json 或降级出错")
     sys.exit(0)
 
-# ===== 终极兜底:若 users.json 不存在,强制视为首次运行(向导会创建用户系统) =====
-# (USERS_JSON 路径常量见顶部)
-if not is_first_run and not os.path.exists(USERS_JSON):
-    is_first_run = True
-    # 同步写回 config.json,避免下次启动再次误判
-    if os.path.exists(CONFIG_JSON):
-        try:
-            with open(CONFIG_JSON, "r", encoding="utf-8") as f:
-                _j = json.load(f)
-            if not _j.get("is_first_run", False):
-                _j["is_first_run"] = True
-                with open(CONFIG_JSON, "w", encoding="utf-8") as f:
-                    json.dump(_j, f, ensure_ascii=False, indent=2)
-        except Exception:
-            pass
 
 # ===== WebSocket 服务器 =====
 import websockets
@@ -1323,17 +1354,17 @@ def _start_webui() -> None:
         banlist.load()
         # 从配置加载自动封禁参数(window/threshold/duration)和开关
         banlist.load_auto_ban_config()
-        # 首次运行或升级:打印 admin 凭证到终端
+        # 首次运行或升级:打印 admin 凭证到终端并输出到日志
         if user_manager._first_run_password:
             admin_pw = user_manager._first_run_password
-            user_manager._first_run_password = None  # 只打印一次
-            print("=" * 44)
-            print("  [EnderBridge] WebUI 用户系统已初始化")
-            print(f"  用户名: admin")
-            print(f"  密  码: {admin_pw}")
-            print(f"  访客:   guest (无需密码)")
-            print("  请牢记密码,可在 WebUI 用户管理中修改。")
-            print("=" * 44)
+            user_manager._first_run_password = None
+            print("=" * 44, flush=True)
+            print("  [EnderBridge] WebUI 用户系统已初始化", flush=True)
+            print(f"  用户名: admin", flush=True)
+            print(f"  密  码: {admin_pw}", flush=True)
+            print(f"  访客:   guest (无需密码)", flush=True)
+            print("  请牢记密码,可在 WebUI 用户管理中修改。", flush=True)
+            print("=" * 44, flush=True)
         set_status_provider(_webui_status)
         set_restart_handler(_request_restart)
         set_event_loop(asyncio.get_running_loop())
@@ -1691,7 +1722,8 @@ def _console_list():
 def _show_prompt():
     """显示终端提示符(防重复:提示符已在行首时不重复输出)"""
     global _prompt_visible
-    if _restarting or _prompt_visible:
+    # 在非交互终端(如 GUI 重定向管道)或重启时不向 stdout 刷提示符
+    if _restarting or _prompt_visible or not sys.stdout.isatty() or os.environ.get("EB_GUI"):
         return
     _prompt_visible = True
     sys.stdout.write(CONSOLE_PROMPT)
@@ -1702,8 +1734,9 @@ def _clear_prompt():
     """日志输出前清除当前行的提示符"""
     global _prompt_visible
     _prompt_visible = False
-    sys.stdout.write("\r\x1b[K")
-    sys.stdout.flush()
+    if sys.stdout.isatty() and not os.environ.get("EB_GUI"):
+        sys.stdout.write("\r\x1b[K")
+        sys.stdout.flush()
 
 
 # 注册控制台钩子:日志写 stdout 前清除提示符,写完后补回来

@@ -1,0 +1,91 @@
+# EnderBridge export ignore rules (.exportignore)
+# 语法与功能类似 .gitignore，在执行 `python main.py export` 时忽略指定文件或目录
+# 支持通配符 (*, ?)、递归目录匹配 (**)、目录限定 (/ 结尾)、根目录限定 (/ 开头) 与取反 (! 开头)
+# 注：.exportignore 文件自身在导出时会自动被排除，无需额外配置
+
+# 缓存与虚拟环境
+__pycache__/
+.pytest_cache/
+.venv*/
+.idea/
+.vscode/
+.vs/
+.gemini/
+*.DotSettings*
+tests/
+
+# 客户端应用源工程与编译构建产物 (桌面端 / Android)
+app/
+app/**/bin/
+app/**/obj/
+app/**/publish/
+app/**/TestResults/
+app/**/packages/
+app/**/Generated Files/
+app/**/AppBundle/
+app/**/Release/
+app/**/Debug/
+app/**/.vs/
+app/**/.idea/
+app/**/.vscode/
+app/**/*.user
+app/**/*.userosscache
+app/**/*.suo
+app/**/*.sln.docstates
+app/**/*.DotSettings.user
+app/**/_ReSharper*/
+app/**/project.assets.json
+app/**/project.nuget.cache
+app/**/project.lock.json
+build/
+dist/
+bin/
+obj/
+*.exe
+*.dll
+*.pdb
+*.apk
+*.aab
+*.dex
+*.keystore
+*.jks
+*.WebView2/
+*.WebView2
+EnderBridge.exe.WebView2/
+
+# 日志与测试临时文件
+logs/
+*.log
+app_error.log
+
+# 备份与打包临时文件
+backups/
+*.zip
+*.bak
+config/*.bak
+
+# Git 元数据
+.git/
+.github/
+
+# 开发文档、变更记录与测试审计脚本
+wiki/
+CHANGELOG.md
+/security_audit.py
+
+# Bot 本地客户端缓存与 node_modules 依赖 (约数百MB，需用户自行 npm install)
+mod/bot/node_modules/
+mod/bot/.minecraft/
+mod/bot/TheCandyBot/
+
+# 资源目录: 默认仅保留目录结构与 .gitkeep 占位，排除用户自定义资产
+resources/midi/*
+resources/mcfunc/*
+resources/ezmatic/*
+resources/pictures/*
+structures/*
+!.gitkeep
+
+# WebUI 方块材质包 (用户可通过设置面板在线按需下载，避免膨胀导出包体积)
+webui/static/textures/blocks/*
+!webui/static/textures/blocks/.gitkeep

@@ -1,0 +1,37 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:navigation="clr-namespace:OnePointUI.Avalonia.Styling.Controls.OnePointControls.Navigation"
+             xmlns:onePointControls="clr-namespace:OnePointUI.Avalonia.Styling.Controls.OnePointControls"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+             x:Class="OnePointUI.Avalonia.Styling.Controls.OnePointControls.Navigation.LotsPageFrame">
+    <Grid RowDefinitions="*,Auto">
+        <navigation:NavigationFrame Grid.Row="0"
+                                    Name="NavigationFrame" />
+        <Grid Grid.Row="1"
+              Margin="0,10,20,20">
+            <StackPanel Orientation="Horizontal"
+                        HorizontalAlignment="Right"
+                        Spacing="8">
+                <Button Classes="NoBorder"
+                        Name="LeftBtn"
+                        Click="LeftBtn_OnClick"
+                        Padding="8">
+                    <onePointControls:FontIcon Glyph="&#xE76B;" />
+                </Button>
+
+                <TextBlock Text="0 / 0"
+                           Name="CountText"
+                           VerticalAlignment="Center" />
+
+                <Button Classes="NoBorder"
+                        Name="RightBtn"
+                        Click="RightBtn_OnClick"
+                        Padding="8">
+                    <onePointControls:FontIcon Glyph="&#xE76C;" />
+                </Button>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</UserControl>

@@ -1,0 +1,26 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:OnePointUI.Avalonia.Styling.Controls.OnePointControls.Navigation.LeftSelectBar">
+    <Design.PreviewWith>
+        <controls:LeftSelectBar>
+            <controls:LeftSelectBarItem ItemText="111" />
+            <controls:LeftSelectBarItem ItemText="111" />
+            <controls:LeftSelectBarItem ItemText="111" />
+        </controls:LeftSelectBar>
+    </Design.PreviewWith>
+
+    <Style Selector="controls|LeftSelectBar">
+        <Setter Property="ItemsPanel">
+            <ItemsPanelTemplate>
+                <StackPanel Margin="5,0" Spacing="8" Orientation="Vertical" />
+            </ItemsPanelTemplate>
+        </Setter>
+        <!-- Set Defaults -->
+        <Setter Property="Template">
+            <ControlTemplate>
+                <ItemsPresenter Name="PART_ItemsPresenter"
+                                ItemsPanel="{TemplateBinding ItemsPanel}" />
+            </ControlTemplate>
+        </Setter>
+    </Style>
+</Styles>

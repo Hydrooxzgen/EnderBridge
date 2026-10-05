@@ -1,0 +1,26 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:OnePointUI.Avalonia.Styling.Controls.OnePointControls.Navigation.SelectBar">
+    <Design.PreviewWith>
+        <controls:SelectBar>
+            <controls:SelectBarItem ItemText="111" />
+            <controls:SelectBarItem ItemText="111" />
+            <controls:SelectBarItem ItemText="111" />
+        </controls:SelectBar>
+    </Design.PreviewWith>
+
+    <Style Selector="controls|SelectBar">
+        <Setter Property="ItemsPanel">
+            <ItemsPanelTemplate>
+                <StackPanel Margin="5,0" Spacing="10" Orientation="Horizontal" />
+            </ItemsPanelTemplate>
+        </Setter>
+        <!-- Set Defaults -->
+        <Setter Property="Template">
+            <ControlTemplate>
+                <ItemsPresenter Name="PART_ItemsPresenter"
+                                ItemsPanel="{TemplateBinding ItemsPanel}" />
+            </ControlTemplate>
+        </Setter>
+    </Style>
+</Styles>

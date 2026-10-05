@@ -1,0 +1,85 @@
+﻿<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:OnePointUI.Avalonia.Classes">
+    <Design.PreviewWith>
+        <Border Padding="20">
+            <!-- Add Controls for Previewer Here -->
+        </Border>
+    </Design.PreviewWith>
+    
+    <Style Selector="local|ParallaxImage3D">
+        <Setter Property="Transitions">
+            <Transitions>
+                <DoubleTransition Property="ScaleValue" Duration="0:0:0.3" Easing="CubicEaseOut"/>
+            </Transitions>
+        </Setter>
+    </Style>
+
+    <!-- Add Styles Here -->
+    <StyleInclude Source="BasicControls/Window.axaml" />
+    <StyleInclude Source="BasicControls/Button.axaml" />
+    <StyleInclude Source="BasicControls/TabControl.axaml" />
+    <StyleInclude Source="BasicControls/TextBox.axaml" />
+    <StyleInclude Source="BasicControls/CheckBox.axaml" />
+    <StyleInclude Source="BasicControls/ComboBox.axaml" />
+    <StyleInclude Source="BasicControls/Slider.axaml" />
+    <StyleInclude Source="BasicControls/ToggleSwitch.axaml" />
+    <StyleInclude Source="BasicControls/ToggleButton.axaml" />
+    <StyleInclude Source="BasicControls/TextBlock.axaml" />
+    <StyleInclude Source="BasicControls/Expander.axaml" />
+    <StyleInclude Source="BasicControls/ScrollBar.axaml" />
+    <StyleInclude Source="BasicControls/ScrollViewer.axaml" />
+    <StyleInclude Source="BasicControls/ComboBoxItem.axaml" />
+    <StyleInclude Source="BasicControls/ComboBox.axaml" />
+    <StyleInclude Source="BasicControls/PopupRoot.axaml" />
+    <StyleInclude Source="BasicControls/Flyout.axaml" />
+    <StyleInclude Source="BasicControls/ListBox.axaml" />
+    <StyleInclude Source="BasicControls/ProgressBar.axaml" />
+    <StyleInclude Source="BasicControls/HyperLink.axaml" />
+
+    <!-- Newly added Avalonia native controls -->
+    <StyleInclude Source="BasicControls/RadioButton.axaml" />
+    <StyleInclude Source="BasicControls/RepeatButton.axaml" />
+    <StyleInclude Source="BasicControls/ToolTip.axaml" />
+    <StyleInclude Source="BasicControls/PathIcon.axaml" />
+    <StyleInclude Source="BasicControls/Separator.axaml" />
+    <StyleInclude Source="BasicControls/Menu.axaml" />
+    <StyleInclude Source="BasicControls/ContextMenu.axaml" />
+    <StyleInclude Source="BasicControls/TreeView.axaml" />
+    <StyleInclude Source="BasicControls/TreeViewItem.axaml" />
+    <StyleInclude Source="BasicControls/GridSplitter.axaml" />
+    <StyleInclude Source="BasicControls/SplitView.axaml" />
+    <StyleInclude Source="BasicControls/Carousel.axaml" />
+    <StyleInclude Source="BasicControls/NumericUpDown.axaml" />
+    <StyleInclude Source="BasicControls/AutoCompleteBox.axaml" />
+    <StyleInclude Source="BasicControls/DatePicker.axaml" />
+    <StyleInclude Source="BasicControls/TimePicker.axaml" />
+    <StyleInclude Source="BasicControls/Calendar.axaml" />
+    <StyleInclude Source="BasicControls/CalendarDatePicker.axaml" />
+    <!-- ColorPicker requires Avalonia.Controls.ColorPicker package; uncomment after adding the package reference -->
+    <!--<StyleInclude Source="BasicControls/ColorPicker.axaml" />-->
+
+    <StyleInclude Source="OnePointControls/LineTextBlock.axaml" />
+    <StyleInclude Source="OnePointControls/FontIcon.axaml" />
+    <StyleInclude Source="OnePointControls/SettingCard.axaml" />
+    <StyleInclude Source="OnePointControls/SettingExpander.axaml" />
+    <StyleInclude Source="OnePointControls/LabelBox.axaml" />
+    <StyleInclude Source="OnePointControls/ProgressRing.axaml" />
+    <StyleInclude Source="OnePointControls/Notice/InfoBar.axaml" />
+    <StyleInclude Source="OnePointControls/Notice/IconNotice.axaml" />
+    <StyleInclude Source="OnePointControls/View/ItemView.axaml" />
+    <StyleInclude Source="OnePointControls/View/ItemViewItem.axaml" />
+    <StyleInclude Source="OnePointControls/Navigation/SelectBar/SelectBar.axaml" />
+    <StyleInclude Source="OnePointControls/Navigation/SelectBar/SelectBarItem.axaml" />
+    <StyleInclude Source="OnePointControls/Navigation/LeftSelectBar/LeftSelectBar.axaml" />
+    <StyleInclude Source="OnePointControls/Navigation/LeftSelectBar/LeftSelectBarItem.axaml" />
+    <StyleInclude Source="OnePointControls/Items/CardCheckBox.axaml" />
+    <StyleInclude Source="OnePointControls/Notice/InfoCard.axaml" />
+    <StyleInclude Source="OnePointControls/Notice/LoadCard.axaml" />
+    <StyleInclude Source="OnePointControls/Items/BorderCard.axaml" />
+    <StyleInclude Source="OnePointControls/Items/SteamCard.axaml" />
+    <StyleInclude Source="OnePointControls/Navigation/CornerSelectBar/CornerSelectBar.axaml" />
+    <StyleInclude Source="OnePointControls/Navigation/CornerSelectBar/CornerSelectBarItem.axaml" />
+    <StyleInclude Source="OnePointControls/Navigation/TabView/TabView.axaml" />
+    <StyleInclude Source="OnePointControls/Navigation/TabView/TabViewItem.axaml" />
+</Styles>

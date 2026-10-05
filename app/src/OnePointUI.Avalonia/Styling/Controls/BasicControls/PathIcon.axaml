@@ -1,0 +1,31 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Design.PreviewWith>
+        <Border Padding="20">
+            <StackPanel Orientation="Horizontal" Spacing="12">
+                <PathIcon Width="24" Height="24"
+                          Data="M 12 2 L 22 22 L 2 22 Z"
+                          Foreground="{DynamicResource AccentBackgroundBrush}" />
+                <PathIcon Width="24" Height="24"
+                          Data="M 4 4 L 20 4 L 20 20 L 4 20 Z"
+                          Foreground="{DynamicResource PrimaryForegroundBrush}" />
+                <PathIcon Width="24" Height="24"
+                          Data="M 12 2 A 10 10 0 1 0 12 22 A 10 10 0 1 0 12 2"
+                          Foreground="{DynamicResource AccentLightBrush}" />
+            </StackPanel>
+        </Border>
+    </Design.PreviewWith>
+
+    <Style Selector="PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryForegroundBrush}" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Path Data="{TemplateBinding Data}"
+                      Fill="{TemplateBinding Foreground}"
+                      Stretch="Uniform"
+                      Width="{TemplateBinding Width}"
+                      Height="{TemplateBinding Height}" />
+            </ControlTemplate>
+        </Setter>
+    </Style>
+</Styles>

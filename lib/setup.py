@@ -290,16 +290,24 @@ def clear_first_run_flag() -> None:
 
 
 def save_config(f) -> None:
-    """基于 JSON 模板直接生成 config.json 并写入 permission.json(均先备份旧文件)"""
+    """基于现有配置或模板生成 config.json 并写入 permission.json(均先备份旧文件)"""
     f = _normalize(f)
 
-    # 从 JSON 模板开始,逐层覆盖表单值
-    tpl_path = os.path.join(CONFIG_DIR, "config.example.json")
-    try:
-        with open(tpl_path, "r", encoding="utf-8") as fp:
-            cfg = json.load(fp)
-    except Exception:
-        raise RuntimeError("找不到模板文件 config.example.json")
+    # 优先继承现有 config.json 中的全部设置(模组/高级配置等),防止首次向导误触时覆盖丢失配置
+    cfg = None
+    if os.path.exists(CONFIG_JSON):
+        try:
+            with open(CONFIG_JSON, "r", encoding="utf-8") as fp:
+                cfg = json.load(fp)
+        except Exception:
+            cfg = None
+    if not cfg:
+        tpl_path = os.path.join(CONFIG_DIR, "config.example.json")
+        try:
+            with open(tpl_path, "r", encoding="utf-8") as fp:
+                cfg = json.load(fp)
+        except Exception:
+            raise RuntimeError("找不到模板文件 config.example.json")
 
     # 移除模板内部字段
     for k in ("_comment", "_version", "_migration_note"):
@@ -355,7 +363,11 @@ def save_config(f) -> None:
     cfg["basePath"]["image"] = str(f.get("basePathImage") or "./resources/pictures")
 
     # --- Mods ---
-    cfg["mods"] = _build_mods(f)
+    built_mods = _build_mods(f)
+    if "clientMods" in f or "serverMods" in f or "advancedMods" in f:
+        cfg["mods"] = built_mods
+    elif "mods" not in cfg:
+        cfg["mods"] = built_mods
 
     # --- 刷屏 ---
     cfg["spam"] = {

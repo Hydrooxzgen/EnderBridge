@@ -33,15 +33,31 @@ CONFIG_TEMPLATE_ALLOW = {
     "config/users.example.json",
 }
 
-# 导出时排除用户数据/设置(与 UPDATE_KEEP 对称,另排除 Bot 的 npm 依赖)
+# 导出时排除用户数据/设置(与 UPDATE_KEEP 对称,另排除 Bot 的 npm 依赖及客户端工程/构建产物)
 EXPORT_EXCLUDE = UPDATE_KEEP | {
     "node_modules",  # Bot 的 npm 依赖(约 500MB),用户需自行 npm install
+    "app",           # 客户端桌面端工程源码及中间编译产物
+    "build",         # 构建输出目录
+    "dist",          # 发行包目录
+    ".venv",         # Python 虚拟环境
 }
 EXPORT_FORCE_INCLUDE = set(CONFIG_TEMPLATE_ALLOW)
-EXPORT_SKIP_DIRS = {"__pycache__"}
-EXPORT_SKIP_EXTS = {".pyc", ".pyo"}
+EXPORT_SKIP_DIRS = {"__pycache__", "bin", "obj"}
+EXPORT_SKIP_EXTS = {".pyc", ".pyo", ".exe", ".dll", ".pdb", ".apk", ".zip"}
 EXPORT_IGNORE_FILE = ".exportignore"
 NONEEDS_FILE = ".noneeds"
+
+# 更新前热备份跳过的目录与扩展名 (排除客户端庞大二进制产物、node_modules 及 venv，确保秒级轻量备份)
+BACKUP_SKIP_DIRS = {
+    "__pycache__", ".git", ".github", "backups", "node_modules",
+    ".venv", "venv", "env", ".env", ".pytest_cache",
+    ".idea", ".vscode", ".vs", "dist", "build", "bin", "obj",
+    "app",
+}
+BACKUP_SKIP_EXTS = {
+    ".pyc", ".pyo", ".exe", ".dll", ".pdb", ".apk",
+    ".zip", ".tar", ".gz", ".tgz", ".bz2", ".xz",
+}
 
 _ZIP_SUFFIX = (".zip",)
 _TAR_SUFFIXES = (".tar.gz", ".tgz", ".tar.bz2", ".tar.xz", ".tar")
@@ -127,6 +143,53 @@ def iter_archive_members(archive):
         raise PackageError(f"读取压缩包失败: {e}")
 
 
+def get_archive_version(archive: str) -> str:
+    """从更新压缩包中探测提取版本号 (优先从 VERSION 文件或 main.py 读取)"""
+    version_file_content = None
+    main_py_content = None
+    config_json_content = None
+    try:
+        for rel, fobj in iter_archive_members(archive):
+            if fobj is None:
+                continue
+            if rel == "VERSION":
+                try:
+                    version_file_content = fobj.read().decode("utf-8", errors="replace").strip()
+                except Exception:
+                    pass
+                break
+            elif rel in ("main.py", "app.py"):
+                try:
+                    main_py_content = fobj.read().decode("utf-8", errors="replace")
+                except Exception:
+                    pass
+            elif rel in ("config/config.json", "config.json"):
+                try:
+                    config_json_content = fobj.read().decode("utf-8", errors="replace")
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+    if version_file_content:
+        return version_file_content
+
+    if main_py_content:
+        m = re.search(r'(?:VERSION|__version__)\s*=\s*["\']([^"\']+)["\']', main_py_content)
+        if m:
+            return m.group(1).strip()
+
+    if config_json_content:
+        try:
+            data = json.loads(config_json_content)
+            if data.get("_version"):
+                return str(data["_version"]).strip()
+        except Exception:
+            pass
+
+    return ""
+
+
 def _is_kept(rel: str, keep, allow) -> bool:
     """判断相对路径是否属于保留的数据区(模板白名单放行)"""
     top = rel.split("/", 1)[0]
@@ -173,24 +236,23 @@ def overlay_dir(src_dir, root, keep=UPDATE_KEEP, allow=CONFIG_TEMPLATE_ALLOW) ->
     return copied
 
 
-def clean_noneeds(root: str) -> list:
+def clean_noneeds(root: str, _is_sub: bool = False) -> list:
     """更新后检测并删除 .noneeds 中指定的冗余文件与文件夹
 
     返回被成功删除的相对路径列表。
     """
     noneeds_path = os.path.join(root, NONEEDS_FILE)
-    if not os.path.isfile(noneeds_path):
-        return []
-
-    try:
-        with open(noneeds_path, "r", encoding="utf-8", errors="replace") as f:
-            lines = f.readlines()
-    except Exception:
-        return []
-
     deleted = []
+    lines = []
+    if os.path.isfile(noneeds_path):
+        try:
+            with open(noneeds_path, "r", encoding="utf-8", errors="replace") as f:
+                lines = f.readlines()
+        except Exception:
+            lines = []
+
     # 核心保护名单: 严禁删除的项目关键文件与配置
-    PROTECTED = {"", ".", "main.py", NONEEDS_FILE, "config", "config/config.json"}
+    PROTECTED = {"", ".", "main.py", NONEEDS_FILE, ".exportignore", ".gitignore", "config", "config/config.json"}
 
     for raw in lines:
         line = raw.strip()
@@ -207,10 +269,10 @@ def clean_noneeds(root: str) -> list:
         if os.path.isabs(clean_line) or clean_line.startswith(("/", "\\")):
             continue
 
-        # 支持通配符匹配 (如 *.tmp, docs/*.draft 等)
+        # 支持通配符匹配 (如 *.tmp, docs/*.draft, app/**/bin 等)
         if any(char in line for char in ("*", "?", "[")):
             import glob
-            full_pattern = os.path.join(root, line.replace("/", os.sep))
+            full_pattern = os.path.join(root, clean_line.replace("/", os.sep))
             matches = glob.glob(full_pattern, recursive=True)
             for m in matches:
                 rel = os.path.relpath(m, root).replace(os.sep, "/")
@@ -239,6 +301,14 @@ def clean_noneeds(root: str) -> list:
                     deleted.append(clean_line)
             except Exception:
                 pass
+
+    # 若未处于子目录清理中且存在 app/.noneeds，同步递归执行 app 子工程清理
+    if not _is_sub:
+        app_dir = os.path.join(root, "app")
+        if os.path.isdir(app_dir) and os.path.isfile(os.path.join(app_dir, NONEEDS_FILE)):
+            sub_deleted = clean_noneeds(app_dir, _is_sub=True)
+            for item in sub_deleted:
+                deleted.append(f"app/{item}")
 
     return deleted
 
@@ -526,9 +596,30 @@ def backup_dir(root, dest_dir=None, keep=BACKUP_KEEP_COUNT, description: str = N
                 }
                 z.writestr(".backup_meta.json", json.dumps(meta_content, ensure_ascii=False, indent=2))
             for dirpath, dirnames, filenames in os.walk(root):
-                dirnames[:] = [d for d in dirnames if d not in ("__pycache__", ".git", "backups")]
+                rel_dir = os.path.relpath(dirpath, root)
+                rel_dir = "" if rel_dir == "." else rel_dir.replace(os.sep, "/")
+
+                pruned = []
+                for d in dirnames:
+                    child_rel = f"{rel_dir}/{d}" if rel_dir else d
+                    top_dir = child_rel.split("/", 1)[0]
+                    if (
+                        d in BACKUP_SKIP_DIRS
+                        or top_dir in BACKUP_SKIP_DIRS
+                        or d.endswith(".WebView2")
+                        or d.startswith(".venv")
+                        or d == "node_modules"
+                        or d in ("bin", "obj")
+                    ):
+                        continue
+                    pruned.append(d)
+                dirnames[:] = pruned
+
                 for fname_item in filenames:
-                    if os.path.splitext(fname_item)[1].lower() in EXPORT_SKIP_EXTS:
+                    ext = os.path.splitext(fname_item)[1].lower()
+                    if ext in BACKUP_SKIP_EXTS or ext in EXPORT_SKIP_EXTS:
+                        continue
+                    if fname_item.endswith(".tmp") or fname_item.endswith(".log"):
                         continue
                     abspath = os.path.join(dirpath, fname_item)
                     rel = os.path.relpath(abspath, root).replace(os.sep, "/")

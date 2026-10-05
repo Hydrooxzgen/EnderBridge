@@ -351,8 +351,14 @@
 (function() {
   // 未登录时自动跳转到新版登录页
   var role = sessionStorage.getItem(ROLE_KEY) || "";
-  if (!role) { location.href = "/login"; return; }
-  if (role !== "guest" && !sessionStorage.getItem(TOKEN_KEY)) { location.href = "/login"; return; }
+  if (!role || (role !== "guest" && !sessionStorage.getItem(TOKEN_KEY))) {
+    if (typeof redirectToLogin === "function") {
+      redirectToLogin();
+    } else {
+      location.href = "/login?redirect=" + encodeURIComponent(location.pathname + location.search);
+    }
+    return;
+  }
 })();
 </script>
 </body>

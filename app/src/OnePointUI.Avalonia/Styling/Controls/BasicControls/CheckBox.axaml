@@ -1,0 +1,110 @@
+﻿<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:onePointControls="clr-namespace:OnePointUI.Avalonia.Styling.Controls.OnePointControls">
+    <Design.PreviewWith>
+        <Border Padding="20">
+            <!-- Add Controls for Previewer Here -->
+            <StackPanel>
+                <CheckBox>CheckBox 1</CheckBox>
+                <CheckBox IsChecked="True">CheckBox 2</CheckBox>
+                <CheckBox IsEnabled="False">CheckBox 1</CheckBox>
+                <CheckBox IsChecked="True" IsEnabled="False">CheckBox 2</CheckBox>
+            </StackPanel>
+        </Border>
+    </Design.PreviewWith>
+
+    <!-- Add Styles Here -->
+    <Style Selector="CheckBox">
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryForegroundBrush}" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Margin" Value="5" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Grid>
+                    <Border HorizontalAlignment="Stretch"
+                            VerticalAlignment="Stretch"
+                            Background="#01FFFFFF"
+                            Opacity="0.0001"></Border>
+                    <StackPanel Orientation="Horizontal">
+                        <Border Name="Path_BackgroundBorder"
+                                CornerRadius="{TemplateBinding CornerRadius}"
+                                BorderThickness="1"
+                                BorderBrush="{DynamicResource PrimaryBorderBrush}"
+                                ClipToBounds="True"
+                                Width="24" Height="24"
+                                Margin="0,0">
+                            <Grid>
+                                <Border Name="Path_Background"
+                                        HorizontalAlignment="Stretch"
+                                        VerticalAlignment="Stretch"
+                                        CornerRadius="5"
+                                        Background="{DynamicResource PrimaryBackgroundOverBrush}"
+                                        Opacity="0" />
+
+                                <onePointControls:FontIcon Name="Path_Check"
+                                                           IsVisible="{TemplateBinding IsChecked}"
+                                                           Glyph="&#xE73E;"
+                                                           FontSize="16"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          Margin="10,0,0,0"
+                                          FontSize="{TemplateBinding FontSize}"
+                                          Foreground="{TemplateBinding Foreground}" />
+                    </StackPanel>
+                </Grid>
+            </ControlTemplate>
+        </Setter>
+
+        <Style Selector="^:pointerover Border#Path_Background">
+            <Setter Property="Opacity" Value="0.3" />
+        </Style>
+        <Style Selector="^:pointerover Border#Path_BackgroundBorder">
+            <Setter Property="BorderThickness" Value="1,1,1,2" />
+        </Style>
+
+        <Style Selector="^:checked Border#Path_Background">
+            <Setter Property="Opacity" Value="0" />
+        </Style>
+        <Style Selector="^:checked Border#Path_BackgroundBorder">
+            <Setter Property="Background" Value="{DynamicResource AccentBackgroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBorderBrush}" />
+        </Style>
+        <Style Selector="^:checked onePointControls|FontIcon#Path_Check">
+            <Setter Property="Foreground" Value="{DynamicResource AccentForegroundBrush}" />
+        </Style>
+        <Style Selector="^:checked Grid#Path_Check">
+            <Setter Property="IsVisible" Value="True" />
+        </Style>
+
+        <Style Selector="^:pressed Border#Path_Background">
+            <Setter Property="Opacity" Value="0.7" />
+        </Style>
+        <Style Selector="^:pressed Border#Path_BackgroundBorder">
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+
+        <Style Selector="^:disabled Border#Path_Background">
+            <Setter Property="Opacity" Value="0" />
+        </Style>
+        <Style Selector="^:disabled Border#Path_BackgroundBorder">
+            <Setter Property="Background" Value="{DynamicResource PrimaryDisabledForegroundBrush}" />
+        </Style>
+    </Style>
+
+    <Style Selector="Border#Path_BackgroundBorder">
+        <Setter Property="Transitions">
+            <Transitions>
+                <ThicknessTransition Property="BorderThickness" Duration="0:0:0.18" Easing="QuinticEaseOut" />
+            </Transitions>
+        </Setter>
+    </Style>
+</Styles>

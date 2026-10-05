@@ -1,0 +1,51 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:onePointControls="clr-namespace:OnePointUI.Avalonia.Styling.Controls.OnePointControls"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+             PointerEntered="Control_PointerEntered"
+             PointerExited="Control_PointerExited"
+             x:Class="OnePointUI.Avalonia.Styling.Controls.OnePointControls.PointHalo">
+    <UserControl.Styles>
+        <Style Selector="onePointControls|PointHalo">
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="ClipToBounds" Value="True" />
+
+            <Style Selector="^ /template/ Border#PATH_Border">
+                <Setter Property="CornerRadius"
+                        Value="{Binding CornerRadius, RelativeSource={RelativeSource TemplatedParent}}" />
+            </Style>
+        </Style>
+    </UserControl.Styles>
+    <Border ClipToBounds="True"
+            CornerRadius="6"
+            Name="PATH_Border">
+        <Canvas Name="MainCanvas" Background="Transparent" PointerMoved="Canvas_PointerMoved"
+                ClipToBounds="True">
+            <!-- 圆环 (Ellipse with a transparent fill and a stroke) -->
+            <Ellipse Name="MovingRing"
+                     Width="160"
+                     Opacity="0"
+                     Height="160">
+                <Ellipse.Styles>
+                    <Style Selector="Ellipse#MovingRing">
+                        <Setter Property="Transitions">
+                            <Transitions>
+                                <DoubleTransition Property="Opacity"
+                                                  Duration="0:0:0.18" />
+                            </Transitions>
+                        </Setter>
+                    </Style>
+                </Ellipse.Styles>
+                <Ellipse.Fill>
+                    <RadialGradientBrush Center="80,80"
+                                         GradientOrigin="80,80">
+                        <GradientStop Color="Gray" Offset="0" />
+                        <GradientStop Color="Transparent" Offset="0.8" />
+                    </RadialGradientBrush>
+                </Ellipse.Fill>
+            </Ellipse>
+        </Canvas>
+    </Border>
+</UserControl>

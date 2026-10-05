@@ -34,9 +34,14 @@
 <script src="/static/js/i18n.js"></script>
 <script>
 (function() {
+  var urlParams = new URLSearchParams(location.search);
+  var rawRedirect = urlParams.get("redirect") || "/";
+  // 安全校验: 必须是以 / 开头且不以 // 开头的相对路径，防止开放重定向攻击
+  var redirectTarget = (rawRedirect.startsWith("/") && !rawRedirect.startsWith("//")) ? rawRedirect : "/";
+
   var role = sessionStorage.getItem(ROLE_KEY) || "";
   if (role === "guest" || (role && sessionStorage.getItem(TOKEN_KEY))) {
-    location.href = "/"; return;
+    location.href = redirectTarget; return;
   }
   $("loginBtn").addEventListener("click", doLogin);
   $("guestBtn").addEventListener("click", function() {
@@ -51,7 +56,7 @@
           sessionStorage.setItem("enderbridge_user", JSON.stringify({
             username: data.username, role: data.role, permissions: data.permissions || [], system: data.system || false
           }));
-          location.href = "/";
+          location.href = redirectTarget;
         } else {
           $("loginMsg").textContent = data.message || t("login.guestFail");
         }
@@ -83,7 +88,7 @@
           sessionStorage.setItem("enderbridge_user", JSON.stringify({
             username: data.username, role: data.role, permissions: data.permissions || [], system: data.system || false
           }));
-          location.href = "/";
+          location.href = redirectTarget;
         } else {
           $("loginMsg").textContent = data.message || t("login.fail");
         }

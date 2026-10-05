@@ -1,0 +1,127 @@
+﻿<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Design.PreviewWith>
+        <Border Padding="20">
+            <StackPanel Width="200">
+                <TextBox Margin="5"
+                         Text="1111111111111111111111111111111"
+                         Watermark="0000" />
+                <TextBox Text="TextBox" Margin="5" IsEnabled="False" />
+            </StackPanel>
+        </Border>
+    </Design.PreviewWith>
+
+    <Style Selector="TextBox">
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="MinHeight" Value="32" />
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryForegroundBrush}" />
+        <Setter Property="CaretBrush" Value="{DynamicResource PrimaryForegroundBrush}" />
+        <Setter Property="SelectionBrush" Value="{DynamicResource AccentBackgroundBrush}" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="SelectionForegroundBrush" Value="{DynamicResource PrimaryForegroundBrush}" />
+        <Setter Property="Cursor" Value="Ibeam" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
+
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Grid HorizontalAlignment="{TemplateBinding HorizontalAlignment}"
+                      VerticalAlignment="{TemplateBinding VerticalAlignment}">
+                    <Border Name="Path_BackgroundBorder"
+                            HorizontalAlignment="{TemplateBinding HorizontalAlignment}"
+                            VerticalAlignment="{TemplateBinding VerticalAlignment}"
+                            BorderThickness="1"
+                            BorderBrush="{DynamicResource PrimaryBorderBrush}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            Background="{DynamicResource BackgroundBrushOpacity}"
+                            Width="{TemplateBinding Width}">
+                        <Border Name="Path_Background"
+                                HorizontalAlignment="Stretch"
+                                VerticalAlignment="Stretch"
+                                CornerRadius="{TemplateBinding CornerRadius}"
+                                Background="{DynamicResource PrimaryBackgroundOverBrush}"
+                                Opacity="0" />
+                    </Border>
+
+                    <TextBlock Name="PART_Watermark"
+                               Text="{TemplateBinding Watermark}"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource PrimaryForegroundBrush}"
+                               Opacity="0"
+                               Margin="7"
+                               TextTrimming="CharacterEllipsis"
+                               TextWrapping="NoWrap">
+                        <TextBlock.Transitions>
+                            <Transitions>
+                                <DoubleTransition Duration="0:0:0.18"
+                                                  Property="Opacity" />
+                            </Transitions>
+                        </TextBlock.Transitions>
+                    </TextBlock>
+
+                    <Border ClipToBounds="True"
+                            Margin="7">
+                        <TextPresenter Name="PART_TextPresenter"
+                                       Text="{TemplateBinding Text, Mode=TwoWay}"
+                                       CaretIndex="{TemplateBinding CaretIndex}"
+                                       CaretBrush="{TemplateBinding CaretBrush}"
+                                       LineHeight="{TemplateBinding LineHeight}"
+                                       TextWrapping="{TemplateBinding TextWrapping}"
+                                       PasswordChar="{TemplateBinding PasswordChar}"
+                                       LetterSpacing="{TemplateBinding LetterSpacing}"
+                                       TextAlignment="{TemplateBinding TextAlignment}"
+                                       RevealPassword="{TemplateBinding RevealPassword}"
+                                       SelectionBrush="{TemplateBinding SelectionBrush}"
+                                       SelectionStart="{TemplateBinding SelectionStart}"
+                                       SelectionForegroundBrush="{TemplateBinding SelectionForegroundBrush}"
+                                       SelectionEnd="{TemplateBinding SelectionEnd}"
+                                       CaretBlinkInterval="{TemplateBinding CaretBlinkInterval}"
+                                       VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                       HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" />
+                    </Border>
+                </Grid>
+            </ControlTemplate>
+        </Setter>
+
+        <Style Selector="^:disabled">
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryDisabledForegroundBrush}" />
+        </Style>
+
+        <Style Selector="^:disabled Border#Path_Background">
+            <Setter Property="Opacity" Value="0.3" />
+        </Style>
+
+        <Style Selector="^:focus Border#Path_BackgroundBorder">
+            <Setter Property="BorderThickness" Value="1,1,1,3" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBorderBrush}" />
+        </Style>
+
+        <Style Selector="^:empty TextBlock#PART_Watermark">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+    </Style>
+
+    <Style Selector="Border#Path_Background">
+        <Setter Property="Transitions">
+            <Transitions>
+                <DoubleTransition Property="Opacity" Duration="0:0:0.18" Easing="QuinticEaseOut" />
+            </Transitions>
+        </Setter>
+    </Style>
+
+    <Style Selector="Border#Path_BackgroundBorder">
+        <Setter Property="Transitions">
+            <Transitions>
+                <ThicknessTransition Property="BorderThickness" Duration="0:0:0.18" Easing="BackEaseOut" />
+            </Transitions>
+        </Setter>
+    </Style>
+
+    <Style Selector="TextBox:pointerover Border#Path_Background">
+        <Setter Property="Opacity" Value="0.3" />
+    </Style>
+
+    <Style Selector="TextBox:focus Border#Path_Background">
+        <Setter Property="Opacity" Value="1" />
+    </Style>
+</Styles>

@@ -1,0 +1,232 @@
+﻿<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:OnePointUI.Avalonia.Styling.Controls.OnePointControls"
+        xmlns:items="clr-namespace:OnePointUI.Avalonia.Styling.Controls.OnePointControls.Items">
+    <Design.PreviewWith>
+        <StackPanel Width="500" Height="300" Background="White">
+            <controls:SettingCard Header="你好"
+                                  Glyph="&#xEB9F;"
+                                  Description="介绍"
+                                  IsFontIcon="True"
+                                  ImageIcon="../../../Assets/OnePointUI.Icon.png"
+                                  IsClickable="True">
+            </controls:SettingCard>
+        </StackPanel>
+    </Design.PreviewWith>
+
+    <Style Selector="controls|SettingCard">
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Name="PART_Root">
+                    <items:BorderCard
+                        ClipToBounds="True"
+                        Padding="0"
+                        Name="PATH_Border">
+                        <Grid>
+                            <Border HorizontalAlignment="Stretch"
+                                    VerticalAlignment="Stretch"
+                                    Name="PATH_Background"
+                                    IsVisible="{TemplateBinding IsClickable}"
+                                    CornerRadius="6"
+                                    ClipToBounds="True"
+                                    Background="{DynamicResource PrimaryForegroundBrush}"
+                                    Opacity="0" />
+
+                            <Border Padding="8">
+                                <Grid>
+                                    <controls:FontIcon Glyph="{TemplateBinding Glyph}"
+                                                       FontSize="24"
+                                                       Margin="10,9,0,0"
+                                                       IsVisible="{TemplateBinding IsFontIcon}"
+                                                       HorizontalAlignment="Left"
+                                                       VerticalAlignment="Top" />
+                                    
+                                    <Border Width="32" Height="32"
+                                            CornerRadius="4"
+                                            Margin="5,5,0,0"
+                                            IsVisible="{TemplateBinding IsNotFontIcon}"
+                                            HorizontalAlignment="Left"
+                                            VerticalAlignment="Top"
+                                            ClipToBounds="True">
+                                        <Image Width="32" Height="32"
+                                               Stretch="UniformToFill"
+                                               Source="{TemplateBinding ImageIcon}"/>
+                                    </Border>
+
+                                    <StackPanel VerticalAlignment="Top"
+                                                Margin="50,3,0,0">
+                                        <ContentPresenter Content="{TemplateBinding Header}"
+                                                          FontSize="16">
+                                            <ContentPresenter.Styles>
+                                                <Style Selector="TextBlock">
+                                                    <Setter Property="FontSize"
+                                                            Value="16" />
+                                                </Style>
+                                            </ContentPresenter.Styles>
+                                        </ContentPresenter>
+
+                                        <ContentPresenter Content="{TemplateBinding Description}">
+                                            <ContentPresenter.Styles>
+                                                <Style Selector="TextBlock">
+                                                    <Setter Property="FontSize"
+                                                            Value="11" />
+                                                    <Setter Property="Foreground"
+                                                            Value="Gray" />
+                                                </Style>
+                                            </ContentPresenter.Styles>
+                                        </ContentPresenter>
+                                    </StackPanel>
+
+                                    <StackPanel Orientation="Horizontal"
+                                                HorizontalAlignment="Right"
+                                                VerticalAlignment="Center">
+                                        <ContentControl Name="ActionContentControl" 
+                                                        Content="{TemplateBinding Content}"
+                                                        Margin="0,0,6,0" />
+
+                                        <Border IsVisible="{TemplateBinding IsShowActionIcon}">
+                                            <controls:FontIcon Glyph="&#xE974;"
+                                                               VerticalAlignment="Center"
+                                                               Margin="0,0,4,0"
+                                                               IsVisible="{TemplateBinding IsClickable}"
+                                                               FontSize="16" />
+                                        </Border>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </Grid>
+                    </items:BorderCard>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+        <Setter Property="MinHeight" Value="58" />
+
+        <Style Selector="^ /template/ Border#PATH_Background">
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Opacity"
+                                      Duration="0:0:0.09" />
+                </Transitions>
+            </Setter>
+        </Style>
+
+        <Style Selector="^:pointerover /template/ Border#PATH_Background">
+            <Setter Property="Opacity" Value="0.05" />
+        </Style>
+
+        <Style Selector="^ /template/ Button#PATH_Button">
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <ContentControl Content="{TemplateBinding Content}"
+                                    Padding="{TemplateBinding Padding}" />
+                </ControlTemplate>
+            </Setter>
+        </Style>
+    </Style>
+
+    <Style Selector="controls|SettingCard.Item">
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Button Name="PATH_Button">
+                    <Border
+                        ClipToBounds="True"
+                        Padding="0"
+                        BorderThickness="0,1,0,0"
+                        BorderBrush="{DynamicResource PrimaryDisabledForegroundBrush}">
+                        <Grid>
+                            <Border HorizontalAlignment="Stretch"
+                                    VerticalAlignment="Stretch"
+                                    Name="PATH_Background"
+                                    IsVisible="{TemplateBinding IsClickable}"
+                                    ClipToBounds="True"
+                                    Background="{DynamicResource PrimaryForegroundBrush}"
+                                    Opacity="0" />
+
+                            <Border Padding="8">
+                                <Grid>
+                                    <controls:FontIcon Glyph="{TemplateBinding Glyph}"
+                                                       FontSize="28"
+                                                       Margin="8,0,0,0"
+                                                       IsVisible="{TemplateBinding IsFontIcon}"
+                                                       HorizontalAlignment="Left"
+                                                       VerticalAlignment="Center" />
+
+                                    <Image Width="32" Height="32"
+                                           Stretch="UniformToFill"
+                                           Margin="6,0,0,0"
+                                           IsVisible="{TemplateBinding IsNotFontIcon}"
+                                           Source="{TemplateBinding ImageIcon}"
+                                           HorizontalAlignment="Left"
+                                           VerticalAlignment="Center" />
+
+                                    <StackPanel VerticalAlignment="Center"
+                                                Margin="50,0,0,0">
+                                        <ContentPresenter Content="{TemplateBinding Header}"
+                                                          FontSize="18">
+                                            <ContentPresenter.Styles>
+                                                <Style Selector="TextBlock">
+                                                    <Setter Property="FontSize"
+                                                            Value="18" />
+                                                </Style>
+                                            </ContentPresenter.Styles>
+                                        </ContentPresenter>
+
+                                        <ContentPresenter Content="{TemplateBinding Description}">
+                                            <ContentPresenter.Styles>
+                                                <Style Selector="TextBlock">
+                                                    <Setter Property="FontSize"
+                                                            Value="12" />
+                                                    <Setter Property="Foreground"
+                                                            Value="Gray" />
+                                                </Style>
+                                            </ContentPresenter.Styles>
+                                        </ContentPresenter>
+                                    </StackPanel>
+
+                                    <StackPanel Orientation="Horizontal"
+                                                HorizontalAlignment="Right"
+                                                VerticalAlignment="Center">
+                                        <ContentControl Name="ActionContentControl"
+                                                        Content="{TemplateBinding Content}"
+                                                        Margin="0,0,12,0" />
+
+                                        <Border IsVisible="{TemplateBinding IsShowActionIcon}">
+                                            <controls:FontIcon Glyph="&#xE974;"
+                                                               VerticalAlignment="Center"
+                                                               Margin="0,0,8,0"
+                                                               IsVisible="{TemplateBinding IsClickable}"
+                                                               FontSize="16" />
+                                        </Border>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </Grid>
+                    </Border>
+                </Button>
+            </ControlTemplate>
+        </Setter>
+        <Setter Property="MinHeight" Value="72" />
+
+        <Style Selector="^ /template/ Border#PATH_Background">
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Opacity"
+                                      Duration="0:0:0.08" />
+                </Transitions>
+            </Setter>
+        </Style>
+
+        <Style Selector="^:pointerover /template/ Border#PATH_Background">
+            <Setter Property="Opacity" Value="0.1" />
+        </Style>
+
+        <Style Selector="^ /template/ Button#PATH_Button">
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <ContentControl Content="{TemplateBinding Content}"
+                                    Padding="{TemplateBinding Padding}" />
+                </ControlTemplate>
+            </Setter>
+        </Style>
+    </Style>
+</Styles>

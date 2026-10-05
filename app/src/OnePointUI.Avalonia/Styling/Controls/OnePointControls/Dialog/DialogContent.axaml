@@ -1,0 +1,130 @@
+﻿<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+             MinWidth="220" MinHeight="120"
+             x:Class="OnePointUI.Avalonia.Styling.Controls.OnePointControls.Dialog.DialogContent">
+    <UserControl.Styles>
+        <Style Selector="Button.AccentBorder">
+            <Setter Property="Background"
+                    Value="{DynamicResource AccentBackgroundBrush}" />
+        </Style>
+    </UserControl.Styles>
+    <Grid>
+        <Grid RowDefinitions="64,*,Auto">
+            <TextBlock Foreground="{DynamicResource AccentBackgroundBrush}"
+                       Margin="20,0"
+                       VerticalAlignment="Center"
+                       FontSize="18"
+                       Name="TitleBox"
+                       FontWeight="Bold">
+                <TextBlock.Styles>
+                    <Style Selector="TextBlock#TitleBox">
+                        <Style.Animations>
+                            <Animation Duration="0:0:1"
+                                       Easing="ExponentialEaseOut">
+                                <KeyFrame Cue="0%">
+                                    <Setter Property="Margin" Value="20,-40,20,40" />
+                                </KeyFrame>
+                                <KeyFrame Cue="40%">
+                                    <Setter Property="Margin" Value="20,-40,20,40" />
+                                </KeyFrame>
+                                <KeyFrame Cue="100%">
+                                    <Setter Property="Margin" Value="20,0" />
+                                </KeyFrame>
+                            </Animation>
+                        </Style.Animations>
+                    </Style>
+                </TextBlock.Styles>
+                Title
+            </TextBlock>
+
+            <Border Grid.Row="2" Height="64"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Bottom"
+                    Name="BtnBorder"
+                    Background="{DynamicResource PrimaryBackgroundBrush}">
+                <Border.Styles>
+                    <Style Selector="Button">
+                        <Style.Animations>
+                            <Animation Duration="0:0:1"
+                                       Easing="ExponentialEaseOut">
+                                <KeyFrame Cue="0%">
+                                    <Setter Property="ScaleTransform.ScaleX" Value="1.02" />
+                                    <Setter Property="ScaleTransform.ScaleY" Value="1.02" />
+                                    <Setter Property="Margin" Value="10,40,0,-40" />
+                                </KeyFrame>
+                                <KeyFrame Cue="98%">
+                                    <Setter Property="ScaleTransform.ScaleX" Value="1.1" />
+                                    <Setter Property="ScaleTransform.ScaleY" Value="1.1" />
+                                    <Setter Property="Margin" Value="10,0,0,0" />
+                                </KeyFrame>
+                                <KeyFrame Cue="100%">
+                                    <Setter Property="ScaleTransform.ScaleX" Value="1" />
+                                    <Setter Property="ScaleTransform.ScaleY" Value="1" />
+                                </KeyFrame>
+                            </Animation>
+                        </Style.Animations>
+                    </Style>
+                </Border.Styles>
+                <Grid Grid.ColumnDefinitions="Auto,Auto,Auto"
+                      HorizontalAlignment="Right"
+                      Margin="0,0,20,0">
+                    <Button Margin="10,0,0,0"
+                            VerticalAlignment="Center"
+                            Padding="18,2"
+                            Name="SecondaryBtn"
+                            IsVisible="False"
+                            Classes="NoBorder"
+                            Click="SecondaryBtn_OnClick"
+                            Height="32" />
+                    <Button Grid.Column="1" Margin="10,0,0,0"
+                            VerticalAlignment="Center"
+                            Padding="18,2"
+                            Name="PrimaryBtn"
+                            IsVisible="False"
+                            Classes="NoBorder"
+                            Click="PrimaryBtn_OnClick"
+                            Height="32" />
+                    <Button Grid.Column="2" Margin="10,0,0,0"
+                            VerticalAlignment="Center"
+                            Padding="18,2"
+                            Name="CloseBtn"
+                            IsVisible="False"
+                            Classes="NoBorder"
+                            Click="CloseBtn_OnClick"
+                            Height="32" />
+                </Grid>
+            </Border>
+
+            <ScrollViewer Grid.Row="1"
+                          Margin="0,0,5,0">
+                <ContentControl Name="ContentBox"
+                                Margin="20,0,15,20">
+                    <ContentControl.Styles>
+                        <Style Selector="ContentControl#ContentBox">
+                            <Style.Animations>
+                                <Animation Duration="0:0:1"
+                                           Easing="ExponentialEaseOut">
+                                    <KeyFrame Cue="0%">
+                                        <Setter Property="ScaleTransform.ScaleX" Value="1.1" />
+                                        <Setter Property="ScaleTransform.ScaleY" Value="1.1" />
+                                    </KeyFrame>
+                                    <KeyFrame Cue="40%">
+                                        <Setter Property="ScaleTransform.ScaleX" Value="1.1" />
+                                        <Setter Property="ScaleTransform.ScaleY" Value="1.1" />
+                                    </KeyFrame>
+                                    <KeyFrame Cue="100%">
+                                        <Setter Property="ScaleTransform.ScaleX" Value="1" />
+                                        <Setter Property="ScaleTransform.ScaleY" Value="1" />
+                                    </KeyFrame>
+                                </Animation>
+                            </Style.Animations>
+                        </Style>
+                    </ContentControl.Styles>
+                </ContentControl>
+            </ScrollViewer>
+        </Grid>
+    </Grid>
+</UserControl>

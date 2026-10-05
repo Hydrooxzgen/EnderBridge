@@ -1,0 +1,165 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Design.PreviewWith>
+        <Border Padding="20">
+            <StackPanel Spacing="10">
+                <RadioButton GroupName="g1">Option A</RadioButton>
+                <RadioButton GroupName="g1" IsChecked="True">Option B</RadioButton>
+                <RadioButton GroupName="g1" IsEnabled="False">Disabled</RadioButton>
+                <RadioButton GroupName="g1" IsChecked="True" IsEnabled="False">Disabled checked</RadioButton>
+            </StackPanel>
+        </Border>
+    </Design.PreviewWith>
+
+    <Style Selector="RadioButton">
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryForegroundBrush}" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Margin" Value="5" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Grid>
+                    <Border HorizontalAlignment="Stretch"
+                            VerticalAlignment="Stretch"
+                            Background="#01FFFFFF"
+                            Opacity="0.0001" />
+                    <StackPanel Orientation="Horizontal">
+                        <Border Name="Path_OuterRing"
+                                CornerRadius="100"
+                                BorderThickness="1"
+                                BorderBrush="{DynamicResource PrimaryBorderBrush}"
+                                ClipToBounds="True"
+                                Width="22" Height="22"
+                                Margin="0,1,0,1">
+                            <Panel>
+                                <Border Name="Path_HoverRing"
+                                        HorizontalAlignment="Stretch"
+                                        VerticalAlignment="Stretch"
+                                        CornerRadius="100"
+                                        Background="{DynamicResource AccentSubtleBrush}"
+                                        Opacity="0" />
+                                <Ellipse Name="Path_Check"
+                                         Width="10" Height="10"
+                                         HorizontalAlignment="Center"
+                                         VerticalAlignment="Center"
+                                         Fill="{DynamicResource BackgroundBrush}"
+                                         IsVisible="False" />
+                            </Panel>
+                        </Border>
+
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          Margin="10,0,0,0"
+                                          FontSize="{TemplateBinding FontSize}"
+                                          Foreground="{TemplateBinding Foreground}" />
+                    </StackPanel>
+                </Grid>
+            </ControlTemplate>
+        </Setter>
+
+        <Style Selector="^:pointerover Border#Path_HoverRing">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+        <Style Selector="^:pointerover Border#Path_OuterRing">
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBorderHoverBrush}" />
+        </Style>
+
+        <Style Selector="^:checked Border#Path_OuterRing">
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBackgroundBrush}" />
+            <Setter Property="BorderThickness" Value="5" />
+        </Style>
+        <Style Selector="^:checked Ellipse#Path_Check">
+            <Setter Property="IsVisible" Value="True" />
+        </Style>
+        <Style Selector="^:checked Border#Path_HoverRing">
+            <Setter Property="Opacity" Value="0" />
+        </Style>
+
+        <Style Selector="^:pressed Border#Path_HoverRing">
+            <Setter Property="Background" Value="{DynamicResource AccentSubtlePressedBrush}" />
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+
+        <Style Selector="^:disabled">
+            <Setter Property="Opacity" Value="0.5" />
+        </Style>
+    </Style>
+    
+    <Style Selector="RadioButton.Vertical">
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryForegroundBrush}" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Margin" Value="5" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Grid>
+                    <Border HorizontalAlignment="Stretch"
+                            VerticalAlignment="Stretch"
+                            Background="#01FFFFFF"
+                            Opacity="0.0001" />
+                    <StackPanel Orientation="Vertical">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          Margin="0,0,0,0"
+                                          FontSize="{TemplateBinding FontSize}"
+                                          Foreground="{TemplateBinding Foreground}" />
+                        
+                        <Border Name="Path_OuterRing"
+                                CornerRadius="100"
+                                BorderThickness="1"
+                                BorderBrush="{DynamicResource PrimaryBorderBrush}"
+                                ClipToBounds="True"
+                                Width="22" Height="22"
+                                Margin="0,1,0,1">
+                            <Panel>
+                                <Border Name="Path_HoverRing"
+                                        HorizontalAlignment="Stretch"
+                                        VerticalAlignment="Stretch"
+                                        CornerRadius="100"
+                                        Background="{DynamicResource AccentSubtleBrush}"
+                                        Opacity="0" />
+                                <Ellipse Name="Path_Check"
+                                         Width="10" Height="10"
+                                         HorizontalAlignment="Center"
+                                         VerticalAlignment="Center"
+                                         Fill="{DynamicResource BackgroundBrush}"
+                                         IsVisible="False" />
+                            </Panel>
+                        </Border>
+                    </StackPanel>
+                </Grid>
+            </ControlTemplate>
+        </Setter>
+
+        <Style Selector="^:pointerover Border#Path_HoverRing">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+        <Style Selector="^:pointerover Border#Path_OuterRing">
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBorderHoverBrush}" />
+        </Style>
+
+        <Style Selector="^:checked Border#Path_OuterRing">
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBackgroundBrush}" />
+            <Setter Property="BorderThickness" Value="5" />
+        </Style>
+        <Style Selector="^:checked Ellipse#Path_Check">
+            <Setter Property="IsVisible" Value="True" />
+        </Style>
+        <Style Selector="^:checked Border#Path_HoverRing">
+            <Setter Property="Opacity" Value="0" />
+        </Style>
+
+        <Style Selector="^:pressed Border#Path_HoverRing">
+            <Setter Property="Background" Value="{DynamicResource AccentSubtlePressedBrush}" />
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+
+        <Style Selector="^:disabled">
+            <Setter Property="Opacity" Value="0.5" />
+        </Style>
+    </Style>
+</Styles>

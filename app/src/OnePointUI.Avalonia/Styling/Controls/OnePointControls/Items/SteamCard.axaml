@@ -1,0 +1,79 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:OnePointUI.Avalonia.Styling.Controls.OnePointControls.Items">
+    <Design.PreviewWith>
+        <WrapPanel Width="900" Margin="10">
+            <controls:SteamCard Width="200" Height="300" Margin="5"
+                                Title="Cyberpunk 2077"
+                                Source="../../../Assets/OnePointUI.Icon.png" />
+            <controls:SteamCard Width="200" Height="300" Margin="5"
+                                Title="Baldur's Gate 3"
+                                Source="../../../Assets/OnePointUI.Icon.png" />
+            <controls:SteamCard Width="200" Height="300" Margin="5"
+                                Title="Elden Ring"
+                                Source="../../../Assets/OnePointUI.Icon.png" />
+        </WrapPanel>
+    </Design.PreviewWith>
+
+    <Style Selector="controls|SteamCard">
+        <Setter Property="Background" Value="{DynamicResource PrimaryBackgroundBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryForegroundBrush}" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <DoubleTransition Property="ScaleValue" Duration="0:0:0.25" Easing="CubicEaseOut" />
+                <DoubleTransition Property="RotateX" Duration="0:0:0.12" Easing="CubicEaseOut" />
+                <DoubleTransition Property="RotateY" Duration="0:0:0.12" Easing="CubicEaseOut" />
+            </Transitions>
+        </Setter>
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Panel>
+                    <Border Name="PART_CardBorder"
+                            CornerRadius="{TemplateBinding CardCornerRadius}"
+                            Background="{TemplateBinding Background}"
+                            BorderThickness="0"
+                            ClipToBounds="True">
+                        <Grid>
+                            <Image Name="PART_Image"
+                                   Source="{TemplateBinding Source}"
+                                   Stretch="{TemplateBinding Stretch}" />
+
+                            <ContentPresenter Name="PART_ContentPresenter"
+                                              Content="{TemplateBinding Content}"
+                                              Padding="{TemplateBinding Padding}" />
+
+                            <Border Name="PART_TitleOverlay"
+                                    VerticalAlignment="Bottom"
+                                    Padding="10,6"
+                                    Opacity="0">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                        <GradientStop Offset="0" Color="Transparent" />
+                                        <GradientStop Offset="1" Color="#CC000000" />
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                                <ContentPresenter Name="PART_TitlePresenter"
+                                                  Content="{TemplateBinding Title}"
+                                                  Foreground="White"
+                                                  FontSize="13"
+                                                  FontWeight="SemiBold" />
+                            </Border>
+                        </Grid>
+                    </Border>
+                </Panel>
+            </ControlTemplate>
+        </Setter>
+
+        <Style Selector="^ /template/ Border#PART_TitleOverlay">
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Opacity" Duration="0:0:0.2" />
+                </Transitions>
+            </Setter>
+        </Style>
+
+        <Style Selector="^:pointerover /template/ Border#PART_TitleOverlay">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+    </Style>
+</Styles>

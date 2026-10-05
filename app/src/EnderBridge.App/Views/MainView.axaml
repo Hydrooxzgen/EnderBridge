@@ -1,0 +1,713 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:items="clr-namespace:OnePointUI.Avalonia.Styling.Controls.OnePointControls.Items;assembly=OnePointUI.Avalonia"
+             xmlns:selectBar="clr-namespace:OnePointUI.Avalonia.Styling.Controls.OnePointControls.Navigation.SelectBar;assembly=OnePointUI.Avalonia"
+             xmlns:onePointControls="clr-namespace:OnePointUI.Avalonia.Styling.Controls.OnePointControls;assembly=OnePointUI.Avalonia"
+             xmlns:webview="clr-namespace:Avalonia.Controls;assembly=Avalonia.Controls.WebView"
+             mc:Ignorable="d" d:DesignWidth="1150" d:DesignHeight="680"
+             x:Class="EnderBridge.App.Views.MainView"
+             Background="{DynamicResource BackgroundBrush}">
+
+    <UserControl.Styles>
+        <!-- BedrockBoot Navigation Slide & Fade Transitions (ExponentialEaseOut 0.38s) -->
+        <Style Selector=":is(Control).EBPage">
+            <Setter Property="Transitions">
+                <Transitions>
+                    <ThicknessTransition Property="Margin"
+                                         Easing="ExponentialEaseOut"
+                                         Duration="0:0:0.38" />
+                    <DoubleTransition Property="Opacity"
+                                      Easing="ExponentialEaseOut"
+                                      Duration="0:0:0.38" />
+                </Transitions>
+            </Setter>
+        </Style>
+
+        <Style Selector="TextBlock#PageTitleText">
+            <Setter Property="Transitions">
+                <Transitions>
+                    <ThicknessTransition Property="Margin"
+                                         Easing="ExponentialEaseOut"
+                                         Duration="0:0:0.32" />
+                    <DoubleTransition Property="Opacity"
+                                      Easing="ExponentialEaseOut"
+                                      Duration="0:0:0.32" />
+                </Transitions>
+            </Setter>
+        </Style>
+
+        <!-- BedrockBoot Bottom-Left Toast Card Style -->
+        <Style Selector="Border.ToastCard">
+            <Setter Property="Transitions">
+                <Transitions>
+                    <ThicknessTransition Property="Margin"
+                                         Easing="ExponentialEaseOut"
+                                         Duration="0:0:0.35" />
+                    <DoubleTransition Property="Opacity"
+                                      Easing="ExponentialEaseOut"
+                                      Duration="0:0:0.35" />
+                </Transitions>
+            </Setter>
+        </Style>
+    </UserControl.Styles>
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto">
+        <!-- 0. Top Beta Notice Bar -->
+        <Border Grid.Row="0"
+                Name="BetaNoticeBanner"
+                Background="#201708"
+                BorderBrush="#78470E"
+                BorderThickness="0,0,0,1"
+                Padding="20,7">
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <Border Background="#B45309" CornerRadius="4" Padding="6,2" VerticalAlignment="Center">
+                        <TextBlock Text="BETA" FontSize="10" FontWeight="Bold" Foreground="White" />
+                    </Border>
+                    <TextBlock Text="Beta 提示:" FontSize="12" FontWeight="SemiBold" Foreground="#F59E0B" VerticalAlignment="Center" />
+                </StackPanel>
+
+                <TextBlock Grid.Column="1"
+                           Text="Beta测试阶段, 不稳定, 仍推荐使用WebUI进行管理。"
+                           FontSize="12" Foreground="#D1D5DB" VerticalAlignment="Center" Margin="10,0,12,0"
+                           TextTrimming="CharacterEllipsis" />
+
+                <Button Grid.Column="2" Content="打开 WebUI" Classes="NoBorder"
+                        Background="#352207" Foreground="#FBBF24"
+                        BorderBrush="#B45309" BorderThickness="1" CornerRadius="6"
+                        Padding="10,4" FontSize="11" Margin="0,0,8,0"
+                        Click="OpenWebUI_Click" Cursor="Hand" />
+
+                <Button Grid.Column="3" Content="✕" Classes="NoBorder"
+                        Background="Transparent" Foreground="#9CA3AF"
+                        Padding="6,3" FontSize="12" Cursor="Hand"
+                        ToolTip.Tip="隐藏此提示" Click="CloseBetaNotice_Click" />
+            </Grid>
+        </Border>
+
+        <!-- Top Modern Header -->
+        <Border Grid.Row="1"
+                Height="60"
+                Padding="24,0"
+                Background="{DynamicResource BackgroundBrush}"
+                BorderBrush="{DynamicResource PrimaryBorderBrush}"
+                BorderThickness="0,0,0,1">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <!-- Brand Logo & Status -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                    <Border Width="36" Height="36" CornerRadius="8" Background="{DynamicResource AccentBackgroundBrush}">
+                        <TextBlock Text="EB" FontWeight="Bold" FontSize="16" Foreground="White"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="EnderBridge" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource PrimaryForegroundBrush}" />
+                        <TextBlock Name="ConnectionStatusText" Text="Minecraft Bedrock Bridge Console" FontSize="11" Foreground="#888888" />
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Page Title (BedrockBoot Header animated) -->
+                <TextBlock Grid.Column="1" Name="PageTitleText" Text="📊 运行仪表盘"
+                           FontSize="16" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryForegroundBrush}"
+                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+
+                <!-- Header Actions -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                    <Button Name="UserAuthBadgeBtn" Classes="NoBorder"
+                            Background="#182230" Foreground="#38BDF8"
+                            BorderBrush="#2563EB" BorderThickness="1" CornerRadius="8" Padding="12,5"
+                            FontSize="12" Content="👤 访客模式 (点击登录)" Click="UserAuthBadge_Click" />
+                    <Button Name="SafeModeBadge" Classes="NoBorder"
+                            Background="#3D3010" Foreground="#F59E0B"
+                            BorderBrush="#785010" BorderThickness="1" CornerRadius="8" Padding="12,5"
+                            FontSize="12" Content="🛡️ 安全排障" Click="SafeMode_Click" />
+                    <Button Name="OpenWebUIBtn" Classes="NoBorder"
+                            Background="{DynamicResource PrimaryBorderBrush}" Foreground="{DynamicResource PrimaryForegroundBrush}"
+                            CornerRadius="8" Padding="12,6" FontSize="12" Content="🌐 打开网页端"
+                            Click="OpenWebUI_Click" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Center Dynamic Page View Area -->
+        <Border Grid.Row="2" Margin="20,12" Name="PageContainer">
+            <Grid>
+                <!-- 1. Dashboard View (Default) -->
+                <ScrollViewer Name="DashboardScrollViewer" Classes="EBPage">
+                    <StackPanel Spacing="16">
+                        <!-- Core Missing Alert Banner -->
+                        <items:BorderCard Name="CoreMissingBanner" Background="#261E10" Margin="0,0,0,4" IsVisible="False">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
+                                    <TextBlock Text="⚠️ 本地未检测到 EnderBridge 核心服务端 (main.py)" FontWeight="Bold" Foreground="#F59E0B" FontSize="14" />
+                                    <TextBlock Text="当前运行目录缺少服务端核心文件。您可以一键从 GitHub 下载并安装最新完整发布包。" Foreground="#CCCCCC" FontSize="12" />
+                                </StackPanel>
+                                <Button Grid.Column="1" Background="{DynamicResource AccentBackgroundBrush}" Foreground="White"
+                                        Padding="14,8" CornerRadius="6" Content="📥 立即自动下载最新版" Click="AutoDownloadLatest_Click" />
+                            </Grid>
+                        </items:BorderCard>
+
+                        <!-- Top KPI Cards Grid -->
+                        <Grid ColumnDefinitions="*,*,*,*">
+                            <!-- Card 1: Server Status -->
+                            <items:BorderCard Grid.Column="0" Margin="0,0,6,0">
+                                <StackPanel Spacing="6">
+                                    <TextBlock Text="核心运行状态" FontSize="12" Foreground="#888888" />
+                                    <TextBlock Name="StatusValueText" Text="● 就绪" FontSize="18" FontWeight="Bold" Foreground="#22C55E" />
+                                    <TextBlock Name="UptimeText" Text="等待拉起后台服务" FontSize="11" Foreground="#666666" />
+                                </StackPanel>
+                            </items:BorderCard>
+
+                            <!-- Card 2: EventLoop Watchdog -->
+                            <items:BorderCard Grid.Column="1" Margin="3,0,3,0">
+                                <StackPanel Spacing="6">
+                                    <TextBlock Text="看门狗自愈延迟" FontSize="12" Foreground="#888888" />
+                                    <TextBlock Name="WatchdogLatencyText" Text="1.2 ms" FontSize="18" FontWeight="Bold" Foreground="White" />
+                                    <TextBlock Text="健康探针: 正常" FontSize="11" Foreground="#22C55E" />
+                                </StackPanel>
+                            </items:BorderCard>
+
+                            <!-- Card 3: Players -->
+                            <items:BorderCard Grid.Column="2" Margin="3,0,3,0">
+                                <StackPanel Spacing="6">
+                                    <TextBlock Text="在线玩家" FontSize="12" Foreground="#888888" />
+                                    <TextBlock Name="OnlinePlayersText" Text="0 人在线" FontSize="18" FontWeight="Bold" Foreground="White" />
+                                    <TextBlock Text="基岩版互联正常" FontSize="11" Foreground="#AAAAAA" />
+                                </StackPanel>
+                            </items:BorderCard>
+
+                            <!-- Card 4: QQ & AI Bridge -->
+                            <items:BorderCard Grid.Column="3" Margin="6,0,0,0">
+                                <StackPanel Spacing="6">
+                                    <TextBlock Text="QQ互联 / AI机器人" FontSize="12" Foreground="#888888" />
+                                    <TextBlock Name="QQBotStatusText" Text="🐧 已连接" FontSize="18" FontWeight="Bold" Foreground="#22C55E" />
+                                    <TextBlock Text="NapCat OneBot v11" FontSize="11" Foreground="#AAAAAA" />
+                                </StackPanel>
+                            </items:BorderCard>
+                        </Grid>
+
+                        <!-- System Terminal Preview Card (Selectable & Copiable) -->
+                        <items:BorderCard>
+                            <StackPanel Spacing="10">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBlock Grid.Column="0" Text="💻 实时终端日志 (支持鼠标划选、Ctrl+C复制)" FontWeight="Bold" FontSize="14" Foreground="White" />
+                                    <Button Grid.Column="1" Classes="NoBorder" Background="{DynamicResource PrimaryBorderBrush}"
+                                            Foreground="#E5E7EB" Padding="10,4" CornerRadius="6" FontSize="11"
+                                            Content="📋 复制日志" Click="CopyConsoleLog_Click" />
+                                </Grid>
+                                <Border Background="#0A0B0D" CornerRadius="6" Padding="12" Height="240"
+                                        BorderBrush="{DynamicResource PrimaryBorderBrush}" BorderThickness="1">
+                                    <ScrollViewer Name="LogScrollViewer">
+                                        <SelectableTextBlock Name="LogStreamTextBlock"
+                                                             FontFamily="Cascadia Code, Consolas, Segoe UI Emoji, Microsoft YaHei, monospace"
+                                                             FontSize="12"
+                                                             LineHeight="18"
+                                                             Foreground="#34D399"
+                                                             TextWrapping="Wrap"
+                                                             Text="[EnderBridge GUI] 欢迎使用 EnderBridge 跨平台客户端&#x0a;[EnderBridge GUI] 支持直接划选文本并按 Ctrl+C 复制。" />
+                                    </ScrollViewer>
+                                </Border>
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBox Grid.Column="0" Name="CommandInputBox"
+                                             PlaceholderText="输入指令 (例如 $help, $qq check, stop, list...)"
+                                             CornerRadius="6" Background="#16181D" Foreground="White"
+                                             KeyDown="CommandInput_KeyDown" />
+                                    <Button Grid.Column="1" Margin="8,0,0,0" Padding="18,0"
+                                            Background="{DynamicResource AccentBackgroundBrush}" Foreground="White"
+                                            CornerRadius="6" Content="发送" Click="SendCommand_Click" />
+                                </Grid>
+                            </StackPanel>
+                        </items:BorderCard>
+
+                        <!-- Fast Actions Card -->
+                        <items:BorderCard>
+                            <StackPanel Spacing="12">
+                                <TextBlock Text="⚡ 快捷运维入口" FontWeight="Bold" FontSize="14" Foreground="White" />
+                                <Grid ColumnDefinitions="*,*,*,*">
+                                    <Button Grid.Column="0" Margin="0,0,6,0" Background="#1E232B" Padding="12" CornerRadius="8" Click="QuickAction_Mods">
+                                        <StackPanel Spacing="4">
+                                            <TextBlock Text="🧩 模组管理" FontWeight="SemiBold" Foreground="White" />
+                                            <TextBlock Text="管理第三方Mod" FontSize="11" Foreground="#888888" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Grid.Column="1" Margin="3,0,3,0" Background="#1E232B" Padding="12" CornerRadius="8" Click="QuickAction_QQ">
+                                        <StackPanel Spacing="4">
+                                            <TextBlock Text="🐧 QQ 互联" FontWeight="SemiBold" Foreground="White" />
+                                            <TextBlock Text="机器人与群互通" FontSize="11" Foreground="#888888" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Grid.Column="2" Margin="3,0,3,0" Background="#1E232B" Padding="12" CornerRadius="8" Click="QuickAction_Backup">
+                                        <StackPanel Spacing="4">
+                                            <TextBlock Text="💾 备份权限" FontWeight="SemiBold" Foreground="White" />
+                                            <TextBlock Text="快照备份与用户权限" FontSize="11" Foreground="#888888" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Grid.Column="3" Margin="6,0,0,0" Background="#1E232B" Padding="12" CornerRadius="8" Click="QuickAction_Studio">
+                                        <StackPanel Spacing="4">
+                                            <TextBlock Text="🎨 创意工坊" FontWeight="SemiBold" Foreground="White" />
+                                            <TextBlock Text="MIDI音乐与蓝图体素" FontSize="11" Foreground="#888888" />
+                                        </StackPanel>
+                                    </Button>
+                                </Grid>
+                            </StackPanel>
+                        </items:BorderCard>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- 2. Version Management View -->
+                <ScrollViewer Name="VersionsScrollViewer" Classes="EBPage" IsVisible="False">
+                    <StackPanel Spacing="16">
+                        <!-- Card 1: Local Core Info -->
+                        <items:BorderCard>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel Grid.Column="0" Spacing="6" VerticalAlignment="Center">
+                                    <TextBlock Text="本地服务端核心状态" FontWeight="Bold" FontSize="14" Foreground="White" />
+                                    <TextBlock Name="VerLocalStatusText" Text="正在检测本地核心..." FontSize="13" Foreground="#AAAAAA" />
+                                    <TextBlock Name="VerLocalPathText" Text="" FontSize="11" Foreground="#666666" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <Button Background="#1F2937" Foreground="#E5E7EB" CornerRadius="6" Padding="12,6" Content="🔍 重新扫描" Click="VerScanLocal_Click" />
+                                    <Button Background="{DynamicResource AccentBackgroundBrush}" Foreground="White" CornerRadius="6" Padding="12,6" Content="📥 下载最新版" Click="AutoDownloadLatest_Click" />
+                                </StackPanel>
+                            </Grid>
+                        </items:BorderCard>
+
+                        <!-- Card 1.5: Custom Core Path Configuration -->
+                        <items:BorderCard>
+                            <StackPanel Spacing="10">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <StackPanel Grid.Column="0" Spacing="2">
+                                        <TextBlock Text="📁 手动指定服务端路径 (main.py / app.py / 工作目录)" FontWeight="Bold" FontSize="13" Foreground="White" />
+                                        <TextBlock Text="支持指定已有 EnderBridge 项目的主文件或目录，下载、更新和启动将直接绑定该目录，防止安装至临时文件夹。" FontSize="11" Foreground="#888888" />
+                                    </StackPanel>
+                                    <Button Grid.Column="1" Background="#262D38" Foreground="#9CA3AF" CornerRadius="6" Padding="8,4" FontSize="11" Content="🔄 恢复自动探测" Click="ResetCustomCorePath_Click" />
+                                </Grid>
+                                <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                                    <TextBox Grid.Column="0" Name="CustomCorePathTextBox" PlaceholderText="留空自动向上探测 main.py，或在此填入主文件/根目录完整路径..." CornerRadius="6" Background="#16181D" Foreground="White" />
+                                    <Button Grid.Column="1" Margin="6,0,0,0" Padding="12,6" Background="#1E293B" Foreground="White" CornerRadius="6" Content="📄 选择文件" Click="BrowseCustomCoreFile_Click" />
+                                    <Button Grid.Column="2" Margin="6,0,0,0" Padding="12,6" Background="#1E293B" Foreground="White" CornerRadius="6" Content="📂 选择目录" Click="BrowseCustomCoreDir_Click" />
+                                    <Button Grid.Column="3" Margin="6,0,0,0" Padding="14,6" Background="{DynamicResource AccentBackgroundBrush}" Foreground="White" CornerRadius="6" Content="应用路径" Click="SaveCustomCorePath_Click" />
+                                </Grid>
+                            </StackPanel>
+                        </items:BorderCard>
+
+                        <!-- Card 2: Download Progress (Visible when downloading) -->
+                        <items:BorderCard Name="VerProgressCard" Background="#131B26" IsVisible="False">
+                            <StackPanel Spacing="8">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBlock Name="VerProgressMessage" Text="正在准备下载..." FontSize="13" Foreground="White" />
+                                    <TextBlock Name="VerProgressPercent" Grid.Column="1" Text="0%" FontWeight="Bold" Foreground="#38BDF8" />
+                                </Grid>
+                                <ProgressBar Name="VerProgressBar" Value="0" Maximum="100" Height="6" CornerRadius="3" Foreground="#38BDF8" />
+                            </StackPanel>
+                        </items:BorderCard>
+
+                        <!-- Card 3: Cloud Releases List -->
+                        <items:BorderCard>
+                            <StackPanel Spacing="12">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="☁️ 云端发布版本列表 (GitHub Releases)" FontWeight="Bold" FontSize="14" Foreground="White" />
+                                        <TextBlock Text="支持在线一键安装最新正式版、版本切换与历史版本回退。" FontSize="11" Foreground="#888888" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                        <ComboBox Name="MirrorComboBox" SelectedIndex="0" Width="190">
+                                            <ComboBoxItem Content="官方 GitHub (默认)" />
+                                            <ComboBoxItem Content="ghproxy.net (国内加速)" />
+                                            <ComboBoxItem Content="mirror.ghproxy.com (备用)" />
+                                        </ComboBox>
+                                        <Button Background="#1F2937" Foreground="#E5E7EB" CornerRadius="6" Padding="12,6" Content="🔄 刷新列表" Click="VerRefreshReleases_Click" />
+                                    </StackPanel>
+                                </Grid>
+
+                                <!-- Releases Container -->
+                                <StackPanel Name="ReleasesListContainer" Spacing="10" Margin="0,8,0,0">
+                                    <TextBlock Name="ReleasesLoadingText" Text="正在从 GitHub 获取版本列表..." Foreground="#888888" HorizontalAlignment="Center" Margin="0,20" />
+                                </StackPanel>
+                            </StackPanel>
+                        </items:BorderCard>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- 3. Dedicated Fullpage Interactive Terminal Console View (Copiable) -->
+                <Grid Name="ConsoleContainer" Classes="EBPage" RowDefinitions="Auto,*,Auto" IsVisible="False">
+                    <!-- Console Toolbar -->
+                    <items:BorderCard Grid.Row="0" Padding="12,8" Margin="0,0,0,10">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                                <TextBlock Text="💻 独立交互终端 (支持自由鼠标划选与 Ctrl+C 复制)" FontWeight="Bold" FontSize="14" Foreground="White" />
+                                <TextBlock Name="ConsolePidText" Text="● 服务未运行" FontSize="12" Foreground="#EF4444" VerticalAlignment="Center" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
+                                <Button Content="🧹 清空日志" Background="#1F2937" Foreground="#E5E7EB"
+                                        CornerRadius="6" Padding="10,5" Click="ClearConsoleLog_Click" />
+                                <Button Content="📋 复制全部" Background="#1F2937" Foreground="#E5E7EB"
+                                        CornerRadius="6" Padding="10,5" Click="CopyConsoleLog_Click" />
+                            </StackPanel>
+                        </Grid>
+                    </items:BorderCard>
+
+                    <!-- Terminal Log Stream (SelectableTextBlock) -->
+                    <Border Grid.Row="1" Background="#0A0B0D" CornerRadius="8" Padding="14" Margin="0,0,0,10"
+                            BorderBrush="{DynamicResource PrimaryBorderBrush}" BorderThickness="1">
+                        <ScrollViewer Name="FullLogScrollViewer">
+                            <SelectableTextBlock Name="FullLogStreamTextBlock"
+                                                 FontFamily="Cascadia Code, Consolas, Segoe UI Emoji, Microsoft YaHei, monospace"
+                                                 FontSize="13"
+                                                 LineHeight="20"
+                                                 Foreground="#34D399"
+                                                 TextWrapping="Wrap"
+                                                 Text="[EnderBridge Console] 独立终端已就绪。你可以用鼠标随意划选任意文字并按 Ctrl+C 进行复制！" />
+                        </ScrollViewer>
+                    </Border>
+
+                    <!-- Command Input & Quick Command Shortcuts -->
+                    <StackPanel Grid.Row="2" Spacing="8">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBox Grid.Column="0" Name="FullCommandInputBox"
+                                     PlaceholderText="输入指令 (例如 $help, list, stop, $qq check, $reload...)"
+                                     CornerRadius="6" Background="#16181D" Foreground="White"
+                                     KeyDown="FullCommandInput_KeyDown" />
+                            <Button Grid.Column="1" Margin="8,0,0,0" Padding="20,0"
+                                    Background="{DynamicResource AccentBackgroundBrush}" Foreground="White"
+                                    CornerRadius="6" Content="发送指令" Click="SendFullCommand_Click" />
+                        </Grid>
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="快捷指令:" FontSize="12" Foreground="#888888" VerticalAlignment="Center" Margin="0,0,4,0" />
+                            <Button Content="$help" Background="#1E232B" Padding="8,4" CornerRadius="4" FontSize="11" Click="QuickCmd_Click" Tag="$help" />
+                            <Button Content="list" Background="#1E232B" Padding="8,4" CornerRadius="4" FontSize="11" Click="QuickCmd_Click" Tag="list" />
+                            <Button Content="$qq check" Background="#1E232B" Padding="8,4" CornerRadius="4" FontSize="11" Click="QuickCmd_Click" Tag="$qq check" />
+                            <Button Content="$reload" Background="#1E232B" Padding="8,4" CornerRadius="4" FontSize="11" Click="QuickCmd_Click" Tag="$reload" />
+                            <Button Content="stop" Background="#3A2020" Foreground="#FF8888" Padding="8,4" CornerRadius="4" FontSize="11" Click="QuickCmd_Click" Tag="stop" />
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+
+                <!-- 4. Native Mods Manager View -->
+                <ScrollViewer Name="ModsScrollViewer" Classes="EBPage" IsVisible="False">
+                    <StackPanel Spacing="16">
+                        <items:BorderCard>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
+                                    <TextBlock Text="🧩 服务端与客户端模组 (Mods)" FontWeight="Bold" FontSize="15" Foreground="White" />
+                                    <TextBlock Name="ModsSummaryText" Text="通过后端 REST API 实时管控已挂载的 Python / JS 插件与模组" FontSize="12" Foreground="#888888" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                                    <Button Content="🔄 刷新列表" Background="#1F2937" Foreground="#E5E7EB" CornerRadius="6" Padding="12,6" Click="ModsRefresh_Click" />
+                                    <Button Content="⚡ 一键重载全部" Background="{DynamicResource AccentBackgroundBrush}" Foreground="White" CornerRadius="6" Padding="12,6" Click="ModsReloadAll_Click" />
+                                    <Button Content="📁 打开目录" Background="#1F2937" Foreground="#E5E7EB" CornerRadius="6" Padding="12,6" Click="ModsOpenFolder_Click" />
+                                </StackPanel>
+                            </Grid>
+                        </items:BorderCard>
+
+                        <TextBlock Text="服务端模组 (Server Mods)" FontWeight="Bold" FontSize="13" Foreground="#9CA3AF" Margin="4,0" />
+                        <StackPanel Name="ServerModsContainer" Spacing="8">
+                            <TextBlock Text="点击 [刷新列表] 获取最新加载模组..." Foreground="#666666" Margin="10" />
+                        </StackPanel>
+
+                        <TextBlock Text="客户端模组 (Client Mods)" FontWeight="Bold" FontSize="13" Foreground="#9CA3AF" Margin="4,8,4,0" />
+                        <StackPanel Name="ClientModsContainer" Spacing="8" />
+
+                        <TextBlock Text="已禁用的模组 (Disabled Mods)" Name="DisabledModsTitle" FontWeight="Bold" FontSize="13" Foreground="#9CA3AF" Margin="4,8,4,0" IsVisible="False" />
+                        <StackPanel Name="DisabledModsContainer" Spacing="8" IsVisible="False" />
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- 5. Native Configuration View -->
+                <ScrollViewer Name="ConfigScrollViewer" Classes="EBPage" IsVisible="False">
+                    <StackPanel Spacing="16">
+                        <items:BorderCard>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
+                                    <TextBlock Text="⚙️ 系统与互联配置 (System Configuration)" FontWeight="Bold" FontSize="15" Foreground="White" />
+                                    <TextBlock Text="直接通过 REST API 读取与原子更新 config 核心参数" FontSize="12" Foreground="#888888" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                                    <Button Content="🔄 重新读取" Background="#1F2937" Foreground="#E5E7EB" CornerRadius="6" Padding="12,6" Click="ConfigReload_Click" />
+                                    <Button Content="💾 保存并应用" Background="{DynamicResource AccentBackgroundBrush}" Foreground="White" CornerRadius="6" Padding="14,6" Click="ConfigSave_Click" />
+                                </StackPanel>
+                            </Grid>
+                        </items:BorderCard>
+
+                        <!-- App 本地设置: 手动指定服务端程序路径 -->
+                        <TextBlock Text="EnderBridge 服务端主程序/工作路径" FontWeight="Bold" FontSize="13" Foreground="#9CA3AF" Margin="4,0" />
+                        <items:BorderCard>
+                            <StackPanel Spacing="10">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <StackPanel Grid.Column="0" Spacing="2">
+                                        <TextBlock Text="📁 服务端程序主入口 / 工作目录 (main.py / app.py)" FontWeight="Bold" FontSize="13" Foreground="White" />
+                                        <TextBlock Text="指定本地已有的 EnderBridge 服务端主文件或项目根目录；启动与更新将直接绑定该路径。" FontSize="11" Foreground="#888888" />
+                                    </StackPanel>
+                                    <Button Grid.Column="1" Background="#262D38" Foreground="#9CA3AF" CornerRadius="6" Padding="8,4" FontSize="11" Content="🔄 恢复自动探测" Click="ResetCustomCorePath_Click" />
+                                </Grid>
+                                <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                                    <TextBox Grid.Column="0" Name="ConfigCorePathTextBox" PlaceholderText="留空自动向上探测 main.py，或在此填入主文件/根目录完整路径..." CornerRadius="6" Background="#16181D" Foreground="White" />
+                                    <Button Grid.Column="1" Margin="6,0,0,0" Padding="12,6" Background="#1E293B" Foreground="White" CornerRadius="6" Content="📄 选择文件" Click="BrowseCustomCoreFile_Click" />
+                                    <Button Grid.Column="2" Margin="6,0,0,0" Padding="12,6" Background="#1E293B" Foreground="White" CornerRadius="6" Content="📂 选择目录" Click="BrowseCustomCoreDir_Click" />
+                                    <Button Grid.Column="3" Margin="6,0,0,0" Padding="14,6" Background="{DynamicResource AccentBackgroundBrush}" Foreground="White" CornerRadius="6" Content="应用路径" Click="SaveConfigCorePath_Click" />
+                                </Grid>
+                            </StackPanel>
+                        </items:BorderCard>
+
+                        <TextBlock Text="基岩版中继核心网络" FontWeight="Bold" FontSize="13" Foreground="#9CA3AF" Margin="4,0" />
+                        <onePointControls:SettingCard Header="服务器实例名称" Description="在游戏内和控制台中广播显示的实例标识" Glyph="&#xE80F;">
+                            <TextBox Name="CfgServerNameBox" Width="240" CornerRadius="6" Background="#16181D" Foreground="White" />
+                        </onePointControls:SettingCard>
+                        <onePointControls:SettingCard Header="中继监听端口 (WebSocket Port)" Description="Minecraft 基岩版客户端连接的 WebSocket 端口 (默认 8800)" Glyph="&#xE968;">
+                            <TextBox Name="CfgWsPortBox" Width="140" CornerRadius="6" Background="#16181D" Foreground="White" />
+                        </onePointControls:SettingCard>
+                        <onePointControls:SettingCard Header="Web 管理面板端口 (HTTP Port)" Description="WebUI 与 HTTP REST API 服务端口 (默认 18888)" Glyph="&#xE774;">
+                            <TextBox Name="CfgWebPortBox" Width="140" CornerRadius="6" Background="#16181D" Foreground="White" />
+                        </onePointControls:SettingCard>
+
+                        <TextBlock Text="QQ 机器人与跨平台互联" FontWeight="Bold" FontSize="13" Foreground="#9CA3AF" Margin="4,8,4,0" />
+                        <onePointControls:SettingCard Header="OneBot (QQ) WebSocket URL" Description="NapCat / LLOneBot 反向或正向 WebSocket 服务端地址" Glyph="&#xE909;">
+                            <TextBox Name="CfgOneBotUrlBox" Width="280" CornerRadius="6" Background="#16181D" Foreground="White" />
+                        </onePointControls:SettingCard>
+                        <onePointControls:SettingCard Header="管理与互通 QQ 群号" Description="服务器事件通知、跨服聊天与管理员指令响应目标群" Glyph="&#xE716;">
+                            <TextBox Name="CfgOneBotGroupBox" Width="180" CornerRadius="6" Background="#16181D" Foreground="White" />
+                        </onePointControls:SettingCard>
+
+                        <TextBlock Text="运维稳定性与安全控制" FontWeight="Bold" FontSize="13" Foreground="#9CA3AF" Margin="4,8,4,0" />
+                        <onePointControls:SettingCard Header="看门狗事件循环自愈 (Watchdog)" Description="检测到主事件循环卡顿超过阈值时自动尝试恢复或重启" Glyph="&#xEC42;">
+                            <ToggleSwitch Name="CfgWatchdogToggle" />
+                        </onePointControls:SettingCard>
+                        <onePointControls:SettingCard Header="仅允许本地回路访问 (LocalOnly)" Description="启用后 WebUI 仅绑定 127.0.0.1，禁止外部局域网 IP 直连" Glyph="&#xE8D7;">
+                            <ToggleSwitch Name="CfgLocalOnlyToggle" />
+                        </onePointControls:SettingCard>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- 6. Native Creative Studio View -->
+                <ScrollViewer Name="StudioScrollViewer" Classes="EBPage" IsVisible="False">
+                    <StackPanel Spacing="16">
+                        <items:BorderCard>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
+                                    <TextBlock Text="🎨 创意工坊与蓝图资产 (Creative Studio)" FontWeight="Bold" FontSize="15" Foreground="White" />
+                                    <TextBlock Name="StudioSummaryText" Text="通过后端 API 管控体素建筑蓝图、MIDI 音乐曲库与像素画资源" FontSize="12" Foreground="#888888" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                                    <Button Content="🔄 刷新工坊" Background="#1F2937" Foreground="#E5E7EB" CornerRadius="6" Padding="12,6" Click="StudioRefresh_Click" />
+                                    <Button Content="📁 蓝图目录" Background="#1F2937" Foreground="#E5E7EB" CornerRadius="6" Padding="10,6" Click="StudioOpenBlueprints_Click" />
+                                    <Button Content="📁 音乐目录" Background="#1F2937" Foreground="#E5E7EB" CornerRadius="6" Padding="10,6" Click="StudioOpenMidi_Click" />
+                                    <Button Content="📁 资源总览" Background="{DynamicResource AccentBackgroundBrush}" Foreground="White" CornerRadius="6" Padding="12,6" Click="StudioOpenFolder_Click" />
+                                </StackPanel>
+                            </Grid>
+                        </items:BorderCard>
+
+                        <TextBlock Text="建筑蓝图与体素结构 (.litematic / .schematic / .mcstructure)" FontWeight="Bold" FontSize="13" Foreground="#9CA3AF" Margin="4,0" />
+                        <StackPanel Name="StudioBlueprintsContainer" Spacing="8">
+                            <TextBlock Text="点击 [刷新工坊] 检索蓝图体素资产..." Foreground="#666666" Margin="10" />
+                        </StackPanel>
+
+                        <TextBlock Text="MIDI 游戏内音乐曲目 (.mid / .midi)" FontWeight="Bold" FontSize="13" Foreground="#9CA3AF" Margin="4,8,4,0" />
+                        <StackPanel Name="StudioMidiContainer" Spacing="8" />
+
+                        <TextBlock Text="像素画图像资产 (.png / .jpg / .webp)" FontWeight="Bold" FontSize="13" Foreground="#9CA3AF" Margin="4,8,4,0" />
+                        <StackPanel Name="StudioImagesContainer" Spacing="8" />
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- 7. Native Backup & Permissions View -->
+                <ScrollViewer Name="SettingsScrollViewer" Classes="EBPage" IsVisible="False">
+                    <StackPanel Spacing="16">
+                        <items:BorderCard>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
+                                    <TextBlock Text="🛡️ 备份快照与权限矩阵 (Backup &amp; Security)" FontWeight="Bold" FontSize="15" Foreground="White" />
+                                    <TextBlock Name="BackupSummaryText" Text="管理项目快照打包与恢复，查看各角色组权限分配" FontSize="12" Foreground="#888888" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                                    <Button Content="💾 立即创建快照" Background="{DynamicResource AccentBackgroundBrush}" Foreground="White" CornerRadius="6" Padding="12,6" Click="BackupCreate_Click" />
+                                    <Button Content="🔄 刷新快照" Background="#1F2937" Foreground="#E5E7EB" CornerRadius="6" Padding="12,6" Click="BackupRefresh_Click" />
+                                    <Button Content="📁 打开备份目录" Background="#1F2937" Foreground="#E5E7EB" CornerRadius="6" Padding="12,6" Click="BackupOpenFolder_Click" />
+                                </StackPanel>
+                            </Grid>
+                        </items:BorderCard>
+
+                        <!-- App 本地设置: 手动指定服务端程序路径 -->
+                        <TextBlock Text="EnderBridge 服务端核心路径设置" FontWeight="Bold" FontSize="13" Foreground="#9CA3AF" Margin="4,0" />
+                        <items:BorderCard>
+                            <StackPanel Spacing="10">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <StackPanel Grid.Column="0" Spacing="2">
+                                        <TextBlock Text="📁 服务端程序主入口 / 工作目录 (main.py / app.py)" FontWeight="Bold" FontSize="13" Foreground="White" />
+                                        <TextBlock Text="指定本地已有的 EnderBridge 服务端主文件或项目根目录；启动与更新将直接绑定该路径。" FontSize="11" Foreground="#888888" />
+                                    </StackPanel>
+                                    <Button Grid.Column="1" Background="#262D38" Foreground="#9CA3AF" CornerRadius="6" Padding="8,4" FontSize="11" Content="🔄 恢复自动探测" Click="ResetCustomCorePath_Click" />
+                                </Grid>
+                                <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                                    <TextBox Grid.Column="0" Name="SettingsCorePathTextBox" PlaceholderText="留空自动向上探测 main.py，或在此填入主文件/根目录完整路径..." CornerRadius="6" Background="#16181D" Foreground="White" />
+                                    <Button Grid.Column="1" Margin="6,0,0,0" Padding="12,6" Background="#1E293B" Foreground="White" CornerRadius="6" Content="📄 选择文件" Click="BrowseCustomCoreFile_Click" />
+                                    <Button Grid.Column="2" Margin="6,0,0,0" Padding="12,6" Background="#1E293B" Foreground="White" CornerRadius="6" Content="📂 选择目录" Click="BrowseCustomCoreDir_Click" />
+                                    <Button Grid.Column="3" Margin="6,0,0,0" Padding="14,6" Background="{DynamicResource AccentBackgroundBrush}" Foreground="White" CornerRadius="6" Content="应用路径" Click="SaveSettingsCorePath_Click" />
+                                </Grid>
+                            </StackPanel>
+                        </items:BorderCard>
+
+                        <TextBlock Text="快照备份记录 (Backups)" FontWeight="Bold" FontSize="13" Foreground="#9CA3AF" Margin="4,0" />
+                        <StackPanel Name="BackupsListContainer" Spacing="8">
+                            <TextBlock Text="点击 [刷新快照] 获取备份快照记录..." Foreground="#666666" Margin="10" />
+                        </StackPanel>
+
+                        <TextBlock Text="系统权限角色矩阵 (Permission Roles)" FontWeight="Bold" FontSize="13" Foreground="#9CA3AF" Margin="4,8,4,0" />
+                        <StackPanel Name="PermissionsListContainer" Spacing="8" />
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- 8. Embedded In-App Browser View -->
+                <Grid Name="BrowserContainer" Classes="EBPage" RowDefinitions="Auto,*" IsVisible="False">
+                    <!-- Browser Control Bar -->
+                    <items:BorderCard Grid.Row="0" Padding="10,8" Margin="0,0,0,10">
+                        <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto">
+                            <Button Grid.Column="0" Content="◀ 返回" Background="#1F2937" Foreground="#E5E7EB"
+                                    CornerRadius="6" Padding="10,5" Margin="0,0,8,0" Click="BrowserBackToDashboard_Click"
+                                    ToolTip.Tip="返回仪表盘" />
+                            <Button Grid.Column="1" Content="◀" Background="#1F2937" Foreground="#E5E7EB"
+                                    CornerRadius="6" Padding="10,5" Margin="0,0,4,0" Click="BrowserGoBack_Click"
+                                    ToolTip.Tip="后退" />
+                            <Button Grid.Column="2" Content="▶" Background="#1F2937" Foreground="#E5E7EB"
+                                    CornerRadius="6" Padding="10,5" Margin="0,0,6,0" Click="BrowserGoForward_Click"
+                                    ToolTip.Tip="前进" />
+                            <Button Grid.Column="3" Content="🔄 刷新" Background="#1F2937" Foreground="#E5E7EB"
+                                    CornerRadius="6" Padding="10,5" Margin="0,0,8,0" Click="BrowserRefresh_Click"
+                                    ToolTip.Tip="重新加载当前页面" />
+                            <TextBox Grid.Column="4" Name="BrowserUrlTextBox" Text="http://127.0.0.1:18888/"
+                                     VerticalAlignment="Center" CornerRadius="6"
+                                     Background="#111318" Foreground="#E5E7EB" Padding="10,6"
+                                     KeyDown="BrowserUrl_KeyDown" />
+                            <Button Grid.Column="5" Content="🚀 载入" Background="{DynamicResource AccentBackgroundBrush}" Foreground="White"
+                                    CornerRadius="6" Padding="12,5" Margin="8,0,8,0" Click="BrowserNavigate_Click" />
+                            <Button Grid.Column="6" Content="🌐 外部浏览器" Background="#1F2937" Foreground="#9CA3AF"
+                                    CornerRadius="6" Padding="10,5" Click="OpenExternalBrowser_Click" />
+                        </Grid>
+                    </items:BorderCard>
+
+                    <!-- Embedded Native WebView -->
+                    <items:BorderCard Grid.Row="1" Padding="0" ClipToBounds="True" CornerRadius="8">
+                        <webview:NativeWebView Name="InAppWebView" />
+                    </items:BorderCard>
+                </Grid>
+
+                <!-- 9. Login Modal Dialog Overlay -->
+                <Grid Name="LoginOverlay" Background="#B0000000" IsVisible="False">
+                    <Border HorizontalAlignment="Center" VerticalAlignment="Center"
+                            Width="420" Padding="28,24" CornerRadius="12"
+                            Background="#181B22" BorderBrush="{DynamicResource PrimaryBorderBrush}" BorderThickness="1">
+                        <StackPanel Spacing="16">
+                            <!-- Title &amp; Close -->
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel Grid.Column="0" Spacing="4">
+                                    <TextBlock Text="🔐 登录到 EnderBridge" FontWeight="Bold" FontSize="16" Foreground="White" />
+                                    <TextBlock Text="输入用户名与密码获取管理鉴权 Token" FontSize="12" Foreground="#888888" />
+                                </StackPanel>
+                                <Button Grid.Column="1" Content="✕" Classes="NoBorder" Background="Transparent" Foreground="#888888"
+                                        FontSize="14" Click="CloseLoginOverlay_Click" />
+                            </Grid>
+
+                            <!-- Input fields -->
+                            <StackPanel Spacing="12">
+                                <StackPanel Spacing="6">
+                                    <TextBlock Text="用户名 (Username)" FontSize="12" Foreground="#AAAAAA" />
+                                    <TextBox Name="LoginUsernameBox" Text="admin" CornerRadius="6" Background="#111317" Foreground="White" />
+                                </StackPanel>
+                                <StackPanel Spacing="6">
+                                    <TextBlock Text="密码 (Password)" FontSize="12" Foreground="#AAAAAA" />
+                                    <TextBox Name="LoginPasswordBox" PasswordChar="●" CornerRadius="6" Background="#111317" Foreground="White" KeyDown="LoginPassword_KeyDown" />
+                                </StackPanel>
+                                <TextBlock Name="LoginErrorText" Text="" Foreground="#EF4444" FontSize="12" IsVisible="False" TextWrapping="Wrap" />
+                                <TextBlock Text="💡 提示: 支持输入明文密码，或直接粘贴 users.json 中的哈希密文登录。" Foreground="#6B7280" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0" />
+                            </StackPanel>
+
+                            <!-- Actions -->
+                            <StackPanel Spacing="10" Margin="0,8,0,0">
+                                <Button Name="LoginSubmitBtn" Content="🚀 确认登录" Background="{DynamicResource AccentBackgroundBrush}" Foreground="White"
+                                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                        CornerRadius="6" Padding="0,10" Click="LoginSubmit_Click" />
+                                <Grid ColumnDefinitions="*,*">
+                                    <Button Grid.Column="0" Content="👤 访客快速接入" Background="#1F2937" Foreground="#9CA3AF"
+                                            Margin="0,0,4,0" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                            CornerRadius="6" Padding="0,8" FontSize="11" Click="LoginAsGuest_Click" />
+                                    <Button Grid.Column="1" Content="取消" Background="#1F2937" Foreground="#9CA3AF"
+                                            Margin="4,0,0,0" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                                            CornerRadius="6" Padding="0,8" FontSize="11" Click="CloseLoginOverlay_Click" />
+                                </Grid>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <!-- Bottom-Left BedrockBoot Style Floating Toast Notification Container -->
+                <StackPanel Name="ToastContainer"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Bottom"
+                            Margin="24,0,0,16"
+                            Spacing="8"
+                            ZIndex="9999"
+                            IsHitTestVisible="True" />
+            </Grid>
+        </Border>
+
+        <!-- Bottom Bar (BedrockBoot Exact Navigation Architecture) -->
+        <Border Grid.Row="3"
+                Height="62"
+                Padding="16,0"
+                Background="{DynamicResource BackgroundBrush}"
+                BorderBrush="{DynamicResource PrimaryBorderBrush}"
+                BorderThickness="0,1,0,0">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <!-- Left: Big Server Control Button (BedrockBoot GameLaunchBtn style) -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <Button Name="MainServerToggleBtn"
+                            Padding="22,9"
+                            CornerRadius="8"
+                            Classes="NoBorder"
+                            Click="MainServerToggle_Click"
+                            Background="{DynamicResource AccentBackgroundBrush}">
+                        <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                            <TextBlock Name="MainServerIconText" Text="▶" FontSize="16" Foreground="White" VerticalAlignment="Center" />
+                            <TextBlock Name="MainServerStatusText" Text="启动服务端" FontSize="14" FontWeight="SemiBold" Foreground="White" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+
+                <!-- Center: BedrockBoot's Navigation SelectBar -->
+                <selectBar:SelectBar Grid.Column="1"
+                                     Name="SelTag"
+                                     SelectedIndex="0"
+                                     SelectionChanged="SelTag_OnSelectionChanged"
+                                     HorizontalAlignment="Center"
+                                     VerticalAlignment="Center">
+                    <selectBar:SelectBarItem ItemText="仪表盘" Glyph="&#xE80F;" Tag="Dashboard" />
+                    <selectBar:SelectBarItem ItemText="版本管理" Glyph="&#xE896;" Tag="Versions" />
+                    <selectBar:SelectBarItem ItemText="控制台" Glyph="&#xE756;" Tag="Console" />
+                    <selectBar:SelectBarItem ItemText="模组管理" Glyph="&#xE74C;" Tag="Mods" />
+                    <selectBar:SelectBarItem ItemText="系统配置" Glyph="&#xE713;" Tag="Config" />
+                    <selectBar:SelectBarItem ItemText="创意工坊" Glyph="&#xE790;" Tag="Studio" />
+                    <selectBar:SelectBarItem ItemText="备份权限" Glyph="&#xE8D7;" Tag="Settings" />
+                    <selectBar:SelectBarItem ItemText="网页端" Glyph="&#xE774;" Tag="WebUI" />
+                </selectBar:SelectBar>
+
+                <!-- Right: BedrockBoot's Floating Version Card -->
+                <Border Grid.Column="2"
+                        Name="VersionStatusCard"
+                        Background="{DynamicResource PrimaryBorderBrush}"
+                        CornerRadius="8"
+                        Padding="14,8"
+                        PointerPressed="VersionCard_PointerPressed"
+                        Cursor="Hand"
+                        VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Name="BottomVerText" Text="EnderBridge" FontWeight="SemiBold" FontSize="12" Foreground="White" />
+                            <TextBlock Name="BottomStatusText" Text="○ 准备就绪" FontSize="10" Foreground="#AAAAAA" />
+                        </StackPanel>
+                        <TextBlock Text="⚙" FontSize="14" Foreground="#888888" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>
