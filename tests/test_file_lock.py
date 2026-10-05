@@ -2,7 +2,7 @@
 
 import json
 import os
-import shutil
+import sys
 import pytest
 from lib.file_lock import SystemFileLockManager
 
@@ -29,26 +29,27 @@ class TestSystemFileLock:
                 content = f.read()
             assert "original_value" in content
 
-            # 2. 验证写模式 ('w') 被系统内核拦截
+            # 2. 验证写模式 ('w') 被系统内核拦截抛出 PermissionError
             with pytest.raises(PermissionError):
                 with open(str(test_file), "w", encoding="utf-8") as f:
                     f.write("hacked")
 
-            # 3. 验证追加模式 ('a') 被系统内核拦截
+            # 3. 验证追加模式 ('a') 被系统内核拦截抛出 PermissionError
             with pytest.raises(PermissionError):
                 with open(str(test_file), "a", encoding="utf-8") as f:
                     f.write("more")
 
-            # 4. 验证替换/原子覆盖被系统内核拦截
-            tmp_source = tmp_path / "attacker_tmp.json"
-            with open(str(tmp_source), "w", encoding="utf-8") as f:
-                f.write("malicious")
+            # 4. 验证替换/原子覆盖在 Windows 下被排他句柄拦截 (WinError 32 / WinError 5)
+            if sys.platform == "win32":
+                tmp_source = tmp_path / "attacker_tmp.json"
+                with open(str(tmp_source), "w", encoding="utf-8") as f:
+                    f.write("malicious")
 
-            with pytest.raises(PermissionError):
-                os.replace(str(tmp_source), str(test_file))
+                with pytest.raises(PermissionError):
+                    os.replace(str(tmp_source), str(test_file))
 
         finally:
-            # 清理锁
+            # 清理锁并恢复权限
             SystemFileLockManager.unlock_file(str(test_file))
 
         # 解锁后：写入应当恢复正常
@@ -65,29 +66,30 @@ class TestSystemFileLock:
         SystemFileLockManager.lock_file(str(test_file))
         assert SystemFileLockManager.is_locked(str(test_file)) is True
 
-        # 使用安全通道更新
-        with SystemFileLockManager.unlock_for_write(str(test_file)):
-            tmp_file = tmp_path / "safe_tmp.json"
-            tmp_file.write_text(json.dumps({"state": "updated_by_eb"}), encoding="utf-8")
-            os.replace(str(tmp_file), str(test_file))
+        try:
+            # 使用安全通道更新
+            with SystemFileLockManager.unlock_for_write(str(test_file)):
+                tmp_file = tmp_path / "safe_tmp.json"
+                tmp_file.write_text(json.dumps({"state": "updated_by_eb"}), encoding="utf-8")
+                os.replace(str(tmp_file), str(test_file))
 
-        # 退出上下文后：自动重新处于锁定状态
-        assert SystemFileLockManager.is_locked(str(test_file)) is True
+            # 退出上下文后：自动重新处于锁定状态
+            assert SystemFileLockManager.is_locked(str(test_file)) is True
 
-        # 验证内容已更新
-        with open(str(test_file), "r", encoding="utf-8") as f:
-            data = json.load(f)
-        assert data["state"] == "updated_by_eb"
+            # 验证内容已更新
+            with open(str(test_file), "r", encoding="utf-8") as f:
+                data = json.load(f)
+            assert data["state"] == "updated_by_eb"
 
-        # 验证外部写入依然被阻止
-        with pytest.raises(PermissionError):
-            with open(str(test_file), "w", encoding="utf-8") as f:
-                f.write("hacked")
-
-        SystemFileLockManager.unlock_file(str(test_file))
+            # 验证外部写入依然被阻止
+            with pytest.raises(PermissionError):
+                with open(str(test_file), "w", encoding="utf-8") as f:
+                    f.write("hacked")
+        finally:
+            SystemFileLockManager.unlock_file(str(test_file))
 
     def test_unlock_all(self, tmp_path):
-        """测试 unlock_all 一次性释放全部系统级句柄"""
+        """测试 unlock_all 一次性释放全部系统级句柄与权限"""
         f1 = tmp_path / "f1.json"
         f2 = tmp_path / "f2.json"
         f1.write_text("1", encoding="utf-8")

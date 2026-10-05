@@ -1,27 +1,31 @@
 """lib/file_lock.py — 操作系统级运行时独占/排他文件锁管理器 (System File Lock Manager)
 
-在 EnderBridge 运行期间，对系统关键配置文件与核心源码持有系统级只读共享锁 (Windows FILE_SHARE_READ / POSIX flock LOCK_SH)，
+在 EnderBridge 运行期间，对系统关键配置文件与核心源码持有系统级只读保护锁，
 从操作系统内核层面彻底禁止外部独立进程 (如独立攻击脚本、病毒、第三方篡改程序、外部编辑器误操作等)
 在服务运行期间非法写入、覆盖、截断或删除核心配置与关键代码。
 
-特性：
-1. 操作系统内核级防护：
-   - Windows: 调用 Win32 CreateFileW API，以 GENERIC_READ 且仅允许 FILE_SHARE_READ 打开文件。
-     任何外部程序尝试以写模式 (GENERIC_WRITE, open('w'), open('a'), os.replace, shutil.copy)
-     访问被锁文件，均会被 Windows 内核直接抛出 ERROR_SHARING_VIOLATION (PermissionError)。
-   - POSIX: 使用 fcntl.flock (LOCK_SH) 提供共享锁保护。
+跨平台支持与防护设计：
+1. 操作系统权限与内核级防护：
+   - 跨平台强制只读 (os.chmod stat.S_IREAD / 0o444)：
+     在 Windows 与 Linux/macOS 上均会令外部进程执行 open('w') 或 open('a') 时直接触发 PermissionError: [Errno 13] Permission denied。
+   - Windows 共享锁强化 (Win32 CreateFileW):
+     以 GENERIC_READ 且仅开放 FILE_SHARE_READ 句柄，拒绝 FILE_SHARE_WRITE 与 FILE_SHARE_DELETE，
+     使 Windows 内核额外在文件被移动、替换 (os.replace)、原子写入或删除时直接抛出 WinError 32 / WinError 5。
+   - POSIX 共享锁强化 (fcntl.flock):
+     持有 LOCK_SH 共享锁，协同 UNIX 系统的文件锁管理。
 2. 零损耗读取：
    - 允许内部及外部所有进程并发以只读模式 ('r') 读取文件，完全不影响系统性能与监控探针。
 3. 安全受控修改通道 (unlock_for_write 上下文管理器)：
    - 当 EnderBridge 自身需要合法持久化配置 (如 WebUI 保存、白名单 Mod 保存) 时，
-     在微秒级时间内临时释放系统锁，执行原子写入与替换，并立即自动重新加锁。
+     在微秒级时间内临时释放系统锁，执行原子写入与替换，并立即自动恢复系统加锁。
 4. 退出自动清理：
-   - 注册 atexit 与 destroy 回调，进程退出时确保释放所有系统句柄。
+   - 注册 atexit 与 destroy 回调，进程退出时确保释放所有系统句柄并恢复权限。
 """
 
 import atexit
 import contextlib
 import os
+import stat
 import sys
 import threading
 from typing import Dict, List, Optional, Set
@@ -63,6 +67,7 @@ class SystemFileLockManager:
     _mutex = threading.RLock()
     _locks: Dict[str, any] = {}  # normpath -> handle or fd
     _raw_paths: Dict[str, str] = {}  # normpath -> original path
+    _orig_modes: Dict[str, int] = {}  # normpath -> original file permissions
 
     @classmethod
     def get(cls) -> "SystemFileLockManager":
@@ -86,6 +91,19 @@ class SystemFileLockManager:
             if norm in cls._locks:
                 return True
 
+            try:
+                mode = stat.S_IMODE(os.stat(abs_path).st_mode)
+                cls._orig_modes[norm] = mode
+            except Exception:
+                cls._orig_modes[norm] = 0o644
+
+            # 1. 跨平台设置文件为只读 (在 Windows 和 Linux/macOS 上均直接禁止 open('w') 与 open('a'))
+            try:
+                os.chmod(abs_path, stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
+            except Exception:
+                pass
+
+            # 2. 操作系统内核排他共享锁加固
             if _IS_WINDOWS:
                 try:
                     handle = ctypes.windll.kernel32.CreateFileW(
@@ -97,28 +115,29 @@ class SystemFileLockManager:
                         _FILE_ATTRIBUTE_NORMAL,
                         None,
                     )
-                    if handle == _INVALID_HANDLE_VALUE or handle <= 0:
-                        return False
-                    cls._locks[norm] = handle
+                    cls._locks[norm] = None if (handle == _INVALID_HANDLE_VALUE or handle <= 0) else handle
                     cls._raw_paths[norm] = abs_path
                     return True
                 except Exception:
-                    return False
+                    cls._locks[norm] = None
+                    cls._raw_paths[norm] = abs_path
+                    return True
             else:
-                if fcntl is None:
-                    return False
-                try:
-                    fd = os.open(abs_path, os.O_RDONLY)
-                    fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
-                    cls._locks[norm] = fd
-                    cls._raw_paths[norm] = abs_path
-                    return True
-                except Exception:
-                    return False
+                cls._raw_paths[norm] = abs_path
+                if fcntl is not None:
+                    try:
+                        fd = os.open(abs_path, os.O_RDONLY)
+                        fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
+                        cls._locks[norm] = fd
+                    except Exception:
+                        cls._locks[norm] = None
+                else:
+                    cls._locks[norm] = None
+                return True
 
     @classmethod
     def unlock_file(cls, filepath: str) -> bool:
-        """释放指定文件的系统级锁"""
+        """释放指定文件的系统级锁并恢复可写权限"""
         if not filepath:
             return False
         norm = _norm(filepath)
@@ -126,8 +145,17 @@ class SystemFileLockManager:
             if norm not in cls._locks:
                 return False
 
+            raw_path = cls._raw_paths.pop(norm, filepath)
             val = cls._locks.pop(norm, None)
-            cls._raw_paths.pop(norm, None)
+            orig_mode = cls._orig_modes.pop(norm, 0o644)
+
+            # 恢复可写权限
+            if raw_path and os.path.exists(raw_path):
+                try:
+                    os.chmod(raw_path, orig_mode | stat.S_IWUSR)
+                except Exception:
+                    pass
+
             if val is not None:
                 if _IS_WINDOWS:
                     try:
@@ -207,23 +235,16 @@ class SystemFileLockManager:
 
     @classmethod
     def unlock_all(cls) -> None:
-        """释放所有系统文件锁"""
+        """释放所有系统文件锁并恢复文件权限"""
         with cls._mutex:
-            for norm, val in list(cls._locks.items()):
-                if _IS_WINDOWS:
-                    try:
-                        ctypes.windll.kernel32.CloseHandle(val)
-                    except Exception:
-                        pass
-                else:
-                    try:
-                        os.close(val)
-                    except Exception:
-                        pass
+            for norm in list(cls._locks.keys()):
+                raw_path = cls._raw_paths.get(norm, norm)
+                cls.unlock_file(raw_path)
             cls._locks.clear()
             cls._raw_paths.clear()
+            cls._orig_modes.clear()
 
 
-# 进程退出时自动释放所有系统级句柄
+# 进程退出时自动释放所有系统级句柄与权限
 atexit.register(SystemFileLockManager.unlock_all)
 
