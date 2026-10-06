@@ -148,19 +148,56 @@ class _TerminalClient:
         return None
 
 
+DEFAULT_BUILTIN_MODS = {
+    "client": {
+        "AI": "mod.ai",
+        "PermissionCommands": "mod.permission",
+        "Tool": "mod.tool",
+        "Position": "mod.position",
+        "Music": "mod.music",
+        "MCFunc": "mod.mcfunc",
+        "MoreWS": "mod.morews",
+        "Ezmatic": "mod.ezmatic.main",
+        "ImageMod": "mod.image.main",
+        "Message": "mod.message",
+        "Bot": "mod.bot",
+    },
+    "server": {
+        "chat": "mod.read",
+        "spam": "mod.spam",
+    },
+}
+
+
 def _mods_config() -> dict:
+    mods_cfg = None
     try:
         from lib.config_loader import get_config
         cfg = get_config()
-        if "mods" in cfg and isinstance(cfg.get("mods"), dict):
-            return cfg["mods"]
+        if "mods" in cfg and isinstance(cfg.get("mods"), dict) and cfg.get("mods"):
+            mods_cfg = cfg["mods"]
     except Exception:
         pass
-    try:
-        from config import mods
-        return mods or {"client": {}, "server": {}}
-    except Exception:
-        return {"client": {}, "server": {}}
+
+    if not mods_cfg:
+        try:
+            from config import mods
+            if isinstance(mods, dict) and mods:
+                mods_cfg = mods
+        except Exception:
+            pass
+
+    res = {
+        "client": dict(DEFAULT_BUILTIN_MODS["client"]),
+        "server": dict(DEFAULT_BUILTIN_MODS["server"]),
+    }
+    if isinstance(mods_cfg, dict):
+        if isinstance(mods_cfg.get("client"), dict):
+            res["client"].update(mods_cfg["client"])
+        if isinstance(mods_cfg.get("server"), dict):
+            res["server"].update(mods_cfg["server"])
+    return res
+
 
 
 def _path_to_module(mod_path: str) -> str:
