@@ -1,0 +1,52 @@
+name: Sync Wiki by hydrox-action-bot
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+    paths:
+      - "wiki/**"
+  workflow_dispatch:
+
+jobs:
+  sync-wiki:
+    name: Sync Wiki to GitHub Wiki
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出当前主仓库
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.BOT_TOKEN }}
+
+      - name: 确认 wiki 目录存在
+        run: |
+          if [ ! -d "wiki" ]; then
+            echo "未发现 wiki/ 目录，跳过同步。"
+            exit 0
+          fi
+
+      - name: 检出并同步到 Wiki 仓库
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+        run: |
+          # 1. 克隆 GitHub Wiki 仓库 (通过 hydrox-action-bot 身份鉴权)
+          git clone "https://x-access-token:${BOT_TOKEN}@github.com/${{ github.repository }}.wiki.git" wiki_git
+
+          # 2. 将本地 wiki/ 下的文件同步复制过去 (排除 .git)
+          rsync -av --delete --exclude '.git' wiki/ wiki_git/
+
+          # 3. 配置 Git 提交身份为 hydrox-action-bot
+          cd wiki_git
+          git config user.name "hydrox-action-bot"
+          git config user.email "hydrox-action-bot@users.noreply.github.com"
+
+          # 4. 如果有变动则自动提交并推送到 master 与 main 分支
+          if [ -n "$(git status --porcelain)" ]; then
+            git add -A
+            git commit -m "docs: wiki synced automatically by @hydrox-action-bot [skip ci]"
+            git push origin master || git push origin main
+            echo "Wiki 同步成功！"
+          else
+            echo "Wiki 内容无变动，无需提交"
+          fi
