@@ -427,6 +427,7 @@ def load_config() -> dict:
         },
         "githubToken": config.get("githubToken", ""),
         "commandAliases": command_aliases,
+        "actionButtons": config.get("actionButtons", []),
         "playerListPolling": config.get("playerListPolling", {"enabled": False, "intervalSeconds": 30}),
         "updateConfig": config.get("updateConfig", {"autoBackup": True}),
         "wsConfig": cfg,
@@ -496,8 +497,8 @@ def save_config(new: dict) -> None:
     if "watchdog" in new and isinstance(new["watchdog"], dict):
         config.setdefault("watchdog", {}).update(new["watchdog"])
 
-    # 5. rateLimit & spam & basePath & commandAliases & playerListPolling & updateConfig & githubToken
-    for k in ("rateLimit", "spam", "basePath", "commandAliases", "playerListPolling", "updateConfig", "githubToken"):
+    # 5. rateLimit & spam & basePath & commandAliases & actionButtons & playerListPolling & updateConfig & githubToken
+    for k in ("rateLimit", "spam", "basePath", "commandAliases", "actionButtons", "playerListPolling", "updateConfig", "githubToken"):
         if k in new:
             config[k] = new[k]
 
@@ -1079,6 +1080,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if path == "/api/banlist/auto-ban-config":
             self._api_banlist_auto_ban_config_get()
             return
+        if path == "/api/action-buttons":
+            self._api_get_action_buttons()
+            return
         if path.startswith("/api/"):
             self._respond({"ok": False, "message": "Not Found"}, status=404)
             return
@@ -1249,6 +1253,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/scheduler/tasks/run":
             self._api_scheduler_run_task()
+            return
+        if parsed.path == "/api/action-buttons":
+            self._api_save_action_buttons()
             return
         self._respond({"ok": False, "message": "Not Found"}, status=404)
 
@@ -2460,6 +2467,61 @@ class WebUIHandler(BaseHTTPRequestHandler):
             threading.Thread(target=_deferred_restart, daemon=True).start()
         else:
             self._respond({"ok": True, "message": "配置已保存(部分设置需重启服务器生效)"})
+
+    DEFAULT_ACTION_BUTTONS = [
+        {"id": "day_weather", "title": "☀️ 晴天白昼", "icon": "☀️", "commands": ["/weather clear", "/time set day"], "color": "#f59e0b"},
+        {"id": "clean_items", "title": "🧹 清理掉落物", "icon": "🧹", "commands": ["/kill @e[type=item]"], "color": "#ef4444"},
+        {"id": "save_all", "title": "💾 全服保存", "icon": "💾", "commands": ["/save hold", "/save query"], "color": "#3b82f6"},
+        {"id": "bot_start", "title": "🤖 假人启动", "icon": "🤖", "commands": ["$bot start"], "color": "#10b981"},
+        {"id": "status_check", "title": "📋 系统状态", "icon": "📋", "commands": ["$status"], "color": "#8b5cf6"},
+    ]
+
+    def _api_get_action_buttons(self) -> None:
+        """获取控制台快捷动作按钮列表"""
+        from lib.config_loader import get_config
+        cfg = get_config()
+        buttons = cfg.get("actionButtons")
+        if not isinstance(buttons, list) or not buttons:
+            buttons = list(self.DEFAULT_ACTION_BUTTONS)
+        self._respond({"ok": True, "buttons": buttons})
+
+    def _api_save_action_buttons(self) -> None:
+        """保存控制台快捷动作按钮列表 (需要 config 权限)"""
+        if not _require_permission("config")(self):
+            return
+        body = self._read_body()
+        buttons = body.get("buttons")
+        if not isinstance(buttons, list):
+            self._respond({"ok": False, "message": "buttons 必须是数组"})
+            return
+        # 校验并净化每个按钮
+        cleaned = []
+        for idx, btn in enumerate(buttons):
+            if not isinstance(btn, dict): continue
+            title = str(btn.get("title") or f"按钮 {idx+1}").strip()
+            cmds = btn.get("commands") or []
+            if isinstance(cmds, str):
+                cmds = [c.strip() for c in cmds.split("\n") if c.strip()]
+            elif isinstance(cmds, list):
+                cmds = [str(c).strip() for c in cmds if str(c).strip()]
+            else:
+                cmds = []
+            cleaned.append({
+                "id": str(btn.get("id") or f"btn_{int(time.time()*1000)}_{idx}"),
+                "title": title,
+                "icon": str(btn.get("icon") or "⚡").strip()[:8],
+                "commands": cmds,
+                "color": str(btn.get("color") or "#3b82f6").strip(),
+            })
+        try:
+            from lib.config_loader import get_config
+            cfg = get_config().copy()
+            cfg["actionButtons"] = cleaned
+            save_config(cfg)
+            _audit(self, "config", f"更新了控制台快捷动作板 (共 {len(cleaned)} 个按钮)")
+            self._respond({"ok": True, "buttons": cleaned, "message": "快捷按钮已保存"})
+        except Exception as e:
+            self._respond({"ok": False, "message": f"保存失败: {e}"})
 
     def _api_get_permissions_meta(self) -> None:
         """获取所有动态发现的权限元数据 (需要 permissions 权限)"""

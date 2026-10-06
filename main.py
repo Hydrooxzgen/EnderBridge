@@ -35,15 +35,14 @@ USERS_JSON = os.path.join(CONFIG_DIR, "users.json")
 UPDATE_MARKER = os.path.join(ROOT, ".update_pending")
 
 # --- 版本常量 ---
-VERSION = "v1.1.0.1"
+VERSION = "v1.1.1"
 # ↓仅当不为None时从Github拉取更新日志, 反之则直接显示该变量内容。
 DESCRIPTION = None
 """
-fix1: 修复无法保存xbox live档案的问题
-fix2: 修复了启动时有几率无法读取config的问题
-feat1: 现在可以在webui控制台执行EB指令
-fix3: 修复了在bot连接到服务器的情况下bot list指令无法显示bot的问题
-safe_feat1: 加入系统锁
+safe_fix1: 修复了3个上游安全漏洞
+feat1: 传送点&家系统
+feat2: Web 快捷指令宏
+fix1: 修复了审计界面即使执行失败也显示"OK"的问题
 """
 MINIMIUM_ALLOWED_VERSION = "v1.1.0.1" # 因为v1.1.0.1版本新增了重要安全改进，再次降低了被第三方恶意mod入侵的风险，所以限制了降级
                                       # 但是如果你需要降级低于v1.1.0.1的版本，请更改这里的值为0.0.0以删除限制

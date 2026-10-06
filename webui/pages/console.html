@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -20,6 +20,15 @@
     <div class="row gap-10" style="align-items:stretch">
       <input type="text" id="consoleInput" data-i18n-ph="console.inputPh" placeholder="输入命令，如 /list 或 say hello" autocomplete="off" />
       <button class="btn btn-primary btn-sm" id="consoleExecBtn" data-i18n="console.exec">▶ 执行</button>
+    </div>
+
+    <!-- 快捷动作板 (Action Buttons) -->
+    <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border-color, rgba(255,255,255,0.08));">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+        <span style="font-size:12px;font-weight:600;color:var(--text-dim);" data-i18n="console.actionButtons">⚡ 快捷宏动作</span>
+        <button class="btn btn-sm" id="editActionButtonsBtn" style="font-size:11px;padding:2px 8px;" title="配置快捷动作">⚙️ 自定义</button>
+      </div>
+      <div id="actionButtonsBar" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
     </div>
   </div>
 

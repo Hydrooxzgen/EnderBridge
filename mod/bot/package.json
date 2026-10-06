@@ -14,6 +14,7 @@
   "overrides": {
     "axios": "^1.8.2",
     "tar": "^7.4.3",
-    "uuid": "^11.1.0"
+    "uuid": "^11.1.0",
+    "brace-expansion": "^1.1.21"
   }
 }

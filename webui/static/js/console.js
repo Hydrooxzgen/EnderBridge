@@ -442,3 +442,161 @@ if (logClearBtn) {
     updateLogCount();
   });
 }
+
+// ===== 快捷宏动作板 (Action Buttons) =====
+var _actionButtons = [];
+
+function loadActionButtons() {
+  var bar = $("actionButtonsBar");
+  if (!bar) return;
+  api("/action-buttons")
+    .then(function (res) {
+      if (res && res.ok && Array.isArray(res.buttons)) {
+        _actionButtons = res.buttons;
+        renderActionButtons();
+      }
+    })
+    .catch(function () {});
+}
+
+function renderActionButtons() {
+  var bar = $("actionButtonsBar");
+  if (!bar) return;
+  bar.innerHTML = "";
+  if (!_actionButtons || _actionButtons.length === 0) {
+    bar.innerHTML = '<span style="font-size:11px;color:var(--text-faint);">暂无快捷按钮</span>';
+    return;
+  }
+  _actionButtons.forEach(function (btn) {
+    var b = document.createElement("button");
+    b.className = "btn btn-sm";
+    b.style.cssText = "font-size:12px;padding:3px 10px;border-radius:6px;display:flex;align-items:center;gap:4px;cursor:pointer;border-left:3px solid " + (btn.color || "#3b82f6");
+    b.innerHTML = '<span>' + escapeHtml(btn.icon || "⚡") + '</span><span>' + escapeHtml(btn.title) + '</span>';
+    b.title = Array.isArray(btn.commands) ? btn.commands.join(" && ") : (btn.commands || "");
+    b.onclick = function () {
+      executeActionButton(btn);
+    };
+    bar.appendChild(b);
+  });
+}
+
+function executeActionButton(btn) {
+  var cmds = btn.commands || [];
+  if (typeof cmds === "string") cmds = [cmds];
+  if (!cmds || cmds.length === 0) return;
+  
+  toast("⚡ 执行快捷动作: " + btn.title, "info");
+  var delay = 0;
+  cmds.forEach(function (cmd, idx) {
+    setTimeout(function () {
+      if (cmd && cmd.trim()) {
+        sendCommand(cmd.trim());
+      }
+    }, idx * 150);
+  });
+}
+
+// 自定义按钮对话框
+var editActionBtn = $("editActionButtonsBtn");
+if (editActionBtn) {
+  editActionBtn.onclick = function () {
+    var modal = document.createElement("div");
+    modal.className = "modal active";
+    modal.innerHTML = 
+      '<div class="modal-box" style="max-width:520px;">' +
+        '<div class="modal-title">⚙️ 配置控制台快捷宏按钮</div>' +
+        '<div style="font-size:12px;color:var(--text-dim);margin-bottom:10px;">' +
+          '点击动作按钮将按顺序自动下发预设的一串命令（支持游戏命令 / 和 EB 前缀指令 $）。' +
+        '</div>' +
+        '<div id="modalButtonsList" style="max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;margin-bottom:12px;"></div>' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+          '<button class="btn btn-sm" id="modalAddBtn">➕ 添加动作</button>' +
+          '<div style="display:flex;gap:6px;">' +
+            '<button class="btn btn-sm" id="modalCancelBtn">取消</button>' +
+            '<button class="btn btn-sm btn-primary" id="modalSaveBtn">保存配置</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(modal);
+
+    var listEl = modal.querySelector("#modalButtonsList");
+    var editList = JSON.parse(JSON.stringify(_actionButtons));
+
+    function renderModalList() {
+      listEl.innerHTML = "";
+      editList.forEach(function (item, idx) {
+        var card = document.createElement("div");
+        card.style.cssText = "padding:8px;border:1px solid var(--border-color, rgba(255,255,255,0.08));border-radius:6px;background:rgba(255,255,255,0.02);display:flex;flex-direction:column;gap:6px;";
+        card.innerHTML =
+          '<div style="display:flex;gap:6px;align-items:center;">' +
+            '<input type="text" style="width:40px;text-align:center;" value="' + escapeHtml(item.icon || "⚡") + '" placeholder="图标" data-field="icon" />' +
+            '<input type="text" style="flex:1;" value="' + escapeHtml(item.title || "") + '" placeholder="按钮名称" data-field="title" />' +
+            '<input type="color" style="width:36px;height:28px;padding:1px;cursor:pointer;" value="' + escapeHtml(item.color || "#3b82f6") + '" data-field="color" />' +
+            '<button class="btn btn-sm" style="color:#ef4444;" data-del="' + idx + '">✕</button>' +
+          '</div>' +
+          '<div>' +
+            '<textarea style="width:100%;height:46px;font-family:monospace;font-size:11px;resize:vertical;" placeholder="执行的指令列表 (每行一条)" data-field="cmds">' + escapeHtml(Array.isArray(item.commands) ? item.commands.join("\n") : (item.commands || "")) + '</textarea>' +
+          '</div>';
+
+        card.querySelectorAll("input, textarea").forEach(function (input) {
+          input.oninput = function () {
+            var f = this.getAttribute("data-field");
+            if (f === "cmds") {
+              item.commands = this.value.split("\n").map(function(s){return s.trim()}).filter(Boolean);
+            } else {
+              item[f] = this.value;
+            }
+          };
+        });
+
+        card.querySelector("[data-del]").onclick = function () {
+          editList.splice(idx, 1);
+          renderModalList();
+        };
+
+        listEl.appendChild(card);
+      });
+    }
+
+    renderModalList();
+
+    modal.querySelector("#modalAddBtn").onclick = function () {
+      editList.push({
+        id: "btn_" + Date.now(),
+        title: "新快捷动作",
+        icon: "⚡",
+        color: "#3b82f6",
+        commands: ["/say 快捷动作已执行"],
+      });
+      renderModalList();
+    };
+
+    modal.querySelector("#modalCancelBtn").onclick = function () {
+      modal.remove();
+    };
+
+    modal.querySelector("#modalSaveBtn").onclick = function () {
+      api("/action-buttons", {
+        method: "POST",
+        body: JSON.stringify({ buttons: editList }),
+      })
+      .then(function (res) {
+        if (res && res.ok) {
+          toast("快捷动作按钮已保存", "success");
+          _actionButtons = res.buttons || editList;
+          renderActionButtons();
+          modal.remove();
+        } else {
+          toast(res.message || "保存失败", "error");
+        }
+      })
+      .catch(function (err) {
+        toast("网络请求失败: " + err, "error");
+      });
+    };
+  };
+}
+
+// 页面加载时自动获取动作按钮
+loadActionButtons();
+

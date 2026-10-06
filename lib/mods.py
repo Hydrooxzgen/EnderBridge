@@ -148,19 +148,57 @@ class _TerminalClient:
         return None
 
 
+DEFAULT_BUILTIN_MODS = {
+    "client": {
+        "AI": "mod.ai",
+        "PermissionCommands": "mod.permission",
+        "Tool": "mod.tool",
+        "Position": "mod.position",
+        "Music": "mod.music",
+        "MCFunc": "mod.mcfunc",
+        "MoreWS": "mod.morews",
+        "Ezmatic": "mod.ezmatic.main",
+        "ImageMod": "mod.image.main",
+        "Message": "mod.message",
+        "Bot": "mod.bot",
+        "Warp": "mod.warp",
+    },
+    "server": {
+        "chat": "mod.read",
+        "spam": "mod.spam",
+    },
+}
+
+
 def _mods_config() -> dict:
+    mods_cfg = None
     try:
         from lib.config_loader import get_config
         cfg = get_config()
-        if "mods" in cfg and isinstance(cfg.get("mods"), dict):
-            return cfg["mods"]
+        if "mods" in cfg and isinstance(cfg.get("mods"), dict) and cfg.get("mods"):
+            mods_cfg = cfg["mods"]
     except Exception:
         pass
-    try:
-        from config import mods
-        return mods or {"client": {}, "server": {}}
-    except Exception:
-        return {"client": {}, "server": {}}
+
+    if not mods_cfg:
+        try:
+            from config import mods
+            if isinstance(mods, dict) and mods:
+                mods_cfg = mods
+        except Exception:
+            pass
+
+    res = {
+        "client": dict(DEFAULT_BUILTIN_MODS["client"]),
+        "server": dict(DEFAULT_BUILTIN_MODS["server"]),
+    }
+    if isinstance(mods_cfg, dict):
+        if isinstance(mods_cfg.get("client"), dict):
+            res["client"].update(mods_cfg["client"])
+        if isinstance(mods_cfg.get("server"), dict):
+            res["server"].update(mods_cfg["server"])
+    return res
+
 
 
 def _path_to_module(mod_path: str) -> str:
@@ -904,28 +942,28 @@ class ClientModManager:
                 self.client.tell(f"§cCommand | §fError > §i命令权限错误", sender)
                 return
 
-            if not self.execute(sender, msg, self.commands["normal"]):
+            if not await self.execute(sender, msg, self.commands["normal"]):
                 return
 
             if permission < 1:
                 self.client.tell(f"§cCommand | §fError > §i未知的命令 {msg.split(' ')[0]}，权限受限", sender)
                 return
 
-            if not self.execute(sender, msg, self.commands["user"]):
+            if not await self.execute(sender, msg, self.commands["user"]):
                 return
 
             if permission < 2:
                 self.client.tell(f"§cCommand | §fError > §i未知的命令 {msg.split(' ')[0]}，权限受限", sender)
                 return
 
-            if not self.execute(sender, msg, self.commands["op"]):
+            if not await self.execute(sender, msg, self.commands["op"]):
                 return
 
             if permission < 3:
                 self.client.tell(f"§cCommand | §fError > §i未知的命令 {msg.split(' ')[0]}，权限受限", sender)
                 return
 
-            if not self.execute(sender, msg, self.commands["owner"]):
+            if not await self.execute(sender, msg, self.commands["owner"]):
                 return
 
             self.client.tell(f"§cCommand | §fError > §i未知的命令 {msg.split(' ')[0]}", sender)
@@ -944,7 +982,7 @@ class ClientModManager:
             if self.client is Current.client:
                 shared.message_logger.log(f"<{sender}> {msg}")
 
-    def execute(self, sender: str, msg: str, cmds: list) -> bool:
+    async def execute(self, sender: str, msg: str, cmds: list) -> bool:
         """遍历命令列表并执行匹配的命令;False=已匹配并执行,True=无匹配"""
         try:
             for cmd in cmds:
@@ -955,17 +993,21 @@ class ClientModManager:
 
                 cmd.on_error = _on_error
 
-                result = cmd.execute(sender, msg)
+                # 支持异步等待命令真实执行结果(避免协程未完成即误记录[OK])
+                if hasattr(cmd, "execute_async"):
+                    result = await cmd.execute_async(sender, msg)
+                else:
+                    result = cmd.execute(sender, msg)
 
                 if result:
-                    # 审计日志:记录命令执行结果(成功/失败)
+                    # 审计日志:记录命令真实执行结果(成功/失败)
                     from lib.logger import audit_log
                     status = "OK" if result.get("status") else "FAIL"
                     detail = result.get("message", "") if not result.get("status") else ""
                     audit_log.append("command", sender, f"{msg} → [{status}]{' ' + detail if detail else ''}")
 
-                    # 命令执行出错时通知发送者
-                    if not result.get("status") and result.get("message"):
+                    # 命令执行出错时通知发送者 (如果尚未通过 quiet 标记抑制重复提示)
+                    if not result.get("status") and result.get("message") and not result.get("quiet"):
                         self.client.tell(f"§cCommand | §fError > §i{result['message']}", sender)
                     return False
         except Exception as e:

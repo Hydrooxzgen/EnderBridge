@@ -328,6 +328,7 @@ class Command:
                 result_list.append(now_text)
 
         # 调用命令执行函数
+        task = None
         if self.func is not None:
             try:
                 ret = self.func(commander, *result_list)
@@ -343,10 +344,35 @@ class Command:
                     else:
                         # 无运行中的事件循环:仅记录
                         asyncio.get_event_loop().run_until_complete(ret)
+                elif isinstance(ret, dict) and "status" in ret:
+                    return ret
+                elif ret is False:
+                    return {"status": False, "message": "命令执行失败"}
             except Exception as e:
                 return {"status": False, "message": str(e)}
 
-        return {"status": True, "message": result_list}
+        res_dict = {"status": True, "message": result_list}
+        if task is not None:
+            res_dict["task"] = task
+        return res_dict
+
+    async def execute_async(self, commander: str, text: str):
+        """异步执行命令并等待真实执行结果，支持协程返回状态与异常捕获"""
+        res = self.execute(commander, text)
+        if not res or not isinstance(res, dict):
+            return res
+        task = res.get("task")
+        if task is not None:
+            try:
+                task_res = await task
+                if isinstance(task_res, dict) and "status" in task_res:
+                    return task_res
+                elif task_res is False:
+                    return {"status": False, "message": "命令执行失败"}
+                return {"status": True, "message": res.get("message")}
+            except Exception as e:
+                return {"status": False, "message": str(e)}
+        return res
 
     def _on_task_done(self, task) -> None:
         """协程任务完成回调:捕获异常并通知 on_error"""
