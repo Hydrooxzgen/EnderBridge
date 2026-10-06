@@ -35,9 +35,10 @@ USERS_JSON = os.path.join(CONFIG_DIR, "users.json")
 UPDATE_MARKER = os.path.join(ROOT, ".update_pending")
 
 # --- 版本常量 ---
-VERSION = "v1.1.1 dev"
+VERSION = "v1.1.1"
 # ↓仅当不为None时从Github拉取更新日志, 反之则直接显示该变量内容。
-DESCRIPTION = """
+DESCRIPTION = None
+"""
 safe_fix1: 修复了3个上游安全漏洞
 feat1: 传送点&家系统
 feat2: Web 快捷指令宏
