@@ -44,6 +44,7 @@ OFFICIAL_BUILTIN_MOD_FILES = {
     "read.py",
     "spam.py",
     "tool.py",
+    "warp.py",
 }
 
 OFFICIAL_BUILTIN_MOD_DIRS = {
@@ -76,7 +77,40 @@ def _is_official_mod(co_filename: str) -> bool:
     return False
 
 
-def _is_caller_mod() -> Tuple[bool, str]:
+# 官方内置 Mod 专属业务数据文件白名单 (允许其写入/原子替换自身的数据文件，如传送点与家数据)
+OFFICIAL_MOD_ALLOWED_DATA_FILES = {
+    "warp.py": {"warps.json", "homes.json"},
+}
+
+
+def _is_official_mod_allowed_target(co_filename: str, target) -> bool:
+    """检查是否属于已登记官方内置 Mod 对其专属数据文件的合法写入"""
+    if not co_filename or not target:
+        return False
+    mod_basename = os.path.basename(co_filename)
+    if mod_basename.endswith(".pyc") or mod_basename.endswith(".pyo"):
+        mod_basename = mod_basename[:-1]
+    allowed_files = OFFICIAL_MOD_ALLOWED_DATA_FILES.get(mod_basename)
+    if not allowed_files:
+        return False
+
+    t_str = str(target)
+    # 兼容 os.replace/rename 时格式 "src -> dst"
+    targets = [p.strip() for p in t_str.split(" -> ")] if " -> " in t_str else [t_str]
+    for t in targets:
+        base = os.path.basename(t).lower()
+        matched = False
+        for allowed in allowed_files:
+            al_lower = allowed.lower()
+            if base == al_lower or base.startswith(al_lower + ".tmp"):
+                matched = True
+                break
+        if not matched:
+            return False
+    return True
+
+
+def _is_caller_mod(target=None) -> Tuple[bool, str]:
     """回溯当前调用栈，判断当前文件操作是否由 mod/ 目录下的非官方第三方模块直接或间接发起
 
     返回: (is_mod: bool, caller_filename: str)
@@ -116,8 +150,11 @@ def _is_caller_mod() -> Tuple[bool, str]:
             if norm_file and norm_file != norm_lib_mods:
                 # 判断当前调用栈帧是否来自 mod/ 目录
                 if (norm_mod_dir and norm_file.startswith(norm_mod_dir + "/")) or ("/mod/" in norm_file):
-                    # 如果是官方内置 Mod 且通过授权的 save_config 核心方法写入，则安全放行
+                    # 1) 如果是官方内置 Mod 且通过授权的 save_config 核心方法写入，则安全放行
                     if _is_official_mod(co_filename) and has_authorized_save_api:
+                        pass
+                    # 2) 如果是官方内置 Mod 且正在写入其专属已声明的数据文件 (如 warps.json, homes.json)，则安全放行
+                    elif _is_official_mod(co_filename) and _is_official_mod_allowed_target(co_filename, target):
                         pass
                     else:
                         return True, co_filename
@@ -189,7 +226,7 @@ def _audit_hook(event: str, args: tuple) -> None:
                 return
 
             if _is_protected_target(target):
-                is_mod, caller = _is_caller_mod()
+                is_mod, caller = _is_caller_mod(target)
                 if is_mod:
                     _log_and_block(caller, target, "写入/覆盖")
 
@@ -199,7 +236,7 @@ def _audit_hook(event: str, args: tuple) -> None:
                 return
             target = args[0]
             if _is_protected_target(target):
-                is_mod, caller = _is_caller_mod()
+                is_mod, caller = _is_caller_mod(target)
                 if is_mod:
                     _log_and_block(caller, target, "删除")
 
@@ -209,7 +246,7 @@ def _audit_hook(event: str, args: tuple) -> None:
                 return
             src, dst = args[0], args[1]
             if _is_protected_target(src) or _is_protected_target(dst):
-                is_mod, caller = _is_caller_mod()
+                is_mod, caller = _is_caller_mod(f"{src} -> {dst}")
                 if is_mod:
                     _log_and_block(caller, f"{src} -> {dst}", "移动/重命名")
 
@@ -218,7 +255,7 @@ def _audit_hook(event: str, args: tuple) -> None:
                 return
             target = args[0]
             if _is_protected_target(target):
-                is_mod, caller = _is_caller_mod()
+                is_mod, caller = _is_caller_mod(target)
                 if is_mod:
                     _log_and_block(caller, target, "截断")
 

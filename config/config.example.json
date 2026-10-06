@@ -71,7 +71,8 @@
       "Ezmatic": "mod.ezmatic.main",
       "ImageMod": "mod.image.main",
       "Message": "mod.message",
-      "Bot": "mod.bot"
+      "Bot": "mod.bot",
+      "Warp": "mod.warp"
     },
     "server": {
       "chat": "mod.read",
@@ -85,6 +86,12 @@
     ],
     "bot": [
       "b"
+    ],
+    "home": [
+      "h"
+    ],
+    "warp": [
+      "w"
     ],
     "function": [
       "func",
