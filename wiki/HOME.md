@@ -1,6 +1,6 @@
-# ⛏️ EnderBridge Wiki
+# EnderBridge Wiki
 
-> Minecraft 基岩版 (Bedrock Edition) 服务器端模组加载框架与控制台管理平台
+> Minecraft 基岩版 (Bedrock Edition) 服务器端模组加载框架&管理平台
 > 通过 WebSocket 桥接游戏客户端，以「客户端 Mod / 服务端 Mod」两层架构加载扩展，并配备现代化 Web 管理面板与跨平台桌面/移动客户端。
 
 ---
