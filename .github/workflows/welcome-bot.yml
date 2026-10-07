@@ -15,7 +15,7 @@ jobs:
     name: Auto Welcome Comment
     runs-on: ubuntu-latest
     steps:
-      - name: 自动以 Bot 身份回复欢迎消息
+      - name: Post welcome comment as bot
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.BOT_TOKEN }}
@@ -23,14 +23,14 @@ jobs:
             const isPR = !!context.payload.pull_request;
             const author = isPR ? context.payload.pull_request.user.login : context.payload.issue.user.login;
 
-            // 如果发起人是 Bot 本身，跳过避免循环
+            // Skip if the author is the bot itself to prevent comment loops
             if (author === 'hydrox-action-bot') {
               console.log('Skipping comment from bot self.');
               return;
             }
 
-            const issueComment = "你好 @" + author + "！感谢提交 Issue。\n\n我们已经收到你的反馈,管理员会尽快跟进处理。\n如有更多日志或复现步骤, 请随时在此补充。";
-            const prComment = "你好 @" + author + "！非常感谢为 EnderBridge 贡献代码！\n\n我们的自动化 CI 检查正在运行中，管理员 会尽快为你审查 PR。";
+            const issueComment = "Hello @" + author + "! Thank you for opening this issue.\n\nWe have received your feedback, and maintainers will look into it as soon as possible.\nIf you have any additional logs, screenshots, or reproduction steps, please feel free to add them here.";
+            const prComment = "Hello @" + author + "! Thank you so much for contributing to EnderBridge!\n\nOur automated CI checks are currently running, and maintainers will review your pull request soon.";
 
             const message = isPR ? prComment : issueComment;
 
