@@ -278,6 +278,17 @@ def _log_and_block(caller: str, target: str, action: str) -> None:
             shared.logger.error(msg)
     except Exception:
         pass
+    try:
+        from lib.webhook import webhook
+        webhook.dispatch(
+            "security_guard",
+            "error",
+            "安全守卫拦截非法操作",
+            msg,
+            {"caller": caller_name, "target": str(target), "action": action},
+        )
+    except Exception:
+        pass
     raise PermissionError(msg)
 
 

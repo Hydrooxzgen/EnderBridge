@@ -59,6 +59,28 @@
       "accessToken": ""
     }
   },
+  "webhookConfig": {
+    "enabled": false,
+    "throttleSeconds": 3,
+    "services": [
+      {
+        "id": "demo_discord",
+        "name": "Discord 运维告警频道",
+        "type": "discord",
+        "url": "https://discord.com/api/webhooks/YOUR_WEBHOOK_URL",
+        "secret": "",
+        "enabled": true,
+        "events": [
+          "server_lifecycle",
+          "client_connection",
+          "auto_ban",
+          "security_guard",
+          "watchdog",
+          "error_log"
+        ]
+      }
+    ]
+  },
   "mods": {
     "client": {
       "AI": "mod.ai",

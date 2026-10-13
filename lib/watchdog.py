@@ -137,6 +137,18 @@ class Watchdog:
                 f"线程堆栈快照已转储至: {dump_path}"
             )
 
+        try:
+            from lib.webhook import webhook
+            webhook.dispatch(
+                "watchdog",
+                "error",
+                "看门狗检测到主事件循环挂起",
+                f"主事件循环已静默 {silence_sec:.1f} 秒 (阈值 {self.hang_timeout}s)，系统疑似卡死。堆栈快照已转储，自愈状态: {'触发自愈重启' if self.auto_recover else '未开启自动重启'}",
+                {"silence_sec": round(silence_sec, 2), "threshold": self.hang_timeout, "auto_recover": self.auto_recover, "dump_file": dump_path},
+            )
+        except Exception:
+            pass
+
         # 2. 如果开启了自动自愈且未重复触发，调用重启处理器
         if self.auto_recover and not self._recovery_triggered:
             self._recovery_triggered = True
