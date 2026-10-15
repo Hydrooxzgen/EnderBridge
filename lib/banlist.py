@@ -115,7 +115,7 @@ def record_auth_failure(ip: str) -> dict:
 
     if attempts >= _FAIL_THRESHOLD and _auto_ban_enabled:
         # 自动封禁时长: _BAN_DURATION 为秒, ban() 需要分钟
-        ban_dur_min = max(_BAN_DURATION // 60, 1) if _BAN_DURATION > 0 else 0
+        ban_dur_min = _BAN_DURATION / 60 if _BAN_DURATION > 0 else 0
         ban(ip, reason=f"自动封禁: {_FAIL_WINDOW}秒内 {attempts} 次登录失败",
             duration=ban_dur_min)
         try:
