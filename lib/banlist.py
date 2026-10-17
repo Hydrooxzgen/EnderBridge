@@ -115,13 +115,25 @@ def record_auth_failure(ip: str) -> dict:
 
     if attempts >= _FAIL_THRESHOLD and _auto_ban_enabled:
         # 自动封禁时长: _BAN_DURATION 为秒, ban() 需要分钟
-        ban_dur_min = max(_BAN_DURATION // 60, 1) if _BAN_DURATION > 0 else 0
+        ban_dur_min = _BAN_DURATION / 60 if _BAN_DURATION > 0 else 0
         ban(ip, reason=f"自动封禁: {_FAIL_WINDOW}秒内 {attempts} 次登录失败",
             duration=ban_dur_min)
         try:
             from lib.logger import audit_log
             dur_text = "永久" if ban_dur_min <= 0 else f"{ban_dur_min} 分钟"
             audit_log.append("ban", "System", f"自动封禁了 {ip} ({_FAIL_WINDOW}秒内 {attempts} 次登录失败, 时长: {dur_text})")
+        except Exception:
+            pass
+        try:
+            from lib.webhook import webhook
+            dur_text = "永久" if ban_dur_min <= 0 else f"{ban_dur_min} 分钟"
+            webhook.dispatch(
+                "auto_ban",
+                "error",
+                "防火墙自动封禁触发",
+                f"IP `{ip}` 在 {_FAIL_WINDOW} 秒内累计登录失败 {attempts} 次，触发防爆破规则已被自动封禁 (时长: {dur_text})",
+                {"ip": ip, "attempts": attempts, "window_sec": _FAIL_WINDOW, "duration": dur_text},
+            )
         except Exception:
             pass
         _fail_log.pop(ip, None)

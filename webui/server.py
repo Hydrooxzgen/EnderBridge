@@ -433,6 +433,11 @@ def load_config() -> dict:
         "wsConfig": cfg,
         "webuiConfig": webui,
         "watchdog": config.get("watchdog", {"auto_restart": True}),
+        "webhookConfig": config.get("webhookConfig", {
+            "enabled": False,
+            "throttleSeconds": 3,
+            "services": [],
+        }),
         "raw": config,
     }
 
@@ -594,6 +599,10 @@ def save_config(new: dict) -> None:
     # 13. is_first_run 明确复位
     config["is_first_run"] = False
 
+    # 14. webhookConfig
+    if "webhookConfig" in new and isinstance(new["webhookConfig"], dict):
+        config["webhookConfig"] = new["webhookConfig"]
+
     # 保存到 JSON (原子写入，系统锁安全通道)
     from lib.file_lock import SystemFileLockManager
     with SystemFileLockManager.unlock_for_write(CONFIG_JSON):
@@ -615,6 +624,13 @@ def save_config(new: dict) -> None:
         from lib.command import reload_all_aliases
         reload_config()  # 清除配置缓存
         reload_all_aliases()
+    except Exception:
+        pass
+
+    # Webhook 配置热重载
+    try:
+        from lib.webhook import webhook
+        webhook.reload()
     except Exception:
         pass
 
@@ -1083,6 +1099,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if path == "/api/action-buttons":
             self._api_get_action_buttons()
             return
+        if path == "/api/webhook":
+            self._api_webhook_get()
+            return
         if path.startswith("/api/"):
             self._respond({"ok": False, "message": "Not Found"}, status=404)
             return
@@ -1226,6 +1245,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/banlist/auto-ban-config":
             self._api_banlist_auto_ban_config_set()
+            return
+        if parsed.path == "/api/webhook/test":
+            self._api_webhook_test()
             return
         if parsed.path == "/api/banlist/edit":
             self._api_banlist_edit()
@@ -2469,11 +2491,11 @@ class WebUIHandler(BaseHTTPRequestHandler):
             self._respond({"ok": True, "message": "配置已保存(部分设置需重启服务器生效)"})
 
     DEFAULT_ACTION_BUTTONS = [
-        {"id": "day_weather", "title": "☀️ 晴天白昼", "icon": "☀️", "commands": ["/weather clear", "/time set day"], "color": "#f59e0b"},
-        {"id": "clean_items", "title": "🧹 清理掉落物", "icon": "🧹", "commands": ["/kill @e[type=item]"], "color": "#ef4444"},
-        {"id": "save_all", "title": "💾 全服保存", "icon": "💾", "commands": ["/save hold", "/save query"], "color": "#3b82f6"},
-        {"id": "bot_start", "title": "🤖 假人启动", "icon": "🤖", "commands": ["$bot start"], "color": "#10b981"},
-        {"id": "status_check", "title": "📋 系统状态", "icon": "📋", "commands": ["$status"], "color": "#8b5cf6"},
+        {"id": "day_weather", "title": "晴天白昼", "icon": "☀️", "commands": ["/weather clear", "/time set day"], "color": "#f59e0b"},
+        {"id": "clean_items", "title": "清理掉落物", "icon": "🧹", "commands": ["/kill @e[type=item]"], "color": "#ef4444"},
+        {"id": "save_all", "title": "全服保存", "icon": "💾", "commands": ["/save hold", "/save query"], "color": "#3b82f6"},
+        {"id": "bot_start", "title": "假人启动", "icon": "🤖", "commands": ["$bot start"], "color": "#10b981"},
+        {"id": "status_check", "title": "系统状态", "icon": "📋", "commands": ["$status"], "color": "#8b5cf6"},
     ]
 
     def _api_get_action_buttons(self) -> None:
@@ -2483,7 +2505,16 @@ class WebUIHandler(BaseHTTPRequestHandler):
         buttons = cfg.get("actionButtons")
         if not isinstance(buttons, list) or not buttons:
             buttons = list(self.DEFAULT_ACTION_BUTTONS)
-        self._respond({"ok": True, "buttons": buttons})
+        cleaned = []
+        for btn in buttons:
+            if isinstance(btn, dict):
+                b = dict(btn)
+                icon = str(b.get("icon") or "").strip()
+                title = str(b.get("title") or "").strip()
+                if icon and title.startswith(icon):
+                    b["title"] = title[len(icon):].strip()
+                cleaned.append(b)
+        self._respond({"ok": True, "buttons": cleaned})
 
     def _api_save_action_buttons(self) -> None:
         """保存控制台快捷动作按钮列表 (需要 config 权限)"""
@@ -3782,6 +3813,25 @@ class WebUIHandler(BaseHTTPRequestHandler):
         except Exception:
             pass
         self._respond({"ok": True, **banlist.get_auto_ban_config()})
+
+    def _api_webhook_get(self) -> None:
+        """获取当前 Webhook 配置 (需要 config 权限)"""
+        if not _require_permission("config")(self):
+            return
+        from lib.webhook import webhook
+        self._respond({"ok": True, "webhookConfig": webhook.get_config()})
+
+    def _api_webhook_test(self) -> None:
+        """在线测试单个 Webhook 服务的网络联通与认证合法性 (需要 config 权限)"""
+        if not _require_permission("config")(self):
+            return
+        body = self._read_body()
+        if not isinstance(body, dict):
+            self._respond({"ok": False, "message": "无效请求参数"}, status=400)
+            return
+        from lib.webhook import webhook
+        ok, msg = webhook.test_service(body)
+        self._respond({"ok": ok, "message": msg})
 
     def _api_restart(self) -> None:
         """一键重启:触发主程序后台执行优雅关闭并重启进程(需要 restart 权限)"""

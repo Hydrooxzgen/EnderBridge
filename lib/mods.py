@@ -162,6 +162,7 @@ DEFAULT_BUILTIN_MODS = {
         "Message": "mod.message",
         "Bot": "mod.bot",
         "Warp": "mod.warp",
+        "TPA": "mod.tpa",
     },
     "server": {
         "chat": "mod.read",

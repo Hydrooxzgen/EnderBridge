@@ -35,14 +35,13 @@ USERS_JSON = os.path.join(CONFIG_DIR, "users.json")
 UPDATE_MARKER = os.path.join(ROOT, ".update_pending")
 
 # --- 版本常量 ---
-VERSION = "v1.1.1"
+VERSION = "v1.1.2"
 # ↓仅当不为None时从Github拉取更新日志, 反之则直接显示该变量内容。
 DESCRIPTION = None
 """
-safe_fix1: 修复了3个上游安全漏洞
-feat1: 传送点&家系统
-feat2: Web 快捷指令宏
-fix1: 修复了审计界面即使执行失败也显示"OK"的问题
+feat1: 多平台 Webhook 告警通知
+fix1: 修复了当ban的时间小于60秒时, 导致ban时间会被强制改为一分钟的bug
+feat2: tpa support
 """
 MINIMIUM_ALLOWED_VERSION = "v1.1.0.1" # 因为v1.1.0.1版本新增了重要安全改进，再次降低了被第三方恶意mod入侵的风险，所以限制了降级
                                       # 但是如果你需要降级低于v1.1.0.1的版本，请更改这里的值为0.0.0以删除限制
@@ -1133,6 +1132,18 @@ async def connection_handler(ws):
     conn.id = str(uuid4())  # type: ignore[attr-defined]
     connections.add(conn)
 
+    try:
+        from lib.webhook import webhook
+        webhook.dispatch(
+            "client_connection",
+            "info",
+            "Minecraft 客户端已连接",
+            f"客户端从 `{client_ip}` 成功接入 WebSocket 服务 (当前总连接数: {len(connections)})",
+            {"ip": client_ip, "total_connections": len(connections)},
+        )
+    except Exception:
+        pass
+
     client_mod = None
     initialized = False
 
@@ -1220,6 +1231,18 @@ async def connection_handler(ws):
     shared.logger.info(f"客户端 {client_ip} 连接已关闭")
     from lib.logger import audit_log
     audit_log.append("disconnect", client_ip, "客户端已断开")
+
+    try:
+        from lib.webhook import webhook
+        webhook.dispatch(
+            "client_connection",
+            "warning",
+            "Minecraft 客户端已断开",
+            f"客户端 `{client_ip}` 连接已断开 (剩余连接数: {len(connections)})",
+            {"ip": client_ip, "remaining_connections": len(connections)},
+        )
+    except Exception:
+        pass
 
     # 通知服务端 Mod 客户端已断开连接
     ServerModManager.on_client_disconnect(conn, conn is Current.client)
@@ -1931,6 +1954,17 @@ async def main():
         await ClientModManager.load()
         shared.logger.info("Mod 加载完成")
     shared.logger.info("服务器已启动")
+    try:
+        from lib.webhook import webhook
+        webhook.dispatch(
+            "server_lifecycle",
+            "info",
+            "服务器已启动就绪",
+            f"EnderBridge 服务端已成功启动，WebSocket 监听端口: {port}，WebUI 已就绪。",
+            {"ws_port": port, "ws_name": wsConfig.get("name", "EnderBridge")},
+        )
+    except Exception:
+        pass
 
     # 启用系统级文件锁，防止外部进程或攻击脚本在运行期间篡改核心配置文件
     try:
@@ -2022,6 +2056,17 @@ async def destroy():
         pass
 
     shared.logger.info("正在停止 Web 管理界面...")
+    try:
+        from lib.webhook import webhook
+        webhook.dispatch(
+            "server_lifecycle",
+            "warning",
+            "服务器正在关闭",
+            "EnderBridge 收到停止信号，服务正在退出并清理资源与连接。",
+            sync_timeout=3.0,
+        )
+    except Exception:
+        pass
     try:
         from webui.server import stop_webui
         stop_webui()

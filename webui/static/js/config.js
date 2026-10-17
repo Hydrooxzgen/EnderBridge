@@ -23,6 +23,7 @@ requireAuth(function (role) {
   initCategoryNav();
   initTexturePackManager();
   initBackupManager();
+  initWebhookManager();
 });
 
 // ===== 分类导航 =====
@@ -234,6 +235,13 @@ function loadConfig() {
     // 始终显示别名 tab,不再因为空所以hide
     _syncAliasTabVisibility(true);
     renderAliasList();
+
+    // Webhook 状态同步
+    var wh = data.config.webhookConfig || {};
+    if ($("cfg-webhook-enabled")) $("cfg-webhook-enabled").checked = !!wh.enabled;
+    if ($("cfg-webhook-throttle")) $("cfg-webhook-throttle").value = (wh.throttleSeconds !== undefined) ? wh.throttleSeconds : 3;
+    _webhookServices = Array.isArray(wh.services) ? JSON.parse(JSON.stringify(wh.services)) : [];
+    renderWebhookServices();
   }).catch(function () {});
 }
 
@@ -646,6 +654,11 @@ function collectFormConfig() {
     playerListPolling: plp,
     updateConfig: {
       autoBackup: $("cfg-backup-autobackup") ? $("cfg-backup-autobackup").checked : ($("cfg-autobackup") ? $("cfg-autobackup").checked : true),
+    },
+    webhookConfig: {
+      enabled: $("cfg-webhook-enabled") ? $("cfg-webhook-enabled").checked : false,
+      throttleSeconds: parseInt($("cfg-webhook-throttle") ? $("cfg-webhook-throttle").value : 3, 10) || 3,
+      services: _collectWebhookServices(),
     },
   };
 }
@@ -1316,5 +1329,254 @@ function _pollAndRedirectConfig() {
       });
     }
   }, 1000);
+}
+
+// ===== 多平台 Webhook 告警管理逻辑 =====
+var _webhookServices = [];
+
+var WEBHOOK_PLATFORM_META = {
+  discord: {
+    name: "Discord",
+    icon: "🎮",
+    urlPh: "https://discord.com/api/webhooks/...",
+    secretPh: "（Discord 无需密钥，留空即可）",
+    secretHint: "Discord Webhook 协议无需 Secret 加签，直接写入 URL",
+  },
+  dingtalk: {
+    name: "钉钉 (DingTalk)",
+    icon: "📌",
+    urlPh: "https://oapi.dingtalk.com/robot/send?access_token=...",
+    secretPh: "SECxxxxxxxx...（选填：加签密钥 Secret）",
+    secretHint: "若钉钉机器人开启了「加签」，请在此填写 Secret，系统会自动计算时间戳与签名",
+  },
+  feishu: {
+    name: "飞书 (Feishu/Lark)",
+    icon: "🕊️",
+    urlPh: "https://open.feishu.cn/open-apis/bot/v2/hook/...",
+    secretPh: "（选填：飞书机器人安全密钥）",
+    secretHint: "若飞书自定义机器人开启了「签名校验」，请在此填写 Secret",
+  },
+  wecom: {
+    name: "企业微信 (WeCom)",
+    icon: "💼",
+    urlPh: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=...",
+    secretPh: "（企业微信无需额外 Secret，留空即可）",
+    secretHint: "企业微信机器人直接使用 Webhook URL 上的 key 进行验证",
+  },
+  generic: {
+    name: "通用 Webhook (Generic JSON)",
+    icon: "🌐",
+    urlPh: "https://api.yourdomain.com/webhook/endpoint",
+    secretPh: "（选填：HMAC-SHA256 签名密钥）",
+    secretHint: "若填写密钥，HTTP 请求头中将自动携带 X-EnderBridge-Signature 标头",
+  },
+};
+
+var WEBHOOK_EVENTS_META = [
+  { id: "server_lifecycle", name: "服务器启停 (Server Lifecycle)" },
+  { id: "client_connection", name: "客户端连接与断开 (Client Connection)" },
+  { id: "auto_ban", name: "防火墙自动封禁 (Auto Ban)" },
+  { id: "security_guard", name: "安全守卫非法拦截 (Security Guard)" },
+  { id: "watchdog", name: "看门狗卡死自愈 (Watchdog)" },
+  { id: "error_log", name: "系统严重错误日志 (Error Log)" },
+];
+
+function initWebhookManager() {
+  var addBtn = $("webhookAddServiceBtn");
+  if (addBtn) {
+    addBtn.addEventListener("click", function () {
+      _syncWebhookServicesFromDOM();
+      var newId = "wh_" + Date.now().toString(36) + "_" + Math.random().toString(36).substr(2, 4);
+      _webhookServices.push({
+        id: newId,
+        name: "新建 Webhook 目标",
+        type: "discord",
+        url: "",
+        secret: "",
+        enabled: true,
+        events: ["server_lifecycle", "client_connection", "auto_ban", "security_guard", "watchdog", "error_log"],
+      });
+      renderWebhookServices();
+    });
+  }
+}
+
+function _syncWebhookServicesFromDOM() {
+  var container = $("webhookServicesContainer");
+  if (!container) return;
+  var cards = container.querySelectorAll(".webhook-service-card");
+  var updated = [];
+  cards.forEach(function (card) {
+    var id = card.getAttribute("data-id");
+    var name = (card.querySelector(".wh-name") ? card.querySelector(".wh-name").value.trim() : "") || "Webhook 服务";
+    var type = card.querySelector(".wh-type") ? card.querySelector(".wh-type").value : "discord";
+    var url = card.querySelector(".wh-url") ? card.querySelector(".wh-url").value.trim() : "";
+    var secret = card.querySelector(".wh-secret") ? card.querySelector(".wh-secret").value.trim() : "";
+    var enabled = card.querySelector(".wh-enabled") ? card.querySelector(".wh-enabled").checked : true;
+    var evs = [];
+    card.querySelectorAll(".wh-ev-check").forEach(function (cb) {
+      if (cb.checked) evs.push(cb.value);
+    });
+    updated.push({
+      id: id,
+      name: name,
+      type: type,
+      url: url,
+      secret: secret,
+      enabled: enabled,
+      events: evs,
+    });
+  });
+  if (cards.length > 0) {
+    _webhookServices = updated;
+  }
+}
+
+function _collectWebhookServices() {
+  _syncWebhookServicesFromDOM();
+  return _webhookServices;
+}
+
+function renderWebhookServices() {
+  var container = $("webhookServicesContainer");
+  if (!container) return;
+  if (!_webhookServices || _webhookServices.length === 0) {
+    container.innerHTML = '<div style="text-align:center;padding:32px;border:1px dashed var(--border);border-radius:10px;color:var(--text-dim);">' +
+      '<div style="font-size:32px;margin-bottom:8px;">🔔</div>' +
+      '<div>' + (t("cfg.webhookNoServices") || "暂未配置任何 Webhook 目标服务，点击上方按钮添加。") + '</div>' +
+      '</div>';
+    return;
+  }
+
+  var html = "";
+  _webhookServices.forEach(function (svc, idx) {
+    var type = svc.type || "discord";
+    var meta = WEBHOOK_PLATFORM_META[type] || WEBHOOK_PLATFORM_META.generic;
+    var events = svc.events || [];
+
+    html += '<div class="cfg-section webhook-service-card" data-id="' + escapeHtml(svc.id || ('wh_' + idx)) + '" style="margin-bottom:12px;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:16px;">' +
+      '  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">' +
+      '    <div style="display:flex;align-items:center;gap:10px;">' +
+      '      <span style="font-size:20px;">' + meta.icon + '</span>' +
+      '      <span style="font-weight:600;font-size:15px;" class="wh-card-title">' + escapeHtml(svc.name || "Webhook 服务") + '</span>' +
+      '      <span style="padding:2px 8px;border-radius:6px;font-size:11px;background:var(--bg-hover);color:var(--text-dim);">' + escapeHtml(meta.name) + '</span>' +
+      '    </div>' +
+      '    <div style="display:flex;align-items:center;gap:10px;">' +
+      '      <div class="cfg-switch" style="margin:0;">' +
+      '        <label class="switch"><input type="checkbox" class="wh-enabled"' + (svc.enabled !== false ? ' checked' : '') + '><span class="track"></span></label>' +
+      '        <span class="switch-label" style="font-size:13px;">' + (svc.enabled !== false ? '已启用' : '已停用') + '</span>' +
+      '      </div>' +
+      '      <button type="button" class="btn btn-sm btn-ghost wh-test-btn" data-idx="' + idx + '" title="测试发送">' + (t("cfg.webhookTestBtn") || "⚡ 测试发送") + '</button>' +
+      '      <button type="button" class="btn btn-sm btn-ghost wh-del-btn" data-idx="' + idx + '" style="color:var(--danger,#ef4444);" title="删除">🗑️</button>' +
+      '    </div>' +
+      '  </div>' +
+      '  <div class="cfg-grid">' +
+      '    <div class="cfg-field">' +
+      '      <label>' + (t("cfg.webhookPlatform") || "平台类型") + '</label>' +
+      '      <select class="cfg-input wh-type" data-idx="' + idx + '">' +
+      '        <option value="discord"' + (type === "discord" ? " selected" : "") + '>🎮 Discord Webhook</option>' +
+      '        <option value="dingtalk"' + (type === "dingtalk" ? " selected" : "") + '>📌 钉钉 (DingTalk) 机器人</option>' +
+      '        <option value="feishu"' + (type === "feishu" ? " selected" : "") + '>🕊️ 飞书 (Feishu/Lark) 机器人</option>' +
+      '        <option value="wecom"' + (type === "wecom" ? " selected" : "") + '>💼 企业微信 (WeCom) 机器人</option>' +
+      '        <option value="generic"' + (type === "generic" ? " selected" : "") + '>🌐 通用 Webhook (Generic JSON)</option>' +
+      '      </select>' +
+      '    </div>' +
+      '    <div class="cfg-field">' +
+      '      <label>' + (t("cfg.webhookServiceName") || "服务名称") + '</label>' +
+      '      <input class="cfg-input wh-name" value="' + escapeHtml(svc.name || "") + '" placeholder="如：核心运维群、Discord 告警频道" />' +
+      '    </div>' +
+      '    <div class="cfg-field cfg-grid-full">' +
+      '      <label>' + (t("cfg.webhookUrl") || "Webhook URL 地址") + '</label>' +
+      '      <input class="cfg-input wh-url" value="' + escapeHtml(svc.url || "") + '" placeholder="' + escapeHtml(meta.urlPh) + '" />' +
+      '    </div>' +
+      '    <div class="cfg-field cfg-grid-full">' +
+      '      <label>' + (t("cfg.webhookSecret") || "加签密钥 / Secret (选填)") + '</label>' +
+      '      <input class="cfg-input wh-secret" value="' + escapeHtml(svc.secret || "") + '" placeholder="' + escapeHtml(meta.secretPh) + '" />' +
+      '      <span class="hint wh-secret-hint">' + escapeHtml(meta.secretHint) + '</span>' +
+      '    </div>' +
+      '    <div class="cfg-field cfg-grid-full">' +
+      '      <label style="margin-bottom:8px;">' + (t("cfg.webhookSubEvents") || "订阅事件") + '</label>' +
+      '      <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(240px, 1fr));gap:8px;">' +
+      WEBHOOK_EVENTS_META.map(function (ev) {
+        var isChecked = events.indexOf(ev.id) !== -1 || events.indexOf("all") !== -1;
+        return '<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;user-select:none;">' +
+          '<input type="checkbox" class="wh-ev-check" value="' + ev.id + '"' + (isChecked ? ' checked' : '') + ' />' +
+          '<span>' + escapeHtml(ev.name) + '</span>' +
+          '</label>';
+      }).join("") +
+      '      </div>' +
+      '    </div>' +
+      '  </div>' +
+      '</div>';
+  });
+
+  container.innerHTML = html;
+
+  // 绑定内部交互事件
+  container.querySelectorAll(".wh-type").forEach(function (sel) {
+    sel.addEventListener("change", function () {
+      var idx = parseInt(this.getAttribute("data-idx"), 10);
+      _syncWebhookServicesFromDOM();
+      if (_webhookServices[idx]) {
+        _webhookServices[idx].type = this.value;
+      }
+      renderWebhookServices();
+    });
+  });
+
+  container.querySelectorAll(".wh-name").forEach(function (inp) {
+    inp.addEventListener("input", function () {
+      var card = this.closest(".webhook-service-card");
+      if (card) {
+        var titleEl = card.querySelector(".wh-card-title");
+        if (titleEl) titleEl.textContent = this.value.trim() || "Webhook 服务";
+      }
+    });
+  });
+
+  container.querySelectorAll(".wh-del-btn").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var idx = parseInt(this.getAttribute("data-idx"), 10);
+      _syncWebhookServicesFromDOM();
+      var svc = _webhookServices[idx];
+      var name = svc ? svc.name : "该服务";
+      if (confirm("确定要删除 Webhook 服务 [" + name + "] 吗？")) {
+        _webhookServices.splice(idx, 1);
+        renderWebhookServices();
+        toast("已删除 Webhook 目标", "ok");
+      }
+    });
+  });
+
+  container.querySelectorAll(".wh-test-btn").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var idx = parseInt(this.getAttribute("data-idx"), 10);
+      _syncWebhookServicesFromDOM();
+      var svc = _webhookServices[idx];
+      if (!svc || !svc.url) {
+        toast("请先填写有效的 Webhook URL 地址", "err");
+        return;
+      }
+      var origText = this.textContent;
+      this.textContent = "⏳ " + (t("cfg.webhookTesting") || "发送测试中...");
+      this.disabled = true;
+      var that = this;
+      api("/webhook/test", { method: "POST", body: JSON.stringify(svc) })
+        .then(function (res) {
+          that.textContent = origText;
+          that.disabled = false;
+          if (res.ok) {
+            toast("✅ " + res.message, "ok");
+          } else {
+            toast("❌ " + res.message, "err");
+          }
+        })
+        .catch(function (e) {
+          that.textContent = origText;
+          that.disabled = false;
+          toast("❌ 测试发送失败: " + (e.message || e), "err");
+        });
+    });
+  });
 }
 

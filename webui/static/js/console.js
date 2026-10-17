@@ -471,7 +471,12 @@ function renderActionButtons() {
     var b = document.createElement("button");
     b.className = "btn btn-sm";
     b.style.cssText = "font-size:12px;padding:3px 10px;border-radius:6px;display:flex;align-items:center;gap:4px;cursor:pointer;border-left:3px solid " + (btn.color || "#3b82f6");
-    b.innerHTML = '<span>' + escapeHtml(btn.icon || "⚡") + '</span><span>' + escapeHtml(btn.title) + '</span>';
+    var icon = (btn.icon || "").trim();
+    var title = (btn.title || "").trim();
+    if (icon && title.startsWith(icon)) {
+      title = title.substring(icon.length).trim();
+    }
+    b.innerHTML = (icon ? '<span>' + escapeHtml(icon) + '</span>' : '') + '<span>' + escapeHtml(title) + '</span>';
     b.title = Array.isArray(btn.commands) ? btn.commands.join(" && ") : (btn.commands || "");
     b.onclick = function () {
       executeActionButton(btn);

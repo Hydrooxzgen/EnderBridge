@@ -26,6 +26,9 @@
       <div class="cfg-sidebar-item" data-cfg-cat="integration">
         <span class="icon">🐧</span><span class="label-text" data-i18n="cfg.catIntegration">机器人 / QQ互联</span>
       </div>
+      <div class="cfg-sidebar-item" data-cfg-cat="webhook">
+        <span class="icon">🔔</span><span class="label-text" data-i18n="cfg.catWebhook">Webhook 告警</span>
+      </div>
       <div class="cfg-sidebar-item" data-cfg-cat="aliases">
         <span class="icon">🔧</span><span class="label-text" data-i18n="cfg.catAliases">命令别名</span>
       </div>
@@ -370,6 +373,35 @@
               <textarea id="cfg-announce-messages" class="cfg-input" rows="6" data-i18n-ph="cfg.annMessagesPh" placeholder="欢迎来到本服务器！&#10;加入我们的 QQ 群：123456789&#10;服务器官网：https://example.com"></textarea>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- ===== Webhook 告警 ===== -->
+      <div class="cfg-category" data-cfg-cat="webhook">
+        <div class="cfg-section">
+          <h3 data-i18n="cfg.webhookTitle">🔔 多平台 Webhook 告警</h3>
+          <p class="hint" data-i18n="cfg.webhookHint">支持 Discord、钉钉、飞书、企业微信与通用 JSON Webhook。当服务器发生关键安全事件、异常卡死或重要状态变更时，异步向指定平台推送富文本通知。</p>
+          <div class="cfg-grid">
+            <div class="cfg-field">
+              <div class="cfg-switch">
+                <label class="switch"><input type="checkbox" id="cfg-webhook-enabled"><span class="track"></span></label>
+                <span class="switch-label" data-i18n="cfg.webhookEnable">全局启用 Webhook 告警</span>
+              </div>
+            </div>
+            <div class="cfg-field">
+              <label data-i18n="cfg.webhookThrottle">防洪刷屏节流时间 (秒)</label>
+              <input id="cfg-webhook-throttle" class="cfg-input" type="number" min="0" max="60" placeholder="3" />
+              <span class="hint" data-i18n="cfg.webhookThrottleHint">相同时段内重复事件将被自动抑制，防止 Webhook 接口被第三方平台限流。</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="cfg-section">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+            <h3 style="margin:0;" data-i18n="cfg.webhookServicesTitle">🎯 Webhook 目标服务</h3>
+            <button type="button" class="btn btn-sm btn-primary" id="webhookAddServiceBtn" data-i18n="cfg.webhookAddBtn">➕ 添加目标服务</button>
+          </div>
+          <div id="webhookServicesContainer" style="display:flex;flex-direction:column;gap:12px;"></div>
         </div>
       </div>
 
