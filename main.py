@@ -35,9 +35,10 @@ USERS_JSON = os.path.join(CONFIG_DIR, "users.json")
 UPDATE_MARKER = os.path.join(ROOT, ".update_pending")
 
 # --- 版本常量 ---
-VERSION = "v1.1.2 dev"
+VERSION = "v1.1.2"
 # ↓仅当不为None时从Github拉取更新日志, 反之则直接显示该变量内容。
-DESCRIPTION = """
+DESCRIPTION = None
+"""
 feat1: 多平台 Webhook 告警通知
 fix1: 修复了当ban的时间小于60秒时, 导致ban时间会被强制改为一分钟的bug
 feat2: tpa support
