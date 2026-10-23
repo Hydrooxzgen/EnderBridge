@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """Studio 创意工坊核心服务模块
 
 负责 MIDI 音乐、MCFunc 脚本、Ezmatic 蓝图模型、Image 像素画资产的

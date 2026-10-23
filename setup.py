@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 # ============================================================
 #  setup.py - 依赖安装器(用于空包主机)
 # ------------------------------------------------------------

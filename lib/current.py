@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """全局状态类
 
 存储当前主客户端引用和全局运行时属性,用于管理全局状态和跨模块通信。

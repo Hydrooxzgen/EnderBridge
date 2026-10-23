@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """tests/test_xbox_account_switch.py — 测试 Xbox 账号切换与移除在 config.py 不存在时的稳定性"""
 
 import json

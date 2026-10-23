@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """test_config_backup.py — 测试 WebUI 功能设置中的立即备份与恢复/删除/下载接口"""
 
 import io

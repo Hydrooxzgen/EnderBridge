@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """AI 对话 Mod
 
 通过 OpenAI 兼容接口与 AI 模型交互,支持单次对话和上下文对话模式

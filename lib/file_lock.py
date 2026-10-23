@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """lib/file_lock.py — 操作系统级运行时独占/排他文件锁管理器 (System File Lock Manager)
 
 在 EnderBridge 运行期间，对系统关键配置文件与核心源码持有系统级只读保护锁，

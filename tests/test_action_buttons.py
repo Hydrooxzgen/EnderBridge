@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """tests/test_action_buttons.py — 控制台快捷动作宏按键 API 单元测试"""
 import unittest
 from unittest.mock import patch

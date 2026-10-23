@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """日志模块
 
 提供分级日志输出(控制台 + 文件),支持颜色高亮与日志文件自动创建。

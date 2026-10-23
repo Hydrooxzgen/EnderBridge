@@ -1,3 +1,6 @@
+// Author: Hydrooxzgen
+// Github: https://github.com/Hydrooxzgen
+// This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 // ===== 控制台页面逻辑(统一终端视图) =====
 var _logLines = [];
 var MAX_LOG_LINES = 1000;

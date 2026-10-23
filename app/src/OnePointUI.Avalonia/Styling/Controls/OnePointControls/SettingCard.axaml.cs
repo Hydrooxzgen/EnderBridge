@@ -1,4 +1,7 @@
-﻿using System.Runtime.InteropServices.JavaScript;
+﻿// Author: Hydrooxzgen
+// Github: https://github.com/Hydrooxzgen
+// This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
+using System.Runtime.InteropServices.JavaScript;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives; // 引入 TemplatedControl 相关的命名空间

@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """终端交互 / 聊天 Mod
 
 监听标准输入,提供终端级别的命令执行和消息发送功能

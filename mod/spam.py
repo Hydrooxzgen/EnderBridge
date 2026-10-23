@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """刷屏 Mod
 
 提供聊天刷屏、广告推送、清屏、倒计时等刷屏类命令

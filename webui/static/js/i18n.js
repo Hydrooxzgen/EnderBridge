@@ -1,3 +1,6 @@
+// Author: Hydrooxzgen
+// Github: https://github.com/Hydrooxzgen
+// This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 // ===== WebUI 国际化 (CHS / ENG) =====
 // 用法:
 //   HTML: <span data-i18n="nav.dashboard">仪表盘</span>

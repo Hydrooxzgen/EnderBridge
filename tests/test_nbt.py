@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """NBT 解析器测试 — 手工构造 big-endian NBT 字节验证 parse_nbt"""
 import struct
 

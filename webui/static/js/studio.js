@@ -1,3 +1,6 @@
+// Author: Hydrooxzgen
+// Github: https://github.com/Hydrooxzgen
+// This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 // ===== EnderBridge 创意资产与蓝图工坊 (Studio) 前端交互逻辑 =====
 
 var _currentTab = "midi"; // "midi" | "image" | "ezmatic" | "mcfunc"

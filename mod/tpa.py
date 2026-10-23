@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """玩家传送请求系统 Mod (TPA System)
 
 提供无 OP 权限的玩家间传送请求与响应功能:

@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """test_watchdog.py — 挂起监控看门狗 (Watchdog) 与健康探针自动化测试"""
 
 import asyncio

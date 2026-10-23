@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """lib/watchdog.py — 挂起检测看门狗与系统自愈探针 (Watchdog & Health Probe)
 
 负责监控 asyncio 事件循环活跃度、检测线程死锁与长时间卡死，

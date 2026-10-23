@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """Mod 管理器模块
 
 包含事件总线、Mod 存储、客户端/服务端 Mod 管理器、SAPI 挂载等。

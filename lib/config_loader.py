@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """配置加载器 - 支持 JSON 和 Python 双格式，自动版本迁移
 
 版本检测和迁移逻辑委托给 version_manager 包。

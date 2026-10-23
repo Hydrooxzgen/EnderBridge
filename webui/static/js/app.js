@@ -1,3 +1,6 @@
+// Author: Hydrooxzgen
+// Github: https://github.com/Hydrooxzgen
+// This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 // ===== 共享工具函数 =====
 function $(id) { return document.getElementById(id); }
 var TOKEN_KEY = "enderbridge_web_token";

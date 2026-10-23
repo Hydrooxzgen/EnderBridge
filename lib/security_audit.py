@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """lib/security_audit.py — EnderBridge 依赖库安全性审计与已知 CVE 漏洞检测模块"""
 
 import os

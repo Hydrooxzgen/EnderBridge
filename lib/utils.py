@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """WebSocket 工具类
 
 封装与 Minecraft Bedrock WebSocket API 的所有交互:命令发送、事件订阅、消息分发等。

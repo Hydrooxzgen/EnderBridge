@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """lib/webhook.py — 多平台 Webhook 告警与外部通知服务模块 (Webhook Alert Manager)
 
 支持 Discord、钉钉 (DingTalk)、飞书 (Feishu/Lark)、企业微信 (WeCom) 以及通用 JSON Webhook。

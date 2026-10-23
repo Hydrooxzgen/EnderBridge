@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """test_scheduler.py — 自动化定时任务调度引擎与 WebUI 接口测试"""
 
 import datetime

@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """webui/websocket.py — 轻量原生 RFC 6455 WebSocket 协议编解码与连接管理
 
 专为 EnderBridge WebUI 控制台实时推流设计，零外部重量级 C 依赖，

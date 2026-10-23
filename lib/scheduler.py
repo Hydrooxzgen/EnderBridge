@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """自动化定时任务计划引擎 (Task Scheduler)
 
 纯 Python 原生实现,支持固定时间间隔 (Interval) 与标准 5 字段 Cron 表达式,

@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """conftest.py — 在导入 mod 前 mock config 模块,避免缺少 config.py 导致导入失败"""
 import sys
 import types
