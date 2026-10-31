@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EnderBridge - 世界备份与快照</title>
+<link rel="stylesheet" href="/static/css/style.css">
+<script>document.documentElement.setAttribute('data-theme',localStorage.getItem('enderbridge_theme')||(window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark'));</script>
+<style>
+.stat-card-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.stat-mini-box { background: var(--card-bg, #1e293b); border: 1px solid var(--border, #334155); border-radius: 8px; padding: 14px 18px; }
+.stat-mini-val { font-size: 22px; font-weight: 700; color: var(--primary, #38bdf8); margin-top: 4px; }
+.stat-mini-sub { font-size: 12px; color: var(--muted, #94a3b8); }
+.badge-pin { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 4px; padding: 2px 6px; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; }
+.badge-unpin { background: rgba(148, 163, 184, 0.15); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.25); border-radius: 4px; padding: 2px 6px; font-size: 11px; }
+.badge-active-world { background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 4px; padding: 2px 6px; font-size: 11px; }
+.tag-pill { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 4px; padding: 1px 6px; font-size: 11px; margin-left: 6px; }
+</style>
+</head>
+<body>
+<aside class="sidebar" data-auto-sidebar></aside>
+<div class="main">
+  <h2>💾 世界存档自动定时备份与快照</h2>
+
+  <!-- 概览卡片 -->
+  <div class="stat-card-row">
+    <div class="stat-mini-box">
+      <div class="stat-mini-sub">📦 已保存快照</div>
+      <div class="stat-mini-val" id="statSnapshotCount">-</div>
+    </div>
+    <div class="stat-mini-box">
+      <div class="stat-mini-sub">💾 快照总占用空间</div>
+      <div class="stat-mini-val" id="statTotalSize">-</div>
+    </div>
+    <div class="stat-mini-box">
+      <div class="stat-mini-sub">🌍 当前活跃世界</div>
+      <div class="stat-mini-val" id="statActiveWorld" style="font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">-</div>
+    </div>
+    <div class="stat-mini-box">
+      <div class="stat-mini-sub">⏰ 定时自动备份状态</div>
+      <div class="stat-mini-val" id="statAutoStatus" style="font-size:16px;">-</div>
+    </div>
+  </div>
+
+  <!-- 创建快照卡片 -->
+  <div class="card card-gap">
+    <h3>⚡ 手动创建世界快照 (.mcworld)</h3>
+    <p class="desc">
+      生成当前世界数据的完整无损快照包。支持一键下发 <code>/save-all</code> 强制游戏刷新 LevelDB 脏数据，生成的 <code>.mcworld</code> 文件支持双击直接在 Windows 基岩版客户端导入运行。
+    </p>
+    <div class="row gap-10" style="flex-wrap:wrap;align-items:center;margin-top:12px;">
+      <select id="wbWorldSelect" style="min-width:220px;padding:8px 12px;border:1px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:14px;">
+        <option value="">正在检测世界存档...</option>
+      </select>
+      <input type="text" id="wbTagInput" placeholder="快照备注（例如: 大战前夕 / 宫殿完工）" style="flex:1;min-width:200px;padding:8px 12px;border:1px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:14px;" autocomplete="off" />
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#cbd5e1;cursor:pointer;">
+        <input type="checkbox" id="wbFlushSaveCheck" checked /> 先执行 /save-all 保存最新数据
+      </label>
+      <button class="btn btn-primary" id="wbCreateBtn">🚀 立即创建快照</button>
+      <button class="btn btn-ghost" id="wbRefreshBtn">🔄 刷新</button>
+    </div>
+  </div>
+
+  <!-- 快照历史列表卡片 -->
+  <div class="card card-gap">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
+      <div>
+        <h3 style="margin-bottom:2px;">📜 快照历史列表</h3>
+        <p class="desc" style="margin:0;">被 📌 锁定保护的快照不会被自动备份配额轮转清理。</p>
+      </div>
+      <div class="row gap-10">
+        <input type="text" id="wbSearchInput" placeholder="按世界名或备注搜索..." style="padding:6px 12px;border:1px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:13px;width:180px;" />
+      </div>
+    </div>
+
+    <div style="overflow-x:auto;">
+      <table class="table" id="wbSnapshotsTable">
+        <thead>
+          <tr>
+            <th style="width:40px;">#</th>
+            <th style="width:80px;">保护状态</th>
+            <th>快照文件名与备注</th>
+            <th>归属世界</th>
+            <th style="width:110px;">文件体积</th>
+            <th style="width:170px;">创建时间</th>
+            <th style="width:190px;text-align:right;">操作</th>
+          </tr>
+        </thead>
+        <tbody id="wbSnapshotsList">
+          <tr><td colspan="7" class="muted" style="text-align:center;padding:24px;">正在加载世界快照...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 自动备份设置卡片 -->
+  <div class="card card-gap">
+    <h3>⚙️ 后台自动定时备份设置</h3>
+    <p class="desc">配置 EnderBridge 运行期间自动进行静默快照与配额轮转清理策略。</p>
+    <div class="row gap-10" style="margin-top:14px;flex-wrap:wrap;">
+      <label style="display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;min-width:180px;">
+        <input type="checkbox" id="cfgEnabled" /> 启用后台自动定时备份
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
+        <span>备份间隔 (分钟):</span>
+        <input type="number" id="cfgInterval" min="5" max="1440" step="5" style="width:80px;padding:6px 10px;border:1px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;" />
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
+        <span>快照保留配额:</span>
+        <input type="number" id="cfgMaxKeep" min="1" max="100" style="width:80px;padding:6px 10px;border:1px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;" />
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
+        <input type="checkbox" id="cfgNotify" /> 备份完成后游戏内广播提示
+      </label>
+    </div>
+    <div style="margin-top:12px;">
+      <label style="display:block;font-size:13px;color:#94a3b8;margin-bottom:4px;">自定义基岩版世界路径 (选填，留空则全自动智能探测系统世界):</label>
+      <input type="text" id="cfgCustomDir" placeholder="例如: C:\Users\Username\AppData\Local\Packages\Microsoft.MinecraftUWP_8wekyb3d8bbwe\LocalState\games\com.mojang\minecraftWorlds" style="width:100%;padding:8px 12px;border:1px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:13px;" />
+    </div>
+    <div style="margin-top:14px;">
+      <button class="btn btn-primary btn-sm" id="cfgSaveBtn">💾 保存备份设置</button>
+    </div>
+  </div>
+
+  <!-- 已探测到的世界存档卡片 -->
+  <div class="card card-gap">
+    <h3>🔍 系统探测到的世界存档目录</h3>
+    <p class="desc">智能扫描出的本机基岩版世界存档。EnderBridge 会依据最后修改时间自动定位最活跃的世界。</p>
+    <div style="overflow-x:auto;margin-top:10px;">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>世界名称</th>
+            <th>活跃状态</th>
+            <th>目录路径</th>
+            <th style="width:110px;">数据体积</th>
+            <th style="width:170px;">最后写入时间</th>
+          </tr>
+        </thead>
+        <tbody id="wbDetectedWorldsList">
+          <tr><td colspan="5" class="muted" style="text-align:center;padding:16px;">正在探测基岩版世界目录...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+<script src="/static/js/app.js"></script>
+<script src="/static/js/i18n.js"></script>
+<script src="/static/js/world_backup.js"></script>
+</body>
+</html>
+

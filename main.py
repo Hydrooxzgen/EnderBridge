@@ -40,6 +40,7 @@ VERSION = "v1.1.3 dev"
 DESCRIPTION = None
 """
 feat1: 世界存档自动定时备份与快照
+feat2: feat1 接入 webui
 """
 MINIMIUM_ALLOWED_VERSION = "v1.1.0.1" # 因为v1.1.0.1版本新增了重要安全改进，再次降低了被第三方恶意mod入侵的风险，所以限制了降级
                                       # 但是如果你需要降级低于v1.1.0.1的版本，请更改这里的值为0.0.0以删除限制
