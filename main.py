@@ -35,13 +35,12 @@ USERS_JSON = os.path.join(CONFIG_DIR, "users.json")
 UPDATE_MARKER = os.path.join(ROOT, ".update_pending")
 
 # --- 版本常量 ---
-VERSION = "v1.1.2"
+VERSION = "v1.1.3"
 # ↓仅当不为None时从Github拉取更新日志, 反之则直接显示该变量内容。
 DESCRIPTION = None
 """
-feat1: 多平台 Webhook 告警通知
-fix1: 修复了当ban的时间小于60秒时, 导致ban时间会被强制改为一分钟的bug
-feat2: tpa support
+feat1: 世界存档自动定时备份与快照
+feat2: feat1 接入 webui
 """
 MINIMIUM_ALLOWED_VERSION = "v1.1.0.1" # 因为v1.1.0.1版本新增了重要安全改进，再次降低了被第三方恶意mod入侵的风险，所以限制了降级
                                       # 但是如果你需要降级低于v1.1.0.1的版本，请更改这里的值为0.0.0以删除限制

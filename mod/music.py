@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """音乐播放 Mod
 
 解析 MIDI/JSON 音乐文件并在游戏内播放(基于 playsound 命令)

@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """tests/test_file_lock.py — 操作系统级运行时独占/排他文件锁单元测试"""
 
 import json

@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """消息通知 Mod
 
 提供管理员从终端向全体玩家发送聊天通知的功能，以及定时公告轮播。

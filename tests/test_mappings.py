@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """load_mappings 映射表加载测试"""
 from mod.ezmatic.main import load_mappings
 

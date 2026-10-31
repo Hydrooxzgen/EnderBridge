@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """工具 Mod
 
 提供命令帮助、搜索、终端执行、SAPI 控制、主客户端切换等管理功能

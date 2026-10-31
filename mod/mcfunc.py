@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """Minecraft 函数文件执行 Mod
 
 支持加载和执行 .mcfunction 格式的指令文件,支持嵌套调用和循环执行

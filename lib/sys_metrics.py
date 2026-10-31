@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """lib/sys_metrics.py — 跨平台系统资源与实时性能指标采集模块
 
 无需第三方依赖(不依赖 psutil)，支持 Windows、Linux 与 Termux 跨平台。

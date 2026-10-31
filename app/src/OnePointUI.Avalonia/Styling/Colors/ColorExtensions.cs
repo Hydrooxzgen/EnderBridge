@@ -1,4 +1,7 @@
-﻿using Avalonia.Media;
+﻿// Author: Hydrooxzgen
+// Github: https://github.com/Hydrooxzgen
+// This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
+using Avalonia.Media;
 
 namespace OnePointUI.Avalonia.Styling.Colors;
 

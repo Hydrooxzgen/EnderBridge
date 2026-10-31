@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 # lib/setup.py - 首次运行图形化配置向导
 #
 # 当模板 config.example.json 中 is_first_run 为 True 时,main.py 会调用 start_setup_server():

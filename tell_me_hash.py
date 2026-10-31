@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """密码哈希计算工具 —— 明文 → 密文
 
 用法:

@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """SAPI 桥接模块
 
 用于与 Minecraft Bedrock 的 SAPI (Server API) 进行通信。

@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """tests/test_security_audit.py — 依赖安全审计与已知 CVE 检测单元测试"""
 
 import json

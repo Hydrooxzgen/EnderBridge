@@ -1,3 +1,6 @@
+// Author: Hydrooxzgen
+// Github: https://github.com/Hydrooxzgen
+// This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 // ===== Mod 管理页面逻辑 (含实时搜索与状态分类 Tab) =====
 var _allMods = { client: {}, server: {}, disabledClient: {}, disabledServer: {} };
 var _activeTab = "all"; // "all" | "active" | "failed" | "disabled"

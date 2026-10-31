@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """跨维度传送点与家管理 Mod (Home & Warp System)
 
 提供玩家个人传送点 ($home) 与全服公共传送点 ($warp) 跨维度传送支持。

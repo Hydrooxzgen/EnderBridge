@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """IP 封禁管理模块
 
 提供 banlist.json 的读写、IP 封禁/解封、连接拦截功能。

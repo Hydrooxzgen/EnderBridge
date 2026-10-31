@@ -1,4 +1,7 @@
-﻿using System;
+﻿// Author: Hydrooxzgen
+// Github: https://github.com/Hydrooxzgen
+// This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using Avalonia;

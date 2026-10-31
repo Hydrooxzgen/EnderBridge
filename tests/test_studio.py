@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """test_studio.py — 游戏资产与蓝图工坊 (Studio) 核心服务与 WebUI 接口测试"""
 
 import os

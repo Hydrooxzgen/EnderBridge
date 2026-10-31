@@ -1,6 +1,9 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """lib/security_guard.py — 核心系统与配置文件安全防护卫士 (Security Guard)
 
-使用 Python C 运行时底层审计挂钩 (PEP 578 sys.addaudithook)，
+使用 Python C 运行时底层审计挂钩 (PEP 578 sys.addaudithook), 
 在解释器级别全面拦截第三方 Mod 对系统核心文件与配置目录 (config/) 的非法篡改、写入与删除。
 
 防护范围：
@@ -45,6 +48,8 @@ OFFICIAL_BUILTIN_MOD_FILES = {
     "spam.py",
     "tool.py",
     "warp.py",
+    "tpa.py",
+    "backup.py",
 }
 
 OFFICIAL_BUILTIN_MOD_DIRS = {

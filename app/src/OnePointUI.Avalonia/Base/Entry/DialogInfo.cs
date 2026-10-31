@@ -1,4 +1,7 @@
-﻿using OnePointUI.Avalonia.Base.Enum;
+﻿// Author: Hydrooxzgen
+// Github: https://github.com/Hydrooxzgen
+// This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
+using OnePointUI.Avalonia.Base.Enum;
 
 namespace OnePointUI.Avalonia.Base.Entry;
 

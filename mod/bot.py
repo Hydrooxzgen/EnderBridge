@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """假人 Mod
 
 通过 Node.js 子进程运行 bedrock-protocol bot,让假人作为独立玩家出现在

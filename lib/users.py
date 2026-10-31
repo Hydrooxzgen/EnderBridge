@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """用户管理模块
 
 提供 WebUI 用户认证与权限管理:
@@ -124,6 +127,7 @@ BUILTIN_PERM_META = [
     {"key": "audit", "label": "nav.audit", "icon": "📋", "name": "审计日志"},
     {"key": "update", "label": "nav.update", "icon": "🔄", "name": "检查更新"},
     {"key": "banlist", "label": "nav.banlist", "icon": "🚫", "name": "封禁管理"},
+    {"key": "world_backup", "label": "nav.world_backup", "icon": "💾", "name": "世界备份"},
     {"key": "restart", "label": "nav.restart", "icon": "🔁", "name": "重启服务器"},
 ]
 
@@ -177,7 +181,7 @@ DEFAULT_ROLES = {
     "operator": {
         "label": "操作员",
         "permissions": [
-            "dashboard", "mods", "studio", "console", "banlist", "audit",
+            "dashboard", "mods", "studio", "console", "banlist", "audit", "world_backup",
             "scheduler",
         ],
     },

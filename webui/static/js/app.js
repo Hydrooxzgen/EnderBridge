@@ -1,3 +1,6 @@
+// Author: Hydrooxzgen
+// Github: https://github.com/Hydrooxzgen
+// This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 // ===== 共享工具函数 =====
 function $(id) { return document.getElementById(id); }
 var TOKEN_KEY = "enderbridge_web_token";
@@ -107,8 +110,9 @@ var _PAGE_PERM_MAP = {
   "banlist": "banlist",
   "audit": "audit",
   "update": "update",
+    "world_backup": "world_backup",
 };
-var _PAGE_ORDER = ["dashboard", "permissions", "config", "mods", "studio", "console", "scheduler", "audit", "update", "banlist"];
+var _PAGE_ORDER = ["dashboard", "permissions", "config", "mods", "studio", "console", "scheduler", "audit", "update", "banlist", "world_backup"];
 
 /** 找到当前路径对应的活跃页面名 */
 function _getActivePage() {
@@ -235,6 +239,7 @@ function initSidebar(activePage, role) {
     "banlist": "banlist",
     "audit": "audit",
     "update": "update",
+    "world_backup": "world_backup",
   };
   document.querySelectorAll(".nav-item[data-page]").forEach(function (el) {
     var page = el.getAttribute("data-page");

@@ -1,3 +1,6 @@
+// Author: Hydrooxzgen
+// Github: https://github.com/Hydrooxzgen
+// This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 // ===== WebUI 国际化 (CHS / ENG) =====
 // 用法:
 //   HTML: <span data-i18n="nav.dashboard">仪表盘</span>
@@ -19,6 +22,7 @@ var I18N = {
     "nav.audit": "审计日志",
     "nav.update": "检查更新",
     "nav.banlist": "封禁管理",
+    "nav.world_backup": "世界备份",
     "nav.restart": "重启服务器",
     "nav.guest": "👤 访客模式",
     "nav.adminLogin": "管理员登录",
@@ -890,6 +894,7 @@ var I18N = {
     "nav.audit": "Audit Log",
     "nav.update": "Check Update",
     "nav.banlist": "Ban List",
+    "nav.world_backup": "World Backup",
     "nav.restart": "Restart Server",
     "nav.guest": "👤 Guest Mode",
     "nav.adminLogin": "Admin Login",
@@ -1830,6 +1835,7 @@ var SIDEBAR_PAGES = [
   ["audit", "📋", "nav.audit"],
   ["update", "🔄", "nav.update"],
   ["banlist", "🚫", "nav.banlist"],
+  ["world_backup", "💾", "nav.world_backup"],
 ];
 
 /** 用 JS 生成侧边栏导航(页面只需留 <aside class="sidebar" data-auto-sidebar>) */

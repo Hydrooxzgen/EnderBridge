@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """Ezmatic 建筑投影导入 Mod
 
 解析 .litematic 文件(NBT 格式),导入为 MCBE 世界中的建筑;

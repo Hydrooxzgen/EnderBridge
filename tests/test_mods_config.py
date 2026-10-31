@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """test_mods_config.py — Mod 专属配置文件解析、读取、保存与热重载测试"""
 
 import json

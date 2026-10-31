@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """迁移调度器 - 注册和执行配置格式迁移
 
 迁移器注册表 MIGRATIONS 维护了所有可用的迁移路径。

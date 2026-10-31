@@ -975,6 +975,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if path == "/console":
             self._serve_page("console.html")
             return
+        if path in ("/world_backup", "/world-backup", "/backup", "/backups"):
+            self._serve_page("world_backup.html")
+            return
         if path.startswith("/static/"):
             self._serve_static(path)
             return
@@ -1001,6 +1004,18 @@ class WebUIHandler(BaseHTTPRequestHandler):
             return
         if path in ("/api/backups/download", "/api/update/backup/download"):
             self._api_backup_download()
+            return
+        if path in ("/api/world_backup/list", "/api/world_backup/snapshots"):
+            self._api_world_backup_list()
+            return
+        if path == "/api/world_backup/worlds":
+            self._api_world_backup_worlds()
+            return
+        if path in ("/api/world_backup/download", "/api/world-backup/download"):
+            self._api_world_backup_download()
+            return
+        if path == "/api/world_backup/config":
+            self._api_world_backup_get_config()
             return
         if path == "/api/security/audit":
             self._api_security_audit()
@@ -1148,6 +1163,9 @@ class WebUIHandler(BaseHTTPRequestHandler):
         if parsed.path in ("/api/backups", "/api/backups/delete", "/api/update/backup"):
             self._api_backup_delete()
             return
+        if parsed.path in ("/api/world_backup", "/api/world_backup/delete", "/api/world-backup/delete"):
+            self._api_world_backup_delete()
+            return
         if parsed.path == "/api/studio/asset":
             self._api_studio_delete_asset()
             return
@@ -1230,6 +1248,18 @@ class WebUIHandler(BaseHTTPRequestHandler):
             return
         if parsed.path in ("/api/update/rollback", "/api/backups/rollback"):
             self._api_update_rollback()
+            return
+        if parsed.path in ("/api/world_backup/create", "/api/world-backup/create"):
+            self._api_world_backup_create()
+            return
+        if parsed.path in ("/api/world_backup/pin", "/api/world-backup/pin"):
+            self._api_world_backup_pin()
+            return
+        if parsed.path in ("/api/world_backup/delete", "/api/world-backup/delete"):
+            self._api_world_backup_delete()
+            return
+        if parsed.path in ("/api/world_backup/config", "/api/world-backup/config"):
+            self._api_world_backup_save_config()
             return
         if parsed.path == "/api/console":
             self._api_console()
@@ -2441,6 +2471,233 @@ class WebUIHandler(BaseHTTPRequestHandler):
             _restart_handler()
         except Exception:
             pass
+
+    # ===== 世界存档自动定时备份与快照 WebUI API =====
+
+    def _get_world_backup_manager(self):
+        from lib.world_backup import WorldBackupManager
+        cfg = load_config().get("features", {}).get("world_backup", {})
+        custom_dir = cfg.get("custom_world_dir") or None
+        return WorldBackupManager(custom_world_dir=custom_dir)
+
+    def _api_world_backup_list(self) -> None:
+        """获取所有已保存的世界快照列表及活跃世界信息"""
+        if not _require_permission("world_backup")(self):
+            return
+        try:
+            from lib.world_backup import _format_size, WorldDetector
+            mgr = self._get_world_backup_manager()
+            snapshots = mgr.list_snapshots()
+            total_size = sum(s.get("size_bytes", 0) for s in snapshots)
+            active_world = WorldDetector.get_active_world(mgr.custom_world_dir)
+            self._respond({
+                "ok": True,
+                "snapshots": snapshots,
+                "count": len(snapshots),
+                "total_size": total_size,
+                "total_size_formatted": _format_size(total_size),
+                "backup_dir": mgr.backup_dir,
+                "active_world": active_world,
+            })
+        except Exception as e:
+            self._respond({"ok": False, "message": f"获取世界快照列表失败: {e}"})
+
+    def _api_world_backup_worlds(self) -> None:
+        """获取所有探测到的系统基岩版世界"""
+        if not _require_permission("world_backup")(self):
+            return
+        try:
+            from lib.world_backup import WorldDetector
+            mgr = self._get_world_backup_manager()
+            worlds = WorldDetector.detect_all_worlds(mgr.custom_world_dir)
+            active_world = WorldDetector.get_active_world(mgr.custom_world_dir)
+            self._respond({
+                "ok": True,
+                "worlds": worlds,
+                "count": len(worlds),
+                "active_world": active_world,
+            })
+        except Exception as e:
+            self._respond({"ok": False, "message": f"探测世界目录失败: {e}"})
+
+    def _api_world_backup_create(self) -> None:
+        """创建世界快照（需要写权限）"""
+        if not _require_write_permission("world_backup")(self):
+            return
+        body = self._read_body()
+        tag = str(body.get("tag", "") or "").strip() or None
+        world_path = str(body.get("world_path", "") or "").strip() or None
+        flush_save = bool(body.get("flush_save", True))
+
+        # 尝试通过已连接的游戏客户端刷新数据
+        if flush_save:
+            try:
+                from lib.current import Current
+                client = getattr(Current, "client", None)
+                if client and hasattr(client, "runCommand"):
+                    import asyncio
+                    _loop = getattr(self, "event_loop", None)
+                    if _loop and _loop.is_running():
+                        asyncio.run_coroutine_threadsafe(client.runCommand("save-all"), _loop)
+            except Exception:
+                pass
+
+        try:
+            mgr = self._get_world_backup_manager()
+            snap = mgr.create_snapshot(world_path=world_path, tag=tag)
+
+            # 读取配额并自动轮转
+            cfg = load_config().get("features", {}).get("world_backup", {})
+            max_keep = int(cfg.get("max_snapshots", 10))
+            cleaned = mgr.rotate_snapshots(max_keep=max_keep)
+
+            _audit(self, "world_backup", f"创建了世界快照: {snap['filename']} ({snap['size_formatted']})")
+            self._respond({
+                "ok": True,
+                "message": f"世界快照已成功创建: {snap['filename']}",
+                "snapshot": snap,
+                "cleaned": cleaned,
+            })
+        except Exception as e:
+            self._respond({"ok": False, "message": f"创建世界快照失败: {e}"})
+
+    def _api_world_backup_pin(self) -> None:
+        """设置/取消快照锁定状态"""
+        if not _require_write_permission("world_backup")(self):
+            return
+        body = self._read_body()
+        snapshot_id = str(body.get("snapshot_id", "") or "").strip()
+        pinned = bool(body.get("pinned", True))
+        if not snapshot_id:
+            self._respond({"ok": False, "message": "缺少快照 ID"})
+            return
+        try:
+            mgr = self._get_world_backup_manager()
+            ok = mgr.set_pin(snapshot_id, pinned=pinned)
+            if not ok:
+                self._respond({"ok": False, "message": "未找到指定的快照或更新失败"}, status=404)
+                return
+            action_text = "锁定保护" if pinned else "解除锁定"
+            _audit(self, "world_backup", f"{action_text}了快照: {snapshot_id}")
+            self._respond({
+                "ok": True,
+                "message": f"快照已成功{action_text}",
+                "snapshot_id": snapshot_id,
+                "pinned": pinned,
+            })
+        except Exception as e:
+            self._respond({"ok": False, "message": f"更新锁定状态失败: {e}"})
+
+    def _api_world_backup_delete(self) -> None:
+        """删除指定世界快照"""
+        if not _require_write_permission("world_backup")(self):
+            return
+        body = self._read_body() if self.command in ("POST", "DELETE") else {}
+        query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        snapshot_id = (body.get("snapshot_id") or body.get("id") or (query.get("id") or [""])[0] or "").strip()
+        if not snapshot_id:
+            self._respond({"ok": False, "message": "缺少快照 ID"})
+            return
+        try:
+            mgr = self._get_world_backup_manager()
+            all_snaps = mgr.list_snapshots()
+            target_snap = next((s for s in all_snaps if s["snapshot_id"] == snapshot_id or s["filename"] == snapshot_id), None)
+            if target_snap and target_snap.get("pinned"):
+                self._respond({"ok": False, "message": "该快照处于锁定保护状态，无法删除！请先解锁。"}, status=400)
+                return
+            ok = mgr.delete_snapshot(snapshot_id)
+            if not ok:
+                self._respond({"ok": False, "message": "快照不存在或已被删除"}, status=404)
+                return
+            fname = target_snap["filename"] if target_snap else snapshot_id
+            _audit(self, "world_backup", f"删除了世界快照: {fname}")
+            self._respond({"ok": True, "message": f"快照 {fname} 已成功删除"})
+        except Exception as e:
+            self._respond({"ok": False, "message": f"删除快照失败: {e}"})
+
+    def _api_world_backup_download(self) -> None:
+        """下载 .mcworld / .zip 快照文件"""
+        if not _require_permission("world_backup")(self):
+            return
+        query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        sid = (query.get("id") or query.get("snapshot_id") or query.get("file") or [""])[0].strip()
+        if not sid:
+            self._respond({"ok": False, "message": "缺少快照 ID 或文件名"})
+            return
+        try:
+            mgr = self._get_world_backup_manager()
+            target_snap = next((s for s in mgr.list_snapshots() if s["snapshot_id"] == sid or s["filename"] == sid), None)
+            if target_snap and os.path.isfile(target_snap["file_path"]):
+                file_path = os.path.abspath(target_snap["file_path"])
+                fname = target_snap["filename"]
+            else:
+                fname = os.path.basename(sid)
+                file_path = os.path.abspath(os.path.join(mgr.backup_dir, fname))
+            
+            norm_bdir = os.path.abspath(mgr.backup_dir)
+            if not file_path.startswith(norm_bdir + os.sep) and file_path != norm_bdir:
+                self._respond({"ok": False, "message": "非法文件访问路径"}, status=403)
+                return
+            if not (fname.endswith(".mcworld") or fname.endswith(".zip")) or not os.path.isfile(file_path):
+                self._respond({"ok": False, "message": "快照文件不存在或已损坏"}, status=404)
+                return
+
+            with open(file_path, "rb") as f:
+                content = f.read()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.send_header("Content-Length", str(len(content)))
+            safe_name = urllib.parse.quote(fname)
+            self.send_header("Content-Disposition", f"attachment; filename*=UTF-8''{safe_name}")
+            self.end_headers()
+            self.wfile.write(content)
+        except Exception as e:
+            self._respond({"ok": False, "message": f"下载文件读取失败: {e}"})
+
+    def _api_world_backup_get_config(self) -> None:
+        """获取自动定时备份配置"""
+        if not _require_permission("world_backup")(self):
+            return
+        try:
+            cfg = load_config().get("features", {}).get("world_backup", {})
+            self._respond({
+                "ok": True,
+                "config": {
+                    "enabled": bool(cfg.get("enabled", False)),
+                    "interval_minutes": int(cfg.get("interval_minutes", 60)),
+                    "max_snapshots": int(cfg.get("max_snapshots", 10)),
+                    "notify_in_game": bool(cfg.get("notify_in_game", False)),
+                    "custom_world_dir": str(cfg.get("custom_world_dir", "") or ""),
+                }
+            })
+        except Exception as e:
+            self._respond({"ok": False, "message": f"读取备份配置失败: {e}"})
+
+    def _api_world_backup_save_config(self) -> None:
+        """保存自动定时备份配置"""
+        if not _require_write_permission("world_backup")(self):
+            return
+        body = self._read_body()
+        try:
+            full_cfg = load_config()
+            if "features" not in full_cfg:
+                full_cfg["features"] = {}
+            wb_cfg = full_cfg["features"].setdefault("world_backup", {})
+            if "enabled" in body:
+                wb_cfg["enabled"] = bool(body["enabled"])
+            if "interval_minutes" in body:
+                wb_cfg["interval_minutes"] = max(5, int(body["interval_minutes"]))
+            if "max_snapshots" in body:
+                wb_cfg["max_snapshots"] = max(1, int(body["max_snapshots"]))
+            if "notify_in_game" in body:
+                wb_cfg["notify_in_game"] = bool(body["notify_in_game"])
+            if "custom_world_dir" in body:
+                wb_cfg["custom_world_dir"] = str(body["custom_world_dir"] or "").strip()
+            save_config(full_cfg)
+            _audit(self, "world_backup", "更新了世界存档备份与快照设置")
+            self._respond({"ok": True, "message": "世界备份设置已保存", "config": wb_cfg})
+        except Exception as e:
+            self._respond({"ok": False, "message": f"保存备份配置失败: {e}"})
 
     def _api_security_audit(self) -> None:
         """执行依赖包安全健康检查与已知 CVE 比对"""

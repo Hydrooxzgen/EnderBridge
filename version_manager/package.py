@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """更新包处理 - 压缩包解压 / 目录覆盖 / 项目导出的统一逻辑
 
 main.py 中的三处重复逻辑统一到这里:

@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """坐标操作 Mod
 
 提供 A/B 点标记、距离/偏移计算、区域填充、结构复制/粘贴/剪切等功能

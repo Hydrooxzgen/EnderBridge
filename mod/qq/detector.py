@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """QQ 消息检测 Mod 模块
 
 消息发送前的安全检测:字节数限制 + 敏感词过滤。

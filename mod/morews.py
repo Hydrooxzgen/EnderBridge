@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """扩展 WebSocket Mod
 
 允许客户端同时连接到多个外部 WebSocket 服务端,实现消息的双向转发

@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """权限管理类
 
 基于 JSON 文件的权限系统,支持 blocker/user/op/owner 四级权限的增删查改。

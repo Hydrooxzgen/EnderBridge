@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """图片像素画转换 Mod
 
 将图片转换为 Minecraft 像素画(基于 setblock/fill 命令)

@@ -1,3 +1,6 @@
+# Author: Hydrooxzgen
+# Github: https://github.com/Hydrooxzgen
+# This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 """QQ 互通 Mod 模块
 
 通过 NapCat (OneBot v11 协议) WebSocket 连接 QQ,实现 QQ 群消息与游戏内消息互通。

@@ -1,3 +1,6 @@
+// Author: Hydrooxzgen
+// Github: https://github.com/Hydrooxzgen
+// This project uses the GPL-3.0 license, you can modify/distribute this project according to the GPL-3.0 license
 // ===== 自动化任务计划前端逻辑 (Task Scheduler) =====
 var _currentTasks = [];
 var _currentLogs = [];
