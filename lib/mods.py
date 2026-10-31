@@ -166,6 +166,7 @@ DEFAULT_BUILTIN_MODS = {
         "Bot": "mod.bot",
         "Warp": "mod.warp",
         "TPA": "mod.tpa",
+        "WorldBackup": "mod.backup",
     },
     "server": {
         "chat": "mod.read",
