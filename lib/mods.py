@@ -563,6 +563,62 @@ class ClientModManager:
         # 挂载到 client 对象(供 ServerModManager.attachMainClient 使用)
         client.clientMod = self
 
+    # ------------------------------------------------------------------
+    #  Bot 事件注入接口（供 mod/bot.py 的 _dispatch_event 调用）
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def get_instance(cls) -> "ClientModManager | None":
+        """返回当前主客户端的 ClientModManager 实例，Bot 事件注入入口。
+
+        优先返回主客户端（Current.client）绑定的 Manager；
+        若无主客户端，则返回第一个可用 Manager；
+        若无任何连接，返回 None。
+        """
+        from lib.current import Current
+        if Current.client and Current.client in Current.client_mods:
+            return Current.client_mods[Current.client]
+        for manager in Current.client_mods.values():
+            if manager:
+                return manager
+        return None
+
+    async def _fire_message(self, data: dict) -> None:
+        """将构造好的 PlayerMessage 事件 data 注入消息处理管道（与 WebSocket 路径等效）。
+
+        data 格式: {"header": {"eventName": "PlayerMessage"}, "body": {sender, message, type, ...}}
+        直接触发已注册的 PlayerMessage 事件处理函数，跳过 WebSocket 层。
+        """
+        try:
+            # 找到 PlayerMessage 事件处理器并直接调用
+            # message() 注册的 handler 存在 _message_handler 属性中
+            handler = getattr(self, "_message_handler", None)
+            if handler:
+                await handler(data)
+        except Exception as e:
+            shared.logger.warning(f"[Mods] _fire_message 失败: {e}")
+
+    async def _fire_event(self, event_name: str, data: dict) -> None:
+        """触发任意命名事件（PlayerJoin / PlayerLeave 等），通知所有订阅该事件的 Mod。
+
+        data 格式与 WebSocket 事件包一致: {"header": {"eventName": ...}, "body": {...}}
+        """
+        try:
+            for mod_name, mod_instance in self.mod_instances.items():
+                listeners = getattr(mod_instance, "_listeners", None)
+                if not listeners:
+                    continue
+                cbs = listeners.get(event_name, [])
+                for cb in cbs:
+                    try:
+                        result = cb(data)
+                        if asyncio.iscoroutine(result):
+                            await result
+                    except Exception as ex:
+                        shared.logger.warning(f"[Mods] _fire_event {event_name} → {mod_name}: {ex}")
+        except Exception as e:
+            shared.logger.warning(f"[Mods] _fire_event 失败: {e}")
+
     def _resolve_mod_method(self, instance, name):
         return _resolve_mod_method(instance, name)
 
@@ -980,6 +1036,9 @@ class ClientModManager:
                 pass
 
         self.client.subscribe("PlayerMessage", _sync_wrapper)
+
+        # 保存 handler 引用，供 Bot 事件注入（_fire_message）直接调用
+        self._message_handler = _handler
 
     def log(self, sender: str, msg: str, type_: str) -> None:
         """消息日志记录(仅记录主客户端的 chat 消息)"""

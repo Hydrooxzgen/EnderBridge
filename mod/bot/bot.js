@@ -239,6 +239,60 @@ async function main() {
     send({ type: 'join' });
   });
 
+  // ========== 服务器事件监听（推送给 Python 处理）==========
+
+  // 聊天与系统文字消息（text 包）
+  client.on('text', (packet) => {
+    // 过滤掉 Bot 自身发出的消息，避免回声死循环
+    if (packet.source_name === username) return;
+
+    const msgType = packet.type; // 'chat' | 'say' | 'whisper' | 'announcement' 等
+    const sender  = packet.source_name || '';
+    const message = packet.message || '';
+
+    if (!message) return;
+
+    send({
+      type:    'event',
+      event:   'chat',
+      msgType, // 原始消息类型，供 Python 侧过滤
+      sender,
+      message,
+    });
+  });
+
+  // 玩家进服 / 退服（player_list 包）
+  // 服务端每次有玩家进退服都会向所有客户端广播完整的 player_list 变更
+  const _knownPlayers = new Map(); // xuid → username，用于追踪当前在线玩家
+  client.on('player_list', (packet) => {
+    const action  = packet.action;  // 'add' | 'remove'
+    const entries = packet.entries || [];
+
+    for (const entry of entries) {
+      const xuid     = entry.xuid     || '';
+      const entryName = entry.username || entry.name || '';
+
+      if (action === 'add') {
+        // 忽略 Bot 自身
+        if (entryName === username) continue;
+        // 忽略重复的 add（服务端有时会全量重发）
+        if (_knownPlayers.has(xuid) && _knownPlayers.get(xuid) === entryName) continue;
+
+        _knownPlayers.set(xuid, entryName);
+        send({ type: 'event', event: 'player_join', username: entryName, xuid });
+        log(`玩家进服: ${entryName} (xuid: ${xuid})`);
+
+      } else if (action === 'remove') {
+        const leaveName = _knownPlayers.get(xuid) || entryName;
+        if (!leaveName || leaveName === username) continue;
+
+        _knownPlayers.delete(xuid);
+        send({ type: 'event', event: 'player_leave', username: leaveName, xuid });
+        log(`玩家退服: ${leaveName} (xuid: ${xuid})`);
+      }
+    }
+  });
+
   client.on('error', (err) => {
     log('连接错误:', err.message, err.stack || '');
     send({ type: 'error', message: err.message });

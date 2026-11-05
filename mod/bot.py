@@ -267,8 +267,104 @@ class BotProcess:
         except asyncio.TimeoutError:
             return {"ok": False, "message": "Bot 响应超时"}
 
+    # ------------------------------------------------------------------ #
+    #  事件分发：将 Bot 收到的服务器事件注入现有的消息处理管道              #
+    # ------------------------------------------------------------------ #
+
+    def _dispatch_event(self, resp: dict):
+        """将 bot.js 推送的 {type:'event', event:...} 注入 EnderBridge 管道。
+
+        支持的事件:
+          - chat        : 玩家聊天 → 触发命令解析 / QQ互通 / AI 等
+          - player_join : 玩家进服广播
+          - player_leave: 玩家退服广播
+        """
+        event = resp.get("event")
+
+        if event == "chat":
+            sender  = resp.get("sender", "")
+            message = resp.get("message", "")
+            msg_type = resp.get("msgType", "chat")
+
+            # 过滤系统消息（say/me 等 source_name 为空或 Server）
+            if not sender or sender in ("", "Server", "server"):
+                return
+            # 仅处理 chat 类型（其余如 announcement 只记录日志不触发命令）
+            if msg_type != "chat":
+                shared.logger.debug(f"[Bot] 系统广播: {message}")
+                return
+
+            shared.logger.debug(f"[Bot] 玩家消息: <{sender}> {message}")
+
+            # 构造与 WebSocket PlayerMessage 事件完全一致的 data 结构，
+            # 交给现有的 ClientModManager 管道处理（命令、权限、审计日志、QQ互通……）
+            data = {
+                "header": {"eventName": "PlayerMessage"},
+                "body": {
+                    "sender":  sender,
+                    "message": message,
+                    "type":    "chat",
+                    "receiver": "",
+                },
+            }
+
+            # 找到当前活跃的 ClientModManager 实例并触发其 message handler
+            try:
+                from lib.mods import ClientModManager
+                mgr = ClientModManager.get_instance()
+                if mgr is not None:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        loop.create_task(mgr._fire_message(data))
+                    else:
+                        loop.run_until_complete(mgr._fire_message(data))
+            except Exception as e:
+                shared.logger.warning(f"[Bot] 事件分发失败 (chat): {e}")
+
+        elif event == "player_join":
+            uname = resp.get("username", "")
+            if uname:
+                shared.logger.info(f"[Bot] 玩家进服: {uname}")
+                # 触发进服事件（供 message.py 等 Mod 广播欢迎语）
+                try:
+                    from lib.mods import ClientModManager
+                    mgr = ClientModManager.get_instance()
+                    if mgr is not None:
+                        data = {
+                            "header": {"eventName": "PlayerJoin"},
+                            "body": {"player": uname},
+                        }
+                        loop = asyncio.get_event_loop()
+                        if loop.is_running():
+                            loop.create_task(mgr._fire_event("PlayerJoin", data))
+                except Exception as e:
+                    shared.logger.warning(f"[Bot] 事件分发失败 (player_join): {e}")
+
+        elif event == "player_leave":
+            uname = resp.get("username", "")
+            if uname:
+                shared.logger.info(f"[Bot] 玩家退服: {uname}")
+                try:
+                    from lib.mods import ClientModManager
+                    mgr = ClientModManager.get_instance()
+                    if mgr is not None:
+                        data = {
+                            "header": {"eventName": "PlayerLeave"},
+                            "body": {"player": uname},
+                        }
+                        loop = asyncio.get_event_loop()
+                        if loop.is_running():
+                            loop.create_task(mgr._fire_event("PlayerLeave", data))
+                except Exception as e:
+                    shared.logger.warning(f"[Bot] 事件分发失败 (player_leave): {e}")
+
     def _on_response(self, resp: dict):
         """收到 bot 响应时调用"""
+        # 服务器事件（来自 bot.js 新增的监听器）
+        if resp.get("type") == "event":
+            self._dispatch_event(resp)
+            return
+
         if resp.get("type") == "auth":
             # Xbox Live 认证信息 — 醒目提示
             user_code = resp.get("user_code", "")
